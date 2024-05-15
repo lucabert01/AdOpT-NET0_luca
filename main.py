@@ -19,8 +19,9 @@ path = "C:/Users/0954659/OneDrive - Universiteit Utrecht/Documents/EHUB-Py/detai
 
 
 pyhub = EnergyHub()
-pyhub.read_data(path, start_period=0, end_period=3)
+pyhub.read_data(path, start_period=0, end_period=6)
 pyhub.quick_solve()
+pyhub.model["full"].pprint()
 # pyhub.construct_balances()
 # pyhub.solve()
 

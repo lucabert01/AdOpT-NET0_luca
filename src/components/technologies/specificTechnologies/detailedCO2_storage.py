@@ -151,19 +151,29 @@ class CO2storageDetailed(Technology):
                 <= self.performance_data["injection_rate_max"]
             )
 
-        b_tec.const_max_charge = Constraint(self.set_t, rule=init_maximal_injection)
+        b_tec.const_max_injection = Constraint(self.set_t, rule=init_maximal_injection)
 
+        # create sets for allowing the ROM to be run for a reduced number of timesteps (periods)
+        length_t_red = 5
+        num_reduced_period = int(np.ceil(len(self.set_t) / length_t_red))
+        b_tec.set_t_reduced = Set(initialize=range(1, num_reduced_period + 1))
+        def init_reduced_set_t(set, t_red):
+            return [x + (t_red-1)*length_t_red for x in list(range(1, length_t_red+1))]
+        b_tec.set_t_for_reduced_period = Set(b_tec.set_t_reduced, initialize=init_reduced_set_t)
+
+        # TODO: add contraint on the injection per t e injection per t_red
         # Electricity consumption for compression
         # Additional sets
-        b_tec.var_bhp = Var(self.set_t, within=NonNegativeReals)
+        b_tec.var_bhp = Var(b_tec.set_t_reduced, within=NonNegativeReals)
         # TODO add constraint on relationship bhp and wellhead pressure
-        b_tec.var_pwellhead = Var(self.set_t, within=NonNegativeReals)
-        b_tec.var_pratio = Var(self.set_t, within=NonNegativeReals, bounds=[0, 100])
+        b_tec.var_pwellhead = Var(b_tec.set_t_reduced, within=NonNegativeReals)
+        b_tec.var_pratio = Var(b_tec.set_t_reduced, within=NonNegativeReals, bounds=[0, 100])
 
         def init_pressure_ratio(const, t):
             return b_tec.var_pratio[t] == 5
 
-        b_tec.const_pratio = Constraint(self.set_t, rule=init_pressure_ratio)
+        b_tec.const_pratio1 = Constraint(expr=b_tec.var_pratio[1] == 5)
+        b_tec.const_pratio2 = Constraint(expr=b_tec.var_pratio[2] == 15)
 
 
         nr_segments =2
@@ -171,27 +181,27 @@ class CO2storageDetailed(Technology):
         eta = [0.2, 0.8]
         pratio_range = [0, 10, 20]
 
-        # b_tec.set_energyconsumption_carriers_in = Set(
-        #     "electricity"
-        # )
 
         self.big_m_transformation_required = 1
-        def init_input_output(dis, t, ind):
+        def init_input_output(dis, t_red, ind):
             # Input-output (eq. 2)
 
-            def init_output(const):
-                return (
-                    self.input[t, "electricity"]
-                    == eta[ind - 1] * self.input[t, self.main_car]
+            def init_output(const, t):
+                if t <= max(self.set_t):
+                    return (
+                        self.input[t, "electricity"]
+                        == eta[ind - 1] * self.input[t, self.main_car]
                 )
+                else:
+                    return Constraint.Skip
 
-            dis.const_output = Constraint(rule=init_output)
+            dis.const_output = Constraint(b_tec.set_t_for_reduced_period[t_red], rule=init_output)
 
             # Lower bound on the energy input (eq. 5)
             def init_input_low_bound(const):
                 return (
                     pratio_range[ind - 1]
-                    <= b_tec.var_pratio[t]
+                    <= b_tec.var_pratio[t_red]
                 )
 
             dis.const_input_on1 = Constraint(rule=init_input_low_bound)
@@ -199,20 +209,20 @@ class CO2storageDetailed(Technology):
             # Upper bound on the energy input (eq. 5)
             def init_input_up_bound(const):
                 return (
-                    b_tec.var_pratio[t]
+                    b_tec.var_pratio[t_red]
                     <= pratio_range[ind]
                 )
 
             dis.const_input_on2 = Constraint(rule=init_input_up_bound)
 
         b_tec.dis_input_output = Disjunct(
-            self.set_t, b_tec.set_pieces, rule=init_input_output
+            b_tec.set_t_reduced, b_tec.set_pieces, rule=init_input_output
         )
 
         # Bind disjuncts
-        def bind_disjunctions(dis, t):
-            return [b_tec.dis_input_output[t, i] for i in b_tec.set_pieces]
-        b_tec.disjunction_input_output = Disjunction(self.set_t, rule=bind_disjunctions)
+        def bind_disjunctions(dis, t_red):
+            return [b_tec.dis_input_output[t_red, i] for i in b_tec.set_pieces]
+        b_tec.disjunction_input_output = Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
 
         return b_tec
 
