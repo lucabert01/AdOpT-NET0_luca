@@ -235,6 +235,8 @@ def select_technology(tec_data: dict):
         return HeatPump(tec_data)
     elif tec_data["tec_type"] == "HydroOpen":
         return HydroOpen(tec_data)
+    elif tec_data["tec_type"] == "CO2storageDetailed":
+        return CO2storageDetailed(tec_data)
 
 
 def read_tec_data(
