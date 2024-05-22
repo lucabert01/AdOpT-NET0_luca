@@ -15,8 +15,10 @@
     "decommission_cost": 0
   },
   "TechnologyPerf": {
-    "comment": "contains fitting data on unit of input, technology types and input/output carriers",
+    "comment": "contains fitting data on unit of input, technology types and input/output carriers. Timestep length in hours",
     "injection_rate_max": 114,
+    "time_step_length": 2,
+    "num_grid_blocks": 20,
     "input_carrier": [
       "CO2captured",
       "electricity"

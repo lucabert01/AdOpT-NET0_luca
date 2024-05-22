@@ -80,6 +80,15 @@ class CO2storageDetailed(Technology):
         # Time dependent coefficents
         self.fitted_performance.time_dependent_coefficients = 0
 
+        # Adding the necessary Jacobians
+        # TODO: see why time_step_length is not found from the json file
+        length_t_red = self.performance_data['time_step_length']
+        num_reduced_period = int(np.ceil(time_steps / length_t_red))
+        nb = self.performance_data['num_grid_blocks']*2
+        self.performance_data['time_step_length']
+        self.fitted_performance.jacobian = np.random.rand(num_reduced_period, nb, nb)
+        self.fitted_performance.jacobian_injection = np.random.rand(num_reduced_period, nb)
+
     def construct_tech_model(
         self, b_tec: Block, data: dict, set_t: Set, set_t_clustered: Set
     ) -> Block:
@@ -154,7 +163,7 @@ class CO2storageDetailed(Technology):
         b_tec.const_max_injection = Constraint(self.set_t, rule=init_maximal_injection)
 
         # Create sets for allowing the reduced order model (ROM) to be run for a reduced number of timesteps (periods)
-        length_t_red = 2
+        length_t_red = self.performance_data['time_step_length']
         num_reduced_period = int(np.ceil(len(self.set_t) / length_t_red))
         b_tec.set_t_reduced = Set(initialize=range(1, num_reduced_period + 1))
         def init_reduced_set_t(set, t_red):
@@ -178,11 +187,10 @@ class CO2storageDetailed(Technology):
         b_tec.const_average_inj = Constraint(b_tec.set_t_reduced, rule = init_average_inj_rate)
 
         # Setting up the ROM for the evolution of bottom-hole pressure
-        nb = 20 #number of gridblocks
+        nb = self.performance_data['num_grid_blocks']
         b_tec.set_grid_blocks = Set(initialize=range(1, 2*nb +1))
         b_tec.var_states = Var(b_tec.set_t_reduced, b_tec.set_grid_blocks, within= NonNegativeReals)
         b_tec.var_bhp = Var(b_tec.set_t_reduced, within=NonNegativeReals)
-        # TODO add constraint on relationship bhp and wellhead pressure
         cell_topwell = 2
 
         # Approximate bhp by identifying the top well cell in the states
@@ -192,39 +200,78 @@ class CO2storageDetailed(Technology):
 
         # Calculate distance between states and training run
         search_range = 1
-        b_tec.set_search = Set(initialize=range(1, search_range + 1))
-        b_tec.var_distance = Var(b_tec.set_t_reduced, b_tec.set_search, within=NonNegativeReals)
-        dist = b_tec.var_distance
+        s_search_indices = range(-search_range, search_range + 1)
+        # TODO: add proper bounds to the distance variables
+        b_tec.var_distance = Var(b_tec.set_t_reduced, s_search_indices, within=NonNegativeReals, bounds=(0, 1000000))
+        b_tec.var_d_min = Var(b_tec.set_t_reduced, within=NonNegativeReals, bounds=(0, 1000000))
+        # TODO: add distance calculations
         def init_distance_calc(const, t_red, t_search):
-            if t_red - t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced):
-                return dist[t_red, t_search] == 1
+            if t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced):
+                return b_tec.var_distance[t_red, t_search] == t_red + t_search
             else:
-                return dist[t_red, t_search] == 200000
+                return b_tec.var_distance[t_red, t_search] == 20000
+        b_tec.const_distance_calc = Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_distance_calc)
 
-        b_tec.const_distance_calc = Constraint(b_tec.set_t_reduced, b_tec.set_search, rule=init_distance_calc)
+        # Find minimum distance per timestep
+        def init_upper_bound_dmin(const, t_red, t_search):
+            return b_tec.var_d_min[t_red] <= b_tec.var_distance[t_red, t_search]
+        b_tec.const_upper_bound_dmin = Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_upper_bound_dmin)
 
+        self.big_m_transformation_required = 1
 
+        J = {-1: 5, 0: 8, 1:7}
+        def init_min_dist(dis, t_red, t_search):
+            def init_lower_bound_dmin(const):
+                return (
+                    b_tec.var_d_min[t_red]
+                    >= b_tec.var_distance[t_red, t_search]
+                )
+
+            dis.const_lower_bound = Constraint(rule=init_lower_bound_dmin)
+
+            # ADD A COSNTRAINT HERE
+            # J[t_search] - var_bla == var_bla2
+
+        b_tec.dis_min_distance = Disjunct(
+            b_tec.set_t_reduced, s_search_indices, rule=init_min_dist
+        )
+
+        # Bind disjuncts
+        def bind_disjunctions(dis, t_red):
+            return [b_tec.dis_min_distance[t_red, i] for i in s_search_indices]
+        b_tec.disjunction_min_distance = Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
 
         # TPWL equation goes here
         states = b_tec.var_states
         alpha = 1
         beta = 2
         bhp_initial = 10  # in Pascal
+        jac = self.fitted_performance.jacobian
+        jac_inj = self.fitted_performance.jacobian_injection
         injection = b_tec.var_average_inj_rate
-        # TODO: fix distance constraint (maybe using matrix)
-        # TODO: create random matrix like the jacobians in fit_performance and use these in the distance const
+        states_initial = 1
+        # def init_states_calc(const, t_red, cell):
+        #     if t_red==1:
+        #         return states[t_red, cell] == bhp_initial * alpha + injection[t_red] * beta
+        #     else:
+        #         return states[t_red, cell] == states[t_red-1,cell] * alpha + injection[t_red] * beta
         def init_states_calc(const, t_red, cell):
             if t_red==1:
-                return states[t_red, cell] == bhp_initial * alpha + injection[t_red] * beta
+                return states[t_red, cell] == states_initial
             else:
-                return states[t_red, cell] == states[t_red-1,cell] * alpha + injection[t_red] * beta
+                print (t_red)
+                print(cell)
+                return states[t_red, cell] == (sum(jac[t_red-1, cell-1, k-1] * states[t_red-1, k] for k in b_tec.set_grid_blocks)
+                                               + jac_inj[t_red - 1, cell-1] * injection[t_red])
 
-        b_tec.const_states_calc = Constraint(b_tec.set_t_reduced,b_tec.set_grid_blocks, rule=init_states_calc)
+        b_tec.const_states_calc = Constraint(b_tec.set_t_reduced, b_tec.set_grid_blocks, rule=init_states_calc)
 
 
         # Electricity consumption for compression
         b_tec.var_pwellhead = Var(b_tec.set_t_reduced, within=NonNegativeReals)
         b_tec.var_pratio = Var(b_tec.set_t_reduced, within=NonNegativeReals, bounds=[0, 100])
+        # TODO add constraint on relationship bhp and wellhead pressure
+
         def init_pressure_ratio(const, t):
             return b_tec.var_pratio[t] == 5
 
