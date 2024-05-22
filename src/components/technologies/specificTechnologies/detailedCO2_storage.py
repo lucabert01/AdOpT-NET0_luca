@@ -87,7 +87,9 @@ class CO2storageDetailed(Technology):
         nb = self.performance_data['num_grid_blocks']*2
         self.performance_data['time_step_length']
         self.fitted_performance.jacobian = np.random.rand(num_reduced_period, nb, nb)
+        self.fitted_performance.jacobian[1:2, :, :] = 0
         self.fitted_performance.jacobian_injection = np.random.rand(num_reduced_period, nb)
+
 
     def construct_tech_model(
         self, b_tec: Block, data: dict, set_t: Set, set_t_clustered: Set
@@ -189,9 +191,12 @@ class CO2storageDetailed(Technology):
         # Setting up the ROM for the evolution of bottom-hole pressure
         nb = self.performance_data['num_grid_blocks']
         b_tec.set_grid_blocks = Set(initialize=range(1, 2*nb +1))
-        b_tec.var_states = Var(b_tec.set_t_reduced, b_tec.set_grid_blocks, within= NonNegativeReals)
+        # TODO: fix bounds var_states
+        b_tec.var_states = Var(b_tec.set_t_reduced, b_tec.set_grid_blocks, within= NonNegativeReals, bounds=(0, 1000000))
         b_tec.var_bhp = Var(b_tec.set_t_reduced, within=NonNegativeReals)
         cell_topwell = 2
+        jac = self.fitted_performance.jacobian
+        jac_inj = self.fitted_performance.jacobian_injection
 
         # Approximate bhp by identifying the top well cell in the states
         def init_approx_bhp(const, t_red):
@@ -217,9 +222,15 @@ class CO2storageDetailed(Technology):
             return b_tec.var_d_min[t_red] <= b_tec.var_distance[t_red, t_search]
         b_tec.const_upper_bound_dmin = Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_upper_bound_dmin)
 
+
         self.big_m_transformation_required = 1
 
-        J = {-1: 5, 0: 8, 1:7}
+        b_tec.var_test = Var(b_tec.set_t_reduced, within=NonNegativeReals, bounds=(0, 1000000))
+        alpha = 1
+        beta = 2
+        bhp_initial = 10  # in Pascal
+        injection = b_tec.var_average_inj_rate
+        J = {-1: 1, 0: 10, 1:200}
         def init_min_dist(dis, t_red, t_search):
             def init_lower_bound_dmin(const):
                 return (
@@ -230,7 +241,15 @@ class CO2storageDetailed(Technology):
             dis.const_lower_bound = Constraint(rule=init_lower_bound_dmin)
 
             # ADD A COSNTRAINT HERE
-            # J[t_search] - var_bla == var_bla2
+            def init_states_calc(const,cell):
+                if t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced):
+                    if t_red == 1:
+                        return  b_tec.var_states[t_red, cell] == sum(jac[t_red + t_search-1, cell-1, k-1] for k in b_tec.set_grid_blocks)
+                    else:
+                        return  b_tec.var_states[t_red, cell] == sum(jac[t_red + t_search-1, cell-1, k-1] for k in b_tec.set_grid_blocks)
+                else:
+                    return Constraint.Skip
+            dis.const_states_calc = Constraint(b_tec.set_grid_blocks, rule=init_states_calc)
 
         b_tec.dis_min_distance = Disjunct(
             b_tec.set_t_reduced, s_search_indices, rule=init_min_dist
@@ -242,29 +261,19 @@ class CO2storageDetailed(Technology):
         b_tec.disjunction_min_distance = Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
 
         # TPWL equation goes here
-        states = b_tec.var_states
-        alpha = 1
-        beta = 2
-        bhp_initial = 10  # in Pascal
-        jac = self.fitted_performance.jacobian
-        jac_inj = self.fitted_performance.jacobian_injection
-        injection = b_tec.var_average_inj_rate
+
         states_initial = 1
+
         # def init_states_calc(const, t_red, cell):
         #     if t_red==1:
-        #         return states[t_red, cell] == bhp_initial * alpha + injection[t_red] * beta
+        #         return states[t_red, cell] == states_initial
         #     else:
-        #         return states[t_red, cell] == states[t_red-1,cell] * alpha + injection[t_red] * beta
-        def init_states_calc(const, t_red, cell):
-            if t_red==1:
-                return states[t_red, cell] == states_initial
-            else:
-                print (t_red)
-                print(cell)
-                return states[t_red, cell] == (sum(jac[t_red-1, cell-1, k-1] * states[t_red-1, k] for k in b_tec.set_grid_blocks)
-                                               + jac_inj[t_red - 1, cell-1] * injection[t_red])
+        #         print (t_red)
+        #         print(cell)
+        #         return states[t_red, cell] == (sum(jac[t_red-1, cell-1, k-1] * states[t_red-1, k] for k in b_tec.set_grid_blocks)
+        #                                        + jac_inj[t_red - 1, cell-1] * injection[t_red])
 
-        b_tec.const_states_calc = Constraint(b_tec.set_t_reduced, b_tec.set_grid_blocks, rule=init_states_calc)
+
 
 
         # Electricity consumption for compression
@@ -285,8 +294,6 @@ class CO2storageDetailed(Technology):
 
         self.big_m_transformation_required = 1
         def init_input_output(dis, t_red, ind):
-            # Input-output (eq. 2)
-
             def init_output(const, t):
                 if t <= max(self.set_t):
                     return (
