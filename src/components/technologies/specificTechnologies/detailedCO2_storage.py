@@ -3,6 +3,7 @@ from pyomo.gdp import *
 import copy
 from warnings import warn
 import numpy as np
+import scipy.io as sci
 
 from src.components.technologies.utilities import FittedPerformance
 from src.components.technologies.technology import Technology
@@ -81,7 +82,6 @@ class CO2storageDetailed(Technology):
         self.fitted_performance.time_dependent_coefficients = 0
 
         # Adding the necessary Jacobians
-        # TODO: see why time_step_length is not found from the json file
         length_t_red = self.performance_data['time_step_length']
         num_reduced_period = int(np.ceil(time_steps / length_t_red))
         nb = self.performance_data['num_grid_blocks']*2
@@ -192,6 +192,7 @@ class CO2storageDetailed(Technology):
         nb = self.performance_data['num_grid_blocks']
         b_tec.set_grid_blocks = Set(initialize=range(1, 2*nb +1))
         # TODO: fix bounds var_states
+        # TODO: rescale var_states (only pressure)
         b_tec.var_states = Var(b_tec.set_t_reduced, b_tec.set_grid_blocks, within= NonNegativeReals, bounds=(0, 1000000))
         b_tec.var_bhp = Var(b_tec.set_t_reduced, within=NonNegativeReals)
         cell_topwell = 2
@@ -240,7 +241,7 @@ class CO2storageDetailed(Technology):
 
             dis.const_lower_bound = Constraint(rule=init_lower_bound_dmin)
 
-            # ADD A COSNTRAINT HERE
+            # TPWL equation
             def init_states_calc(const,cell):
                 if t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced):
                     if t_red == 1:
@@ -259,21 +260,6 @@ class CO2storageDetailed(Technology):
         def bind_disjunctions(dis, t_red):
             return [b_tec.dis_min_distance[t_red, i] for i in s_search_indices]
         b_tec.disjunction_min_distance = Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
-
-        # TPWL equation goes here
-
-        states_initial = 1
-
-        # def init_states_calc(const, t_red, cell):
-        #     if t_red==1:
-        #         return states[t_red, cell] == states_initial
-        #     else:
-        #         print (t_red)
-        #         print(cell)
-        #         return states[t_red, cell] == (sum(jac[t_red-1, cell-1, k-1] * states[t_red-1, k] for k in b_tec.set_grid_blocks)
-        #                                        + jac_inj[t_red - 1, cell-1] * injection[t_red])
-
-
 
 
         # Electricity consumption for compression
