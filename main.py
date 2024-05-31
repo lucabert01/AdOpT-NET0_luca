@@ -8,9 +8,9 @@ import numpy as np
 # Todo: make it possible to add technology blocks retrospectively
 # Todo: logging
 
-path = "C:/Users/0954659/OneDrive - Universiteit Utrecht/Documents/EHUB-Py/detailedCO2storage_test"
+path = "C:/Users/0954659/OneDrive - Universiteit Utrecht/Documents/EHUB-Py/detailedCO2storage_test1"
 #dp.create_optimization_templates(path)
-# dp.create_input_data_folder_template(path)
+#dp.create_input_data_folder_template(path)
 
 # dp.copy_technology_data(path, "C:/Users/6574114/Documents/Research/EHUB-Py/data")
 # dp.copy_network_data(path, "C:/Users/6574114/Documents/Research/EHUB-Py/data")
@@ -19,7 +19,7 @@ path = "C:/Users/0954659/OneDrive - Universiteit Utrecht/Documents/EHUB-Py/detai
 
 
 pyhub = EnergyHub()
-pyhub.read_data(path, start_period=0, end_period=6)
+pyhub.read_data(path, start_period=0, end_period=60)
 pyhub.quick_solve()
 pyhub.model["full"].pprint()
 # pyhub.construct_balances()

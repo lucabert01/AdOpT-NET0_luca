@@ -4,6 +4,7 @@ import copy
 from warnings import warn
 import numpy as np
 import scipy.io as sci
+from pathlib import Path
 
 from src.components.technologies.utilities import FittedPerformance
 from src.components.technologies.technology import Technology
@@ -56,6 +57,9 @@ class CO2storageDetailed(Technology):
         """
 
         time_steps = len(climate_data)
+
+        # Load the .mat file
+        self.fitted_performance.matrices_data = sci.loadmat(Path("./data/technology_data/Sink/SalineAquifer_data/matrices_for_ROM.mat"))
 
         # Main carrier (carrier to be stored)
         self.main_car = self.performance_data["main_input_carrier"]
@@ -189,8 +193,8 @@ class CO2storageDetailed(Technology):
         b_tec.const_average_inj = Constraint(b_tec.set_t_reduced, rule = init_average_inj_rate)
 
         # Setting up the ROM for the evolution of bottom-hole pressure
-        nb = self.performance_data['num_grid_blocks']
-        b_tec.set_grid_blocks = Set(initialize=range(1, 2*nb +1))
+        nb = self.fitted_performance.matrices_data['ltot'] # this is actually the number of eigenvectors retrieved from the POD
+        b_tec.set_grid_blocks = Set(initialize=range(1, 2*nb +1)) # also refers to the eigenvectors retrieved and not to grid blocks
         # TODO: fix bounds var_states
         # TODO: rescale var_states (only pressure)
         b_tec.var_states = Var(b_tec.set_t_reduced, b_tec.set_grid_blocks, within= NonNegativeReals, bounds=(0, 1000000))
@@ -198,6 +202,14 @@ class CO2storageDetailed(Technology):
         cell_topwell = 2
         jac = self.fitted_performance.jacobian
         jac_inj = self.fitted_performance.jacobian_injection
+
+        epsilon = self.fitted_performance.matrices_data['epsilon']
+        u = self.fitted_performance.matrices_data['u']
+        weight = self.fitted_performance.matrices_data['weight']
+        invJred = self.fitted_performance.matrices_data['invJred']
+        Ared = self.fitted_performance.matrices_data['Ared']
+        Bred = self.fitted_performance.matrices_data['Bred']
+        phi = self.fitted_performance.matrices_data['phi']
 
         # Approximate bhp by identifying the top well cell in the states
         def init_approx_bhp(const, t_red):
@@ -227,11 +239,7 @@ class CO2storageDetailed(Technology):
         self.big_m_transformation_required = 1
 
         b_tec.var_test = Var(b_tec.set_t_reduced, within=NonNegativeReals, bounds=(0, 1000000))
-        alpha = 1
-        beta = 2
-        bhp_initial = 10  # in Pascal
-        injection = b_tec.var_average_inj_rate
-        J = {-1: 1, 0: 10, 1:200}
+
         def init_min_dist(dis, t_red, t_search):
             def init_lower_bound_dmin(const):
                 return (
