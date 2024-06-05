@@ -193,22 +193,22 @@ class CO2storageDetailed(Technology):
         b_tec.const_average_inj = Constraint(b_tec.set_t_reduced, rule = init_average_inj_rate)
 
         # Setting up the ROM for the evolution of bottom-hole pressure
-        nb = self.fitted_performance.matrices_data['ltot'] # this is actually the number of eigenvectors retrieved from the POD
-        b_tec.set_grid_blocks = Set(initialize=range(1, 2*nb +1)) # also refers to the eigenvectors retrieved and not to grid blocks
+        nb = int(self.fitted_performance.matrices_data['ltot']) # this is actually the number of eigenvectors retrieved from the POD
+        b_tec.set_grid_blocks = Set(initialize=range(1, nb +1)) # also refers to the eigenvectors retrieved and not to grid blocks
         # TODO: fix bounds var_states
         # TODO: rescale var_states (only pressure)
-        b_tec.var_states = Var(b_tec.set_t_reduced, b_tec.set_grid_blocks, within= NonNegativeReals, bounds=(0, 1000000))
-        b_tec.var_bhp = Var(b_tec.set_t_reduced, within=NonNegativeReals)
+        b_tec.var_states = Var(b_tec.set_t_reduced, b_tec.set_grid_blocks, within= Reals, bounds=(-100000000000, 10000000000))
+        b_tec.var_bhp = Var(b_tec.set_t_reduced, within=Reals)
         cell_topwell = 2
         jac = self.fitted_performance.jacobian
         jac_inj = self.fitted_performance.jacobian_injection
 
-        epsilon = self.fitted_performance.matrices_data['epsilon']
+        epsilon = self.fitted_performance.matrices_data['epsilon_mat']
         u = self.fitted_performance.matrices_data['u']
         weight = self.fitted_performance.matrices_data['weight']
-        invJred = self.fitted_performance.matrices_data['invJred']
-        Ared = self.fitted_performance.matrices_data['Ared']
-        Bred = self.fitted_performance.matrices_data['Bred']
+        invJred = self.fitted_performance.matrices_data['invJred_mat']
+        Ared = self.fitted_performance.matrices_data['Ared_mat']
+        Bred = self.fitted_performance.matrices_data['Bred_mat']
         phi = self.fitted_performance.matrices_data['phi']
 
         # Approximate bhp by identifying the top well cell in the states
@@ -220,14 +220,14 @@ class CO2storageDetailed(Technology):
         search_range = 1
         s_search_indices = range(-search_range, search_range + 1)
         # TODO: add proper bounds to the distance variables
-        b_tec.var_distance = Var(b_tec.set_t_reduced, s_search_indices, within=NonNegativeReals, bounds=(0, 1000000))
-        b_tec.var_d_min = Var(b_tec.set_t_reduced, within=NonNegativeReals, bounds=(0, 1000000))
+        b_tec.var_distance = Var(b_tec.set_t_reduced, s_search_indices, within=Reals, bounds=(-1000000000, 10000000000))
+        b_tec.var_d_min = Var(b_tec.set_t_reduced, within=Reals, bounds=(-10000000000, 100000000000))
         # TODO: add distance calculations
         def init_distance_calc(const, t_red, t_search):
             if t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced):
                 return b_tec.var_distance[t_red, t_search] == t_red + t_search
             else:
-                return b_tec.var_distance[t_red, t_search] == 20000
+                return b_tec.var_distance[t_red, t_search] == 44444
         b_tec.const_distance_calc = Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_distance_calc)
 
         # Find minimum distance per timestep
@@ -238,8 +238,6 @@ class CO2storageDetailed(Technology):
 
         self.big_m_transformation_required = 1
 
-        b_tec.var_test = Var(b_tec.set_t_reduced, within=NonNegativeReals, bounds=(0, 1000000))
-
         def init_min_dist(dis, t_red, t_search):
             def init_lower_bound_dmin(const):
                 return (
@@ -249,16 +247,23 @@ class CO2storageDetailed(Technology):
 
             dis.const_lower_bound = Constraint(rule=init_lower_bound_dmin)
 
-            # TPWL equation
-            def init_states_calc(const,cell):
-                if t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced):
-                    if t_red == 1:
-                        return  b_tec.var_states[t_red, cell] == sum(jac[t_red + t_search-1, cell-1, k-1] for k in b_tec.set_grid_blocks)
-                    else:
-                        return  b_tec.var_states[t_red, cell] == sum(jac[t_red + t_search-1, cell-1, k-1] for k in b_tec.set_grid_blocks)
+            #TPWL equation (note that (t_red + t_search) is the equivalent of i+1 in the paper)
+            def init_states_calc(const, cell):
+                if t_red ==1:
+                    return b_tec.var_states[t_red, cell] == epsilon[1, cell-1]
+                elif t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced) and t_red > 1:
+                        return  (b_tec.var_states[t_red, cell] == epsilon[t_red + t_search -1, cell-1] -
+                                sum(invJred[t_red + t_search -1, cell-1, j-1]*
+                                sum(Ared[t_red + t_search -1, cell-1, k-1] * (b_tec.var_states[t_red-1, cell] -
+                                                                              epsilon[t_red + t_search -2, cell-1]) +
+                                    Bred[t_red + t_search - 1, k - 1] * (b_tec.var_average_inj_rate[t_red] -
+                                                                                   u[0,t_red + t_search-1])
+                                    for k in b_tec.set_grid_blocks)
+                                for j in b_tec.set_grid_blocks))
                 else:
                     return Constraint.Skip
-            dis.const_states_calc = Constraint(b_tec.set_grid_blocks, rule=init_states_calc)
+
+            dis.const_states_calc = Constraint( b_tec.set_grid_blocks, rule=init_states_calc)
 
         b_tec.dis_min_distance = Disjunct(
             b_tec.set_t_reduced, s_search_indices, rule=init_min_dist
@@ -344,3 +349,6 @@ class CO2storageDetailed(Technology):
             "storage_level",
             data=[model_block.var_storage_level[t].value for t in self.set_t_full],
         )
+
+
+    #def convert2matrix(self, ):
