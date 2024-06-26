@@ -5,11 +5,11 @@ from adopt_net0.modelhub import ModelHub
 from adopt_net0.result_management.read_results import add_values_to_summary
 
 # Specify the path to your input data
-path = "specify path to input data"
+path = "C:/Users/0954659/OneDrive - Universiteit Utrecht/Documents/AdOpT-NET0_luca/detailedCO2storage_test1"
 
 # Create template files (comment these lines if already defined)
 dp.create_optimization_templates(path)
-dp.create_montecarlo_template_csv(path)
+# #dp.create_montecarlo_template_csv(path)
 
 # Create folder structure (comment these lines if already defined)
 dp.create_input_data_folder_template(path)
