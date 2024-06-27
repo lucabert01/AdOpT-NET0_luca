@@ -89,13 +89,6 @@ class CO2storageDetailed(Technology):
         self.processed_coeff.time_independent["matrices_data"] = sci.loadmat("C:/Users/0954659\OneDrive - Universiteit Utrecht/Documents/AdOpT-NET0_luca/adopt_net0/data/technology_data/Sink/SalineAquifer_data/matrices_for_ROM.mat")
 
 
-        # Adding the necessary Jacobians
-        length_t_red = self.input_parameters.performance_data['time_step_length']
-        num_reduced_period = int(np.ceil(time_steps / length_t_red))
-        nb = int(self.processed_coeff.time_independent["matrices_data"]["ltot"])*2
-        self.processed_coeff.time_independent["jacobian"] = np.random.rand(num_reduced_period, nb, nb)
-        self.processed_coeff.time_independent["jacobian"][1:2, :, :] = 0
-        self.processed_coeff.time_independent["jacobian_injection"] = np.random.rand(num_reduced_period, nb)
 
     def _calculate_bounds(self):
         """
@@ -193,8 +186,8 @@ class CO2storageDetailed(Technology):
 
 
         # Create sets for allowing the reduced order model (ROM) to be run for a reduced number of timesteps (periods)
-        length_t_red = self.input_parameters.performance_data["performance"]['time_step_length']
-        num_reduced_period = int(np.ceil(len(self.set_t) / length_t_red))
+        length_t_red = self.input_parameters.performance_data['time_step_length']
+        num_reduced_period = int(np.ceil(len(self.set_t_full) / length_t_red))
         b_tec.set_t_reduced = pyo.Set(initialize=range(1, num_reduced_period + 1))
         def init_reduced_set_t(set, t_red):
             return [x + (t_red-1)*length_t_red for x in list(range(1, length_t_red+1))]
@@ -202,15 +195,15 @@ class CO2storageDetailed(Technology):
 
         # TODO: convert max injection_rate_max to m3/s
         b_tec.var_average_inj_rate = pyo.Var(b_tec.set_t_reduced, domain=pyo.NonNegativeReals,
-                               bounds=[0, self.performance_data["injection_rate_max"]])
+                               bounds=[0, self.input_parameters.performance_data["injection_rate_max"]])
 
         # TODO: convert max pyo.Var_average_inj_rate to m3/s
         def init_average_inj_rate(const, t_red):
-            if t_red * length_t_red <= max(self.set_t):
+            if t_red * length_t_red <= max(self.set_t_full):
                 return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
                                                                 for t in list(range(1, t_red * length_t_red+1)))/length_t_red
             else:
-                leftover_t_step = max(self.set_t) - (t_red-1) * length_t_red
+                leftover_t_step = max(self.set_t_full) - (t_red-1) * length_t_red
                 return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
                                                                 for t in list(range(1, leftover_t_step+1)))/leftover_t_step
 
@@ -222,19 +215,19 @@ class CO2storageDetailed(Technology):
         # TODO: fix bounds var_states
         # TODO: rescale var_states (only pressure)
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_grid_blocks, within= pyo.Reals,
-                                   bounds=(-100000000000, 10000000000))
+                                   bounds=(-10000000, 10000000))
         b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals)
         cell_topwell = 2
-        jac = coeff_ti['matrices_data']['jacobian']
-        jac_inj = coeff_ti['matrices_data']['jacobian_injection']
 
-        epsilon = coeff_ti['matrices_data']['epsilon_mat']
+
+        scale_down = 100000
+        epsilon = coeff_ti['matrices_data']['epsilon_mat']/scale_down
         u = coeff_ti['matrices_data']['u']
         weight = coeff_ti['matrices_data']['weight']
-        invJred = coeff_ti['matrices_data']['invJred_mat']
-        Ared = coeff_ti['matrices_data']['Ared_mat']
-        Bred = coeff_ti['matrices_data']['Bred_mat']
-        phi = coeff_ti['matrices_data']['phi']
+        invJred = coeff_ti['matrices_data']['invJred_mat'] /scale_down
+        Ared = coeff_ti['matrices_data']['Ared_mat']/scale_down
+        Bred = coeff_ti['matrices_data']['Bred_mat']/scale_down
+        phi = coeff_ti['matrices_data']['phi']/scale_down
 
         # Approximate bhp by identifying the top well cell in the states
         def init_approx_bhp(const, t_red):
@@ -246,9 +239,9 @@ class CO2storageDetailed(Technology):
         s_search_indices = range(-search_range, search_range + 1)
         # TODO: add proper bounds to the distance variables
         b_tec.var_distance = pyo.Var(b_tec.set_t_reduced, s_search_indices,
-                                     within=pyo.Reals, bounds=(-1000000000, 10000000000))
+                                     within=pyo.Reals, bounds=(-100000, 1000000))
         b_tec.var_d_min = pyo.Var(b_tec.set_t_reduced,
-                                  within=pyo.Reals, bounds=(-10000000000, 100000000000))
+                                  within=pyo.Reals, bounds=(-1000000, 10000000))
         # TODO: add distance calculations
         def init_distance_calc(const, t_red, t_search):
             if t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced):
@@ -321,7 +314,7 @@ class CO2storageDetailed(Technology):
         self.big_m_transformation_required = 1
         def init_input_output(dis, t_red, ind):
             def init_output(const, t):
-                if t <= max(self.set_t):
+                if t <= max(self.set_t_full):
                     return (
                         self.input[t, "electricity"]
                         == eta[ind - 1] * self.input[t, self.main_car]
@@ -349,14 +342,14 @@ class CO2storageDetailed(Technology):
 
             dis.const_input_on2 = pyo.Constraint(rule=init_input_up_bound)
 
-        b_tec.dis_input_output = pyo.Disjunct(
+        b_tec.dis_input_output = gdp.Disjunct(
             b_tec.set_t_reduced, b_tec.set_pieces, rule=init_input_output
         )
 
         # Bind disjuncts
         def bind_disjunctions(dis, t_red):
             return [b_tec.dis_input_output[t_red, i] for i in b_tec.set_pieces]
-        b_tec.disjunction_input_output = pyo.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
+        b_tec.disjunction_input_output = gdp.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
 
 
 
