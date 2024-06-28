@@ -56,9 +56,10 @@ adopt.fill_carrier_data(path, value_or_data=-1500, columns=['Import price'], car
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['electricity'], nodes=['storage'])
 
 
-
 # Construct and solve the model
 m = adopt.ModelHub()
-m.read_data(path, start_period=0, end_period=14)
+m.read_data(path, start_period=0, end_period=6)
 m.quick_solve()
-m.model[m.info_solving_algorithms["aggregation_model"]].pprint()
+m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+    "PermanentStorage_CO2_detailed"].pprint()
+a =1
