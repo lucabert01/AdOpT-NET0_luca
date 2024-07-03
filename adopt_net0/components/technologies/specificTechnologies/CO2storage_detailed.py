@@ -201,23 +201,24 @@ class CO2storageDetailed(Technology):
         def init_average_inj_rate(const, t_red):
             if t_red * length_t_red <= max(self.set_t_full):
                 return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
-                                                                for t in list(range(1, t_red * length_t_red+1)))/length_t_red
+                                                                for t in list(range((t_red -1) * length_t_red +1,
+                                                                                    t_red * length_t_red+1)))/length_t_red
             else:
                 leftover_t_step = max(self.set_t_full) - (t_red-1) * length_t_red
                 return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
-                                                                for t in list(range(1, leftover_t_step+1)))/leftover_t_step
+                                                                for t in list(range((t_red-1) * length_t_red,
+                                                                                    (t_red-1) * length_t_red +leftover_t_step+1)))/leftover_t_step
 
         b_tec.const_average_inj = pyo.Constraint(b_tec.set_t_reduced, rule = init_average_inj_rate)
 
         # Setting up the ROM for the evolution of bottom-hole pressure
-        nb = int(coeff_ti['matrices_data']['ltot']) # this is actually the number of eigenvectors retrieved from the POD
-        b_tec.set_grid_blocks = pyo.Set(initialize=range(1, nb +1)) # also refers to the eigenvectors retrieved and not to grid blocks
+        ltot = int(coeff_ti['matrices_data']['ltot']) # this is actually the number of eigenvectors retrieved from the POD (ltot=lp+ls)
+        b_tec.set_modes = pyo.Set(initialize=range(1, ltot +1)) # also refers to the eigenvectors retrieved and not to grid blocks
         # TODO: fix bounds var_states
         # TODO: rescale var_states (only pressure)
-        b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_grid_blocks, within= pyo.Reals,
-                                   bounds=(-1000000000, 1000000000))
+        b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals)
         b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals)
-        cell_topwell = 2
+        cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])
         scale_down = 1
         epsilon = coeff_ti['matrices_data']['epsilon_mat']/scale_down
         u = coeff_ti['matrices_data']['u']
@@ -245,7 +246,7 @@ class CO2storageDetailed(Technology):
             if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
                 return (b_tec.var_distance[t_red, t_search] == sum(b_tec.var_states[t_red, k]
                                                                   - epsilon[t_red + t_search -1, k-1]
-                                                                  for k in b_tec.set_grid_blocks) + b_tec.var_average_inj_rate[t_red] - u[0,t_red + t_search-1])
+                                                                  for k in b_tec.set_modes) + b_tec.var_average_inj_rate[t_red] - u[0,t_red + t_search-1])
             else:
                 return pyo.Constraint.Skip
         b_tec.const_distance_calc = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_distance_calc)
@@ -286,22 +287,22 @@ class CO2storageDetailed(Technology):
             # dis.const_retrieve_index = pyo.Constraint(rule=init_retrieve_index)
 
             #TPWL equation (note that (t_red + t_search) is the equivalent of i+1 in the paper)
-            def init_states_calc(const, cell):
+            def init_states_calc(const, mode):
                 if t_red ==1:
-                    return b_tec.var_states[t_red, cell] == epsilon[1, cell-1]
+                    return b_tec.var_states[t_red, mode] == epsilon[1, mode-1]
                 elif t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced) and t_red > 1:
-                        return  (b_tec.var_states[t_red, cell] == epsilon[t_red + t_search -1, cell-1] -
-                                sum(invJred[t_red + t_search -1, cell-1, j-1]*
-                                sum(Ared[t_red + t_search -1, cell-1, k-1] * (b_tec.var_states[t_red-1, cell] -
-                                                                              epsilon[t_red + t_search -2, cell-1]) +
-                                    Bred[t_red + t_search - 1, k - 1] * (b_tec.var_average_inj_rate[t_red] -
+                        return  (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1] -
+                                sum(invJred[t_red + t_search -1, mode-1, j-1]*
+                                sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
+                                                                              epsilon[t_red + t_search -2, k-1]) +
+                                    Bred[t_red + t_search - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
                                                                                    u[0,t_red + t_search-1])
-                                    for k in b_tec.set_grid_blocks)
-                                for j in b_tec.set_grid_blocks))
+                                    for k in b_tec.set_modes)
+                                for j in b_tec.set_modes))
                 else:
                     return pyo.Constraint.Skip
 
-            dis.const_states_calc = pyo.Constraint( b_tec.set_grid_blocks, rule=init_states_calc)
+            dis.const_states_calc = pyo.Constraint( b_tec.set_modes, rule=init_states_calc)
 
         b_tec.dis_min_distance = gdp.Disjunct(
             b_tec.set_t_reduced, s_search_indices, rule=init_min_dist
