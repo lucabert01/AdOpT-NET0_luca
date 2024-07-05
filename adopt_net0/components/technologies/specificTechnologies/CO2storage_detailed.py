@@ -231,17 +231,17 @@ class CO2storageDetailed(Technology):
         phi = coeff_ti['matrices_data']['phi']
 
 
-        def init_states_calc(const, t_red, mode):
-            if t_red ==1:
-                if mode <= lp: # scaled down states from Pa to MPa
-                    return b_tec.var_states[t_red, mode] == epsilon[0, mode-1] * scale_down
-                else: # saturation is kept the same
-                    return b_tec.var_states[t_red, mode] == epsilon[0, mode-1]
+        def init_states_time0(const, mode):
+             return b_tec.var_states[1, mode] == epsilon[0, mode-1]
 
+        b_tec.const_states_time0 = pyo.Constraint(b_tec.set_modes, rule=init_states_time0)
+
+        def init_states_calc(const, t_red, mode):
+            if t_red==1:
+                return pyo.Constraint.Skip
             else:
-                if mode <= lp:
-                    return  (b_tec.var_states[t_red, mode] == epsilon[t_red -1, mode-1] * scale_down
-                                - sum(invJred[t_red -1, mode-1, j-1] * scale_down * (
+                return  (b_tec.var_states[t_red, mode] == epsilon[t_red -1, mode-1]
+                                - sum(invJred[t_red -1, mode-1, j-1]* (
                                 sum(Ared[t_red -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
                                                                               epsilon[t_red -2, k-1]) for k in b_tec.set_modes)
                                 +
@@ -249,16 +249,6 @@ class CO2storageDetailed(Technology):
                                                                                    u[0,t_red -1])
                                     )
                                 for j in b_tec.set_modes))
-                else:
-                    return  (b_tec.var_states[t_red, mode] == epsilon[t_red -1, mode-1]
-                            - sum(invJred[t_red -1, mode-1, j-1]* (
-                            sum(Ared[t_red -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
-                                                                          epsilon[t_red -2, k-1]) for k in b_tec.set_modes)
-                            +
-                                Bred[t_red - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
-                                                                               u[0,t_red -1])
-                                )
-                            for j in b_tec.set_modes))
                 # return  (b_tec.var_states[t_red, mode] == epsilon[t_red -1, mode-1]
                 #             - sum(invJred[t_red -1, mode-1, j-1]*
                 #             sum(Ared[t_red -1, mode-1, k-1] * (b_tec.var_states[t_red-1, mode] -
@@ -270,7 +260,6 @@ class CO2storageDetailed(Technology):
 
 
         b_tec.const_states_calc = pyo.Constraint( b_tec.set_t_reduced, b_tec.set_modes, rule=init_states_calc)
-
 
         # rewrite the states in the new base (only done for the cell of interest - top well)
         def init_retrieve_bhp(const, t_red):
