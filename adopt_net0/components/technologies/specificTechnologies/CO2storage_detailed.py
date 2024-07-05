@@ -216,8 +216,9 @@ class CO2storageDetailed(Technology):
         b_tec.set_modes = pyo.Set(initialize=range(1, ltot +1)) # also refers to the eigenvectors retrieved and not to grid blocks
         # TODO: fix bounds var_states
         # TODO: rescale var_states (only pressure)
-        b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals)
-        b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals)
+        b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
+                                   bounds=(-10000000000000, 10000000000000))
+        b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals,bounds=(-10000000000000, 10000000000000))
         cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])
         scale_down = 1
         epsilon = coeff_ti['matrices_data']['epsilon_mat']/scale_down
@@ -228,19 +229,15 @@ class CO2storageDetailed(Technology):
         Bred = coeff_ti['matrices_data']['Bred_mat']
         phi = coeff_ti['matrices_data']['phi']
 
-        # Approximate bhp by identifying the top well cell in the states
-        def init_approx_bhp(const, t_red):
-            return b_tec.var_bhp[t_red] == b_tec.var_states[t_red, cell_topwell]
-        b_tec.const_approx_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_approx_bhp)
 
         # Calculate distance between states and training run
         search_range = 1
         s_search_indices = range(-search_range, search_range + 1)
         # TODO: add proper bounds to the distance variables
         b_tec.var_distance = pyo.Var(b_tec.set_t_reduced, s_search_indices,
-                                     within=pyo.Reals, bounds=(-10000000, 100000000))
+                                     within=pyo.Reals, bounds=(-10000000000, 100000000000))
         b_tec.var_d_min = pyo.Var(b_tec.set_t_reduced,
-                                  within=pyo.Reals, bounds=(-100000000, 1000000000))
+                                  within=pyo.Reals, bounds=(-100000000000, 100000000000))
         # TODO: add distance calculations
         def init_distance_calc(const, t_red, t_search):
             if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
@@ -278,15 +275,9 @@ class CO2storageDetailed(Technology):
                     return pyo.Constraint.Skip
 
             dis.const_lower_bound = pyo.Constraint(rule=init_lower_bound_dmin)
-            # def init_retrieve_index(const):
-            #     return (
-            #         b_tec.var_index_min_d[t_red]
-            #         == t_red + t_search
-            #     )
-            #
-            # dis.const_retrieve_index = pyo.Constraint(rule=init_retrieve_index)
 
-            #TPWL equation (note that (t_red + t_search) is the equivalent of i+1 in the paper)
+
+            #TPWL equation (note that t_red+t_search is the equivalent of i+1 in the paper)
             def init_states_calc(const, mode):
                 if t_red ==1:
                     return b_tec.var_states[t_red, mode] == epsilon[1, mode-1]
@@ -312,6 +303,13 @@ class CO2storageDetailed(Technology):
         def bind_disjunctions(dis, t_red):
             return [b_tec.dis_min_distance[t_red, i] for i in s_search_indices]
         b_tec.disjunction_min_distance = gdp.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
+
+        # rewrite the states in the new base (only done for the cell of interest - top well)
+        def init_retrieve_bhp(const, t_red):
+            return b_tec.var_bhp[t_red] == sum(phi[cell_topwell - 1, k - 1] * b_tec.var_states[t_red, k]
+                                               for k in b_tec.set_modes)
+
+        b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
 
 
 
