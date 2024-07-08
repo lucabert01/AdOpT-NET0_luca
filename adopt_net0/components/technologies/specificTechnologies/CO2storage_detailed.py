@@ -206,7 +206,7 @@ class CO2storageDetailed(Technology):
             else:
                 leftover_t_step = max(self.set_t_full) - (t_red-1) * length_t_red
                 return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
-                                                                for t in list(range((t_red-1) * length_t_red,
+                                                                for t in list(range((t_red-1) * length_t_red+1,
                                                                                     (t_red-1) * length_t_red +leftover_t_step+1)))/leftover_t_step
 
         b_tec.const_average_inj = pyo.Constraint(b_tec.set_t_reduced, rule = init_average_inj_rate)
