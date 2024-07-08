@@ -217,8 +217,8 @@ class CO2storageDetailed(Technology):
         # TODO: fix bounds var_states
         # TODO: rescale var_states (only pressure)
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
-                                   bounds=(-10000000000000, 10000000000000))
-        b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals,bounds=(-10000000000000, 10000000000000))
+                                   bounds=(-1000000000000000, 1000000000000000))
+        b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals,bounds=(-1000000000000000, 1000000000000000))
         cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])
         scale_down = 1
         epsilon = coeff_ti['matrices_data']['epsilon_mat']/scale_down
@@ -229,6 +229,11 @@ class CO2storageDetailed(Technology):
         Bred = coeff_ti['matrices_data']['Bred_mat']
         phi = coeff_ti['matrices_data']['phi']
 
+
+        def init_states_time0(const, mode):
+             return b_tec.var_states[1, mode] == epsilon[0, mode-1]
+
+        b_tec.const_states_time0 = pyo.Constraint(b_tec.set_modes, rule=init_states_time0)
 
         # Calculate distance between states and training run
         search_range = 1
@@ -259,9 +264,6 @@ class CO2storageDetailed(Technology):
         b_tec.const_upper_bound_dmin = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_upper_bound_dmin)
 
 
-        b_tec.var_index_min_d = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals, bounds=[0, num_reduced_period+1])
-
-
         self.big_m_transformation_required = 1
 
         def init_min_dist(dis, t_red, t_search):
@@ -279,17 +281,24 @@ class CO2storageDetailed(Technology):
 
             #TPWL equation (note that t_red+t_search is the equivalent of i+1 in the paper)
             def init_states_calc(const, mode):
-                if t_red ==1:
-                    return b_tec.var_states[t_red, mode] == epsilon[1, mode-1]
-                elif t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced) and t_red > 1:
-                        return  (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1] -
-                                sum(invJred[t_red + t_search -1, mode-1, j-1]*
-                                sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
-                                                                              epsilon[t_red + t_search -2, k-1]) +
-                                    Bred[t_red + t_search - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
-                                                                                   u[0,t_red + t_search-1])
-                                    for k in b_tec.set_modes)
+                if t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced) and t_red > 1:
+                        return  (b_tec.var_states[t_red, mode] == epsilon[t_red -1, mode-1]
+                                - sum(invJred[t_red -1, mode-1, j-1]* (
+                                sum(Ared[t_red -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
+                                                                              epsilon[t_red -2, k-1]) for k in b_tec.set_modes)
+                                +
+                                    Bred[t_red - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
+                                                                                   u[0,t_red -1])
+                                    )
                                 for j in b_tec.set_modes))
+                        # return  (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1] -
+                        #         sum(invJred[t_red + t_search -1, mode-1, j-1]*
+                        #         sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
+                        #                                                       epsilon[t_red + t_search -2, k-1]) +
+                        #             Bred[t_red + t_search - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
+                        #                                                            u[0,t_red + t_search-1])
+                        #             for k in b_tec.set_modes)
+                        #         for j in b_tec.set_modes))
                 else:
                     return pyo.Constraint.Skip
 
