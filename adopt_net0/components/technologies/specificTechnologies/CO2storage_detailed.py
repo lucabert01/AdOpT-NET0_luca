@@ -221,7 +221,6 @@ class CO2storageDetailed(Technology):
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals)
         b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals)
         cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])
-        scale_down = 10**-6
         epsilon = coeff_ti['matrices_data']['epsilon_mat']
         u = coeff_ti['matrices_data']['u']
         weight_distance_cwi = coeff_ti['matrices_data']['weight']
@@ -249,14 +248,6 @@ class CO2storageDetailed(Technology):
                                                                                    u[0,t_red -1])
                                     )
                                 for j in b_tec.set_modes))
-                # return  (b_tec.var_states[t_red, mode] == epsilon[t_red -1, mode-1]
-                #             - sum(invJred[t_red -1, mode-1, j-1]*
-                #             sum(Ared[t_red -1, mode-1, k-1] * (b_tec.var_states[t_red-1, mode] -
-                #                                                           epsilon[t_red -2, mode-1]) +
-                #                 Bred[t_red - 1, k - 1] * (b_tec.var_average_inj_rate[t_red] -
-                #                                                                u[0,t_red -1])
-                #                 for k in b_tec.set_modes)
-                #             for j in b_tec.set_modes))
 
 
         b_tec.const_states_calc = pyo.Constraint( b_tec.set_t_reduced, b_tec.set_modes, rule=init_states_calc)
