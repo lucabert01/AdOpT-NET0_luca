@@ -219,7 +219,7 @@ class CO2storageDetailed(Technology):
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
                                    bounds=(-2000000000000000, 2000000000000000))
         b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals,bounds=(-1000000000000000, 1000000000000000))
-        cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])-1
+        cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])
         scale_down = 1
         epsilon = coeff_ti['matrices_data']['epsilon_mat']/scale_down
         u = coeff_ti['matrices_data']['u']
@@ -250,7 +250,7 @@ class CO2storageDetailed(Technology):
             #                                                       - epsilon[t_red + t_search -1, k-1]
             #                                                       for k in b_tec.set_modes) + b_tec.var_average_inj_rate[t_red] - u[0,t_red + t_search-1])
             if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
-                return (b_tec.var_distance[t_red, t_search] == t_red + t_search)
+                return (b_tec.var_distance[t_red, t_search] == t_red )
             else:
                 return pyo.Constraint.Skip
         b_tec.const_distance_calc = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_distance_calc)
@@ -316,11 +316,11 @@ class CO2storageDetailed(Technology):
         b_tec.disjunction_min_distance = gdp.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
 
         # rewrite the states in the new base (only done for the cell of interest - top well)
-        # def init_retrieve_bhp(const, t_red):
-        #     return b_tec.var_bhp[t_red] == sum(phi[cell_topwell - 1, k - 1] * b_tec.var_states[t_red, k]
-        #                                        for k in b_tec.set_modes)
-        #
-        # b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
+        def init_retrieve_bhp(const, t_red):
+            return b_tec.var_bhp[t_red] == sum(phi[cell_topwell - 1, k - 1] * b_tec.var_states[t_red, k]
+                                               for k in b_tec.set_modes)
+
+        b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
 
 
 
