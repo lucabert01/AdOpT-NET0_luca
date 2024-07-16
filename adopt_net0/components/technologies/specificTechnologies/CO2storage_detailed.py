@@ -219,7 +219,7 @@ class CO2storageDetailed(Technology):
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
                                    bounds=(-2000000000000000, 2000000000000000))
         b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals,bounds=(-1000000000000000, 1000000000000000))
-        cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])
+        cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])-1
         scale_down = 1
         epsilon = coeff_ti['matrices_data']['epsilon_mat']/scale_down
         u = coeff_ti['matrices_data']['u']
