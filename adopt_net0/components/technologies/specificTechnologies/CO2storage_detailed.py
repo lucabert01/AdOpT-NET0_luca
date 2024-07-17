@@ -283,7 +283,7 @@ class CO2storageDetailed(Technology):
 
             #TPWL equation (note that t_red+t_search is the equivalent of i+1 in the paper)
             def init_states_calc(const, mode):
-                if t_red > 1 and t_red+t_search<= max(b_tec.set_t_reduced)+1:
+                if t_red > 1 and t_red<= max(b_tec.set_t_reduced):
                     return  (b_tec.var_states[t_red, mode] == epsilon[t_red+t_search-1, mode-1])
                 else:
                     return pyo.Constraint.Skip
