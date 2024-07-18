@@ -58,7 +58,7 @@ adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], car
 
 # Construct and solve the model
 m = adopt.ModelHub()
-m.read_data(path, start_period=0, end_period=8)
+m.read_data(path, start_period=0, end_period=10)
 m.quick_solve()
 m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
     "PermanentStorage_CO2_detailed"].var_states.pprint()
