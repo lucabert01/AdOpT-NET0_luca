@@ -61,5 +61,7 @@ m = adopt.ModelHub()
 m.read_data(path, start_period=0, end_period=6)
 m.quick_solve()
 m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+    "PermanentStorage_CO2_detailed"].var_states.pprint()
+m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
     "PermanentStorage_CO2_detailed"].var_bhp.pprint()
 a =1
