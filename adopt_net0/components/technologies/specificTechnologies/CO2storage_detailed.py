@@ -283,24 +283,16 @@ class CO2storageDetailed(Technology):
 
             #TPWL equation (note that t_red+t_search is the equivalent of i+1 in the paper)
             def init_states_calc(const, mode):
-                if t_red + t_search >= 1 and t_red + t_search <= max(b_tec.set_t_reduced) and t_red > 1:
-                        return  (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1]
-                                - sum(invJred[t_red + t_search -1, mode-1, j-1]* (
-                                sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
-                                                                              epsilon[t_red + t_search -2, k-1]) for k in b_tec.set_modes)
-                                +
-                                    Bred[t_red + t_search - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
-                                                                                   u[0,t_red + t_search -1])
-                                    )
-                                for j in b_tec.set_modes))
-                        # return  (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1] -
-                        #         sum(invJred[t_red + t_search -1, mode-1, j-1]*
-                        #         sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
-                        #                                                       epsilon[t_red + t_search -2, k-1]) +
-                        #             Bred[t_red + t_search - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
-                        #                                                            u[0,t_red + t_search-1])
-                        #             for k in b_tec.set_modes)
-                        #         for j in b_tec.set_modes))
+                if t_red <= max(b_tec.set_t_reduced) and t_red > 1: # WARNINING: distances outside the timesteps (e.g -1 or max_t + 1 are not really excluded I think)
+                    return (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1]
+                            - sum(invJred[t_red + t_search -1, mode-1, j-1]* (
+                            sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
+                                                                          epsilon[t_red + t_search -2, k-1]) for k in b_tec.set_modes)
+                            +
+                                Bred[t_red + t_search - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
+                                                                               u[0,t_red + t_search -1])
+                                )
+                            for j in b_tec.set_modes))
                 else:
                     return pyo.Constraint.Skip
 
