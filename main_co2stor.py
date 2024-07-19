@@ -10,7 +10,7 @@ import numpy as np
 path = Path("./detailedCO2storage_test1")
 
 # Create template files (comment these lines if already defined)
-adopt.create_optimization_templates(path)
+# adopt.create_optimization_templates(path)
 
 # Load json template
 with open(path / "Topology.json", "r") as json_file:
