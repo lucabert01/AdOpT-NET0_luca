@@ -213,7 +213,7 @@ class CO2storageDetailed(Technology):
 
         # Setting up the ROM for the evolution of bottom-hole pressure
         ltot = int(coeff_ti['matrices_data']['ltot']) # this is actually the number of eigenvectors retrieved from the POD (ltot=lp+ls)
-        b_tec.set_modes = pyo.Set(initialize=range(1, ltot +1)) # also refers to the eigenvectors retrieved and not to grid blocks
+        b_tec.set_modes = pyo.Set(initialize=range(1, 28 +1)) # also refers to the eigenvectors retrieved and not to grid blocks
         # TODO: fix bounds var_states
         # TODO: rescale var_states (only pressure)
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
@@ -250,7 +250,7 @@ class CO2storageDetailed(Technology):
             #                                                       - epsilon[t_red + t_search -1, k-1]
             #                                                       for k in b_tec.set_modes) + b_tec.var_average_inj_rate[t_red] - u[0,t_red + t_search-1])
             if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
-                return (b_tec.var_distance[t_red, t_search] == t_red )
+                return (b_tec.var_distance[t_red, t_search] == t_red +t_search)
             else:
                 return pyo.Constraint.Skip
         b_tec.const_distance_calc = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_distance_calc)
@@ -283,8 +283,8 @@ class CO2storageDetailed(Technology):
 
             #TPWL equation (note that t_red+t_search is the equivalent of i+1 in the paper)
             def init_states_calc(const, mode):
-                if t_red <= max(b_tec.set_t_reduced) and t_red > 1: # WARNINING: distances outside the timesteps (e.g -1 or max_t + 1 are not really excluded I think)
-                    return (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1]
+                if t_red > 1 and t_red<= max(b_tec.set_t_reduced):
+                    return  (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1]
                             - sum(invJred[t_red + t_search -1, mode-1, j-1]* (
                             sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
                                                                           epsilon[t_red + t_search -2, k-1]) for k in b_tec.set_modes)
