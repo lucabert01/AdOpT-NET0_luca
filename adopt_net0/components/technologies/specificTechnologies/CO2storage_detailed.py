@@ -213,18 +213,19 @@ class CO2storageDetailed(Technology):
 
         # Setting up the ROM for the evolution of bottom-hole pressure
         ltot = int(coeff_ti['matrices_data']['ltot']) # this is actually the number of eigenvectors retrieved from the POD (ltot=lp+ls)
-        b_tec.set_modes = pyo.Set(initialize=range(1, 28 +1)) # also refers to the eigenvectors retrieved and not to grid blocks
+        lp = int(coeff_ti['matrices_data']['lp']) # this is actually the number of eigenvectors retrieved from the POD (ltot=lp+ls)
+        b_tec.set_modes = pyo.Set(initialize=range(1, lp +1)) # also refers to the eigenvectors retrieved and not to grid blocks
         # TODO: fix bounds var_states
         # TODO: rescale var_states (only pressure)
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
                                    bounds=(-2000000000000000, 2000000000000000))
         b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals,bounds=(-1000000000000000, 1000000000000000))
         cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])
-        scale_down = 1
-        epsilon = coeff_ti['matrices_data']['epsilon_mat']/scale_down
+        scale_down = 10**5
+        epsilon = coeff_ti['matrices_data']['epsilon_mat']
         u = coeff_ti['matrices_data']['u']
         weight_distance_cwi = coeff_ti['matrices_data']['weight']
-        invJred = coeff_ti['matrices_data']['invJred_mat'] /scale_down
+        invJred = coeff_ti['matrices_data']['invJred_mat']
         Ared = coeff_ti['matrices_data']['Ared_mat']
         Bred = coeff_ti['matrices_data']['Bred_mat']
         phi = coeff_ti['matrices_data']['phi']
