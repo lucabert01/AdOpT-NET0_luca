@@ -236,7 +236,7 @@ class CO2storageDetailed(Technology):
 
         b_tec.const_states_time0 = pyo.Constraint(b_tec.set_modes, rule=init_states_time0)
 
-        # Calculate distance between states and training run
+        # Calculate distance between states and training run:
         search_range = 1
         s_search_indices = range(-search_range, search_range + 1)
         s_abs_index = [0, 1]
@@ -249,16 +249,8 @@ class CO2storageDetailed(Technology):
                                      within=pyo.Reals, bounds=(0, 100000000000))
         b_tec.var_d_states = pyo.Var(b_tec.set_t_reduced, s_search_indices,
                                      within=pyo.Reals, bounds=(-10000000000, 100000000000))
-        b_tec.var_d_cuminj = pyo.Var(b_tec.set_t_reduced, s_search_indices,
-                                     within=pyo.Reals, bounds=(-10000000000, 100000000000))
-        b_tec.var_d_tot = pyo.Var(b_tec.set_t_reduced, s_search_indices,
-                                     within=pyo.Reals, bounds=(-10000000000, 100000000000))
-        b_tec.var_d_min = pyo.Var(b_tec.set_t_reduced,
-                                  within=pyo.Reals, bounds=(-100000000000, 100000000000))
 
-        # TODO: add distance calculations
-
-        # Absolute value for distance between the statesdisjunction
+        # Absolute value for distance between the states disjunction
         self.big_m_transformation_required = 1
 
         def init_abs_dis(dis, t_red, t_search, mode,ind):
@@ -297,14 +289,32 @@ class CO2storageDetailed(Technology):
             b_tec.set_t_reduced, s_search_indices, b_tec.set_modes, rule=bind_disjunctions_abs_dist
         )
 
-        def init_const_abs_aux(const, t_red, t_search, mode):
+        def init_const_dstates_aux(const, t_red, t_search, mode):
             return (b_tec.var_dstates_permode[t_red, t_search, mode] == b_tec.var_abs_dpermode_auxpos[t_red, t_search, mode]
                     + b_tec.var_abs_dpermode_auxneg[t_red, t_search, mode])
-        b_tec.const_abs_aux = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, b_tec.set_modes, rule=init_const_abs_aux)
+        b_tec.const_abs_aux = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, b_tec.set_modes, rule=init_const_dstates_aux)
+
+        def init_const_dstates_tot(const, t_red, t_search):
+            if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
+                return b_tec.var_d_states[t_red, t_search] == sum(b_tec.var_dstates_permode[t_red, t_search, k] for k in b_tec.set_modes)
+            else:
+                return pyo.Constraint.Skip
+        b_tec.const_dstates_tot = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_const_dstates_tot)
 
 
+        # Distance cumulative injection
+        b_tec.var_d_cuminj = pyo.Var(b_tec.set_t_reduced, s_search_indices,
+                                     within=pyo.Reals, bounds=(0, 100000000000))
+        b_tec.var_d_cuminj_auxpos = pyo.Var(b_tec.set_t_reduced, s_search_indices,
+                                     within=pyo.Reals, bounds=(0, 100000000000))
+        b_tec.var_d_cuminj_auxneg = pyo.Var(b_tec.set_t_reduced, s_search_indices,
+                                     within=pyo.Reals, bounds=(0, 100000000000))
+        b_tec.var_d_tot = pyo.Var(b_tec.set_t_reduced, s_search_indices,
+                                     within=pyo.Reals, bounds=(-10000000000, 100000000000))
+        b_tec.var_d_min = pyo.Var(b_tec.set_t_reduced,
+                                  within=pyo.Reals, bounds=(-100000000000, 100000000000))
 
-
+        # Absolute value for cumulative injection distance disjunction
 
         # TODO disjunction for the abs of the injection distance part
         # TODO add constraint that distance tot= sum(distance_abs_permode)
