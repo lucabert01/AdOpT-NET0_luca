@@ -61,7 +61,10 @@ m = adopt.ModelHub()
 m.read_data(path, start_period=0, end_period=8)
 m.quick_solve()
 m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
-    "PermanentStorage_CO2_detailed"].var_states.pprint()
+    "PermanentStorage_CO2_detailed"].var_distance.pprint()
 m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
     "PermanentStorage_CO2_detailed"].var_bhp.pprint()
+m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+    "PermanentStorage_CO2_detailed"].var_d_min.pprint()
+
 a =1
