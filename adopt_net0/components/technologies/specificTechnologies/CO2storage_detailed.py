@@ -219,11 +219,6 @@ class CO2storageDetailed(Technology):
         # Setting up the ROM for the evolution of bottom-hole pressure
         ltot = int(coeff_ti['matrices_data']['ltot']) # this is actually the number of eigenvectors retrieved from the POD (ltot=lp+ls)
         lp = int(coeff_ti['matrices_data']['lp']) # a mode is the equivalent of a grid block, but in the reduced space. So there is a pressure for every mode etc
-        b_tec.set_modes = pyo.Set(initialize=range(1, lp +1)) # also refers to the eigenvectors retrieved and not to grid blocks
-        # TODO: fix bounds var_states
-        b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
-                                   bounds=(-2000000000000000, 2000000000000000))
-        b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals,bounds=(-1000000000000000, 1000000000000000))
         cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])
         scale_down = 1
         epsilon = coeff_ti['matrices_data']['epsilon_mat']
@@ -235,6 +230,16 @@ class CO2storageDetailed(Technology):
         phi = coeff_ti['matrices_data']['phi']
         wi = coeff_ti['matrices_data']['WI']
         mob = coeff_ti['matrices_data']['mobApprox']
+
+        b_tec.set_modes = pyo.Set(initialize=range(1, lp +1)) # also refers to the eigenvectors retrieved and not to grid blocks
+        # TODO: fix bounds of all variables
+        b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
+                                   bounds=(epsilon.min(), epsilon.max()))
+        # b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
+        #                            bounds=(-2000000000000000, 2000000000000000))
+        # b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals,bounds=(0, 1000))
+        b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals)
+
 
 
         def init_states_time0(const, mode):
@@ -338,14 +343,17 @@ class CO2storageDetailed(Technology):
                         >= b_tec.var_distance[t_red, t_search]
                     )
                 else:
-                    return pyo.Constraint.Skip
+                    # this makes sure that unwanted t_search are not picked (first
+                    # and last time interval)
+                    return b_tec.var_d_min[t_red] >= sum(b_tec.var_distance[t_red,
+                    t_search] for t_search in s_search_indices)
 
             dis.const_lower_bound = pyo.Constraint(rule=init_lower_bound_dmin)
 
 
             #TPWL equation (note that t_red+t_search is the equivalent of i+1 in the paper)
             def init_states_calc(const, mode):
-                if t_red > 1 and t_red<= max(b_tec.set_t_reduced):
+                if t_red > 1:
                     return  (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1]
                             - sum(invJred[t_red + t_search -1, mode-1, j-1]* (
                             sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
@@ -358,7 +366,7 @@ class CO2storageDetailed(Technology):
                 else:
                     return pyo.Constraint.Skip
 
-            dis.const_states_calc = pyo.Constraint( b_tec.set_modes, rule=init_states_calc)
+            dis.const_states_calc = pyo.Constraint(b_tec.set_modes, rule=init_states_calc)
 
         b_tec.dis_min_distance = gdp.Disjunct(
             b_tec.set_t_reduced, s_search_indices, rule=init_min_dist
@@ -461,5 +469,10 @@ class CO2storageDetailed(Technology):
             data=[model_block.var_storage_level[t].value for t in self.set_t_full],
         )
 
+        h5_group.create_dataset(
+            "bhp",
+            data=[model_block.var_bhp[t_red].value for t_red in model_block.set_t_reduced for t
+         in model_block.set_t_for_reduced_period[t_red]]
+        )
 
     #def convert2matrix(self, ):
