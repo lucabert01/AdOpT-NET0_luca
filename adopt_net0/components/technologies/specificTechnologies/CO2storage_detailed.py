@@ -86,7 +86,12 @@ class CO2storageDetailed(Technology):
             )
 
         # Load the .mat file
-        self.processed_coeff.time_independent["matrices_data"] = sci.loadmat("C:/Users/0954659\OneDrive - Universiteit Utrecht/Documents/AdOpT-NET0_luca/adopt_net0/data/technology_data/Sink/SalineAquifer_data/matrices_for_ROM.mat")
+        performance_data_path = Path(__file__).parent.parent.parent.parent
+        performance_data_path = (
+            performance_data_path
+            / "data/technology_data/Sink/SalineAquifer_data/matrices_for_ROM.mat"
+        )
+        self.processed_coeff.time_independent["matrices_data"] = sci.loadmat(performance_data_path)
 
 
 
