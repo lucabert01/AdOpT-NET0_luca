@@ -205,9 +205,9 @@ class CO2storageDetailed(Technology):
         # TODO: convert max pyo.Var_average_inj_rate to m3/s
         def init_average_inj_rate(const, t_red):
             if t_red * length_t_red <= max(self.set_t_full):
-                return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
-                                                                for t in list(range((t_red -1) * length_t_red +1,
-                                                                                    t_red * length_t_red+1)))/length_t_red
+                return b_tec.var_average_inj_rate[t_red] == sum(
+                    self.input[t, self.main_car]
+                    for t in b_tec.set_t_for_reduced_period[t_red])/length_t_red
             else:
                 leftover_t_step = max(self.set_t_full) - (t_red-1) * length_t_red
                 return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
@@ -263,111 +263,260 @@ class CO2storageDetailed(Technology):
         # Absolute value for cumulative injection distance disjunction
         # note: we use the inj_rate instead of inj_rate*length_timestep because we use constant timsteps, so they cancel out in the equation
 
-        self.big_m_transformation_required = 1
-
-        def init_abs_dis_cuminj(dis, t_red, t_search, ind):
-            def init_dist_pos_cuminj(const):
-                if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
-                    return (
-                            b_tec.var_d_cuminj_auxpos[t_red, t_search]
-                            == (sum(b_tec.var_average_inj_rate[k] for k in range(1, t_red))
-                                - sum(u[0, k - 1] for k in range(1, t_red + t_search))) / (
-                            (sum(u[0, k - 1] for k in range(1, t_red + t_search)) + 0.001)
-                            ) * ind
-                    )
-                else:
-                    return pyo.Constraint.Skip
-
-            dis.const_dist_cuminj_pos = pyo.Constraint(rule=init_dist_pos_cuminj)
-
-            def init_dist_neg_cuminj(const):
-                if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
-                    return (
-                            b_tec.var_d_cuminj_auxneg[t_red, t_search]
-                            == (-1) * (sum(b_tec.var_average_inj_rate[k] for k in range(1, t_red))
-                                       - sum(u[0, k - 1] for k in range(1, t_red + t_search))) /
-                            ((sum(u[0, k - 1] for k in range(1, t_red + t_search)) + 0.001))
-                            * (1 - ind)
-                    )
-                else:
-                    return pyo.Constraint.Skip
-
-            dis.const_dist_cuminj_neg = pyo.Constraint(rule=init_dist_neg_cuminj)
-
-        b_tec.dis_abs_dist_cuminj = gdp.Disjunct(
-            b_tec.set_t_reduced, s_search_indices, s_abs_index, rule=init_abs_dis_cuminj
-        )
-
-        # Bind disjuncts for absolute value of cumulative injection distance
-        def bind_disjunctions_abs_dist_cuminj(dis, t_red, t_search):
-            return [b_tec.dis_abs_dist_cuminj[t_red, t_search, i] for i in s_abs_index]
-
-        b_tec.disjunction_abs_dist_cuminj = gdp.Disjunction(
-            b_tec.set_t_reduced, s_search_indices, rule=bind_disjunctions_abs_dist_cuminj
-        )
-
-        # Complete absolute value with d_cuminj = d_cuminj_pos + d_cuminj_neg
-        def init_const_dcuminj_aux(const, t_red, t_search):
-            return (b_tec.var_d_cuminj[t_red, t_search] == b_tec.var_d_cuminj_auxpos[t_red, t_search]
-                    + b_tec.var_d_cuminj_auxneg[t_red, t_search])
-
-        b_tec.const_abs_dcuminj_aux = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_const_dcuminj_aux)
-
-        def init_d_tot(const, t_red, t_search):
-            return b_tec.var_distance[t_red, t_search] == b_tec.var_d_cuminj[t_red, t_search]
-        b_tec.const_d_tot = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_d_tot)
-
-
-        # Find minimum distance per timestep
-        def init_upper_bound_dmin(const, t_red, t_search):
-            if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
-                return b_tec.var_d_min[t_red] <= b_tec.var_distance[t_red, t_search]
-            else:
-                return pyo.Constraint.Skip
-
-        b_tec.const_upper_bound_dmin = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_upper_bound_dmin)
-
+        #
+        #
+        # self.big_m_transformation_required = 1
+        #
+        # def init_abs_dis_cuminj(dis, t_red, t_search, ind):
+        #     def init_dist_pos_cuminj(const):
+        #         if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
+        #             return (
+        #                     b_tec.var_d_cuminj_auxpos[t_red, t_search]
+        #                     == (sum(b_tec.var_average_inj_rate[k] for k in range(1, t_red))
+        #                         - sum(u[0, k - 1] for k in range(1, t_red + t_search))) / (
+        #                     (sum(u[0, k - 1] for k in range(1, t_red + t_search)) + 0.001)
+        #                     ) * ind
+        #             )
+        #         else:
+        #             return pyo.Constraint.Skip
+        #
+        #     dis.const_dist_cuminj_pos = pyo.Constraint(rule=init_dist_pos_cuminj)
+        #
+        #     def init_dist_neg_cuminj(const):
+        #         if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
+        #             return (
+        #                     b_tec.var_d_cuminj_auxneg[t_red, t_search]
+        #                     == (-1) * (sum(b_tec.var_average_inj_rate[k] for k in range(1, t_red))
+        #                                - sum(u[0, k - 1] for k in range(1, t_red + t_search))) /
+        #                     ((sum(u[0, k - 1] for k in range(1, t_red + t_search)) + 0.001))
+        #                     * (1 - ind)
+        #             )
+        #         else:
+        #             return pyo.Constraint.Skip
+        #
+        #     dis.const_dist_cuminj_neg = pyo.Constraint(rule=init_dist_neg_cuminj)
+        #
+        # b_tec.dis_abs_dist_cuminj = gdp.Disjunct(
+        #     b_tec.set_t_reduced, s_search_indices, s_abs_index, rule=init_abs_dis_cuminj
+        # )
+        #
+        # # Bind disjuncts for absolute value of cumulative injection distance
+        # def bind_disjunctions_abs_dist_cuminj(dis, t_red, t_search):
+        #     return [b_tec.dis_abs_dist_cuminj[t_red, t_search, i] for i in s_abs_index]
+        #
+        # b_tec.disjunction_abs_dist_cuminj = gdp.Disjunction(
+        #     b_tec.set_t_reduced, s_search_indices, rule=bind_disjunctions_abs_dist_cuminj
+        # )
+        #
+        # # Complete absolute value with d_cuminj = d_cuminj_pos + d_cuminj_neg
+        # def init_const_dcuminj_aux(const, t_red, t_search):
+        #     return (b_tec.var_d_cuminj[t_red, t_search] == b_tec.var_d_cuminj_auxpos[t_red, t_search]
+        #             + b_tec.var_d_cuminj_auxneg[t_red, t_search])
+        #
+        # b_tec.const_abs_dcuminj_aux = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_const_dcuminj_aux)
+        #
+        # def init_d_tot(const, t_red, t_search):
+        #     return b_tec.var_distance[t_red, t_search] == b_tec.var_d_cuminj[t_red, t_search]
+        # b_tec.const_d_tot = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_d_tot)
+        #
+        #
+        # # Find minimum distance per timestep
+        # def init_upper_bound_dmin(const, t_red, t_search):
+        #     if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
+        #         return b_tec.var_d_min[t_red] <= b_tec.var_distance[t_red, t_search]
+        #     else:
+        #         return pyo.Constraint.Skip
+        #
+        # b_tec.const_upper_bound_dmin = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_upper_bound_dmin)
+        #
 
 
         # disjunction
-        def init_min_dist(dis, t_red, t_search):
-            def init_lower_bound_dmin(const):
-                if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
-                    return (
-                        b_tec.var_d_min[t_red]
-                        >= b_tec.var_distance[t_red, t_search]
-                    )
-                else:
-                    return pyo.Constraint.Skip
-
-            dis.const_lower_bound = pyo.Constraint(rule=init_lower_bound_dmin)
-
+        # def init_min_dist(dis, t_red, t_search):
+            # def init_lower_bound_dmin(const):
+            #     if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
+            #         return (
+            #             b_tec.var_d_min[t_red]
+            #             >= b_tec.var_distance[t_red, t_search]
+            #         )
+            #     else:
+            #         return pyo.Constraint.Skip
+            #
+            # dis.const_lower_bound = pyo.Constraint(rule=init_lower_bound_dmin)
+            #
 
             #TPWL equation (note that t_red+t_search is the equivalent of i+1 in the paper)
-            def init_states_calc(const, mode):
-                if t_red > 1 and t_red<= max(b_tec.set_t_reduced):
-                    return  (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1]
-                            - sum(invJred[t_red + t_search -1, mode-1, j-1]* (
-                            sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
-                                                                          epsilon[t_red + t_search -2, k-1]) for k in b_tec.set_modes)
-                            +
-                                Bred[t_red + t_search - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
-                                                                               u[0,t_red + t_search -1])
-                                )
-                            for j in b_tec.set_modes))
-                else:
-                    return pyo.Constraint.Skip
+        t_search = -1
+        def init_states_calc(const, t_red, mode):
+            if t_red > 1 and t_red<= max(b_tec.set_t_reduced):
+                return  (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1]
+                        - sum(invJred[t_red + t_search -1, mode-1, j-1]* (
+                        sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
+                                                                      epsilon[t_red + t_search -2, k-1]) for k in b_tec.set_modes)
+                        +
+                            Bred[t_red + t_search - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
+                                                                           u[0,t_red + t_search -1])
+                            )
+                        for j in b_tec.set_modes))
+            else:
+                return pyo.Constraint.Skip
 
-            dis.const_states_calc = pyo.Constraint( b_tec.set_modes, rule=init_states_calc)
+        b_tec.const_states_calc = pyo.Constraint( b_tec.set_t_reduced,
+                                                  b_tec.set_modes, rule=init_states_calc)
+        #
+        # b_tec.dis_min_distance = gdp.Disjunct(
+        #     b_tec.set_t_reduced, s_search_indices, rule=init_min_dist
+        # )
+        #
+        # # Bind disjuncts
+        # def bind_disjunctions(dis, t_red):
+        #     return [b_tec.dis_min_distance[t_red, i] for i in s_search_indices]
+        # b_tec.disjunction_min_distance = gdp.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
 
-        b_tec.dis_min_distance = gdp.Disjunct(
-            b_tec.set_t_reduced, s_search_indices, rule=init_min_dist
-        )
 
-        # Bind disjuncts
-        def bind_disjunctions(dis, t_red):
-            return [b_tec.dis_min_distance[t_red, i] for i in s_search_indices]
-        b_tec.disjunction_min_distance = gdp.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
+
+
+
+
+
+
+
+
+
+
+
+        #
+        #
+        #
+        #
+        #
+        # self.big_m_transformation_required = 1
+        #
+        # def init_abs_dis_cuminj(dis, t_red, t_search, ind):
+        #     def init_dist_pos_cuminj(const):
+        #         if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
+        #             return (
+        #                     b_tec.var_d_cuminj_auxpos[t_red, t_search]
+        #                     == (sum(b_tec.var_average_inj_rate[k] for k in range(1, t_red))
+        #                         - sum(u[0, k - 1] for k in range(1, t_red + t_search))) / (
+        #                     (sum(u[0, k - 1] for k in range(1, t_red + t_search)) + 0.001)
+        #                     ) * ind
+        #             )
+        #         else:
+        #             return pyo.Constraint.Skip
+        #
+        #     dis.const_dist_cuminj_pos = pyo.Constraint(rule=init_dist_pos_cuminj)
+        #
+        #     def init_dist_neg_cuminj(const):
+        #         if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
+        #             return (
+        #                     b_tec.var_d_cuminj_auxneg[t_red, t_search]
+        #                     == (-1) * (sum(b_tec.var_average_inj_rate[k] for k in range(1, t_red))
+        #                                - sum(u[0, k - 1] for k in range(1, t_red + t_search))) /
+        #                     ((sum(u[0, k - 1] for k in range(1, t_red + t_search)) + 0.001))
+        #                     * (1 - ind)
+        #             )
+        #         else:
+        #             return pyo.Constraint.Skip
+        #
+        #     dis.const_dist_cuminj_neg = pyo.Constraint(rule=init_dist_neg_cuminj)
+        #
+        # b_tec.dis_abs_dist_cuminj = gdp.Disjunct(
+        #     b_tec.set_t_reduced, s_search_indices, s_abs_index, rule=init_abs_dis_cuminj
+        # )
+        #
+        # # Bind disjuncts for absolute value of cumulative injection distance
+        # def bind_disjunctions_abs_dist_cuminj(dis, t_red, t_search):
+        #     return [b_tec.dis_abs_dist_cuminj[t_red, t_search, i] for i in s_abs_index]
+        #
+        # b_tec.disjunction_abs_dist_cuminj = gdp.Disjunction(
+        #     b_tec.set_t_reduced, s_search_indices, rule=bind_disjunctions_abs_dist_cuminj
+        # )
+        #
+        # # Complete absolute value with d_cuminj = d_cuminj_pos + d_cuminj_neg
+        # def init_const_dcuminj_aux(const, t_red, t_search):
+        #     return (b_tec.var_d_cuminj[t_red, t_search] == b_tec.var_d_cuminj_auxpos[t_red, t_search]
+        #             + b_tec.var_d_cuminj_auxneg[t_red, t_search])
+        #
+        # b_tec.const_abs_dcuminj_aux = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_const_dcuminj_aux)
+        #
+        # def init_d_tot(const, t_red, t_search):
+        #     return b_tec.var_distance[t_red, t_search] == b_tec.var_d_cuminj[t_red, t_search]
+        # b_tec.const_d_tot = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_d_tot)
+        #
+        #
+        # # Find minimum distance per timestep
+        # def init_upper_bound_dmin(const, t_red, t_search):
+        #     if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
+        #         return b_tec.var_d_min[t_red] <= b_tec.var_distance[t_red, t_search]
+        #     else:
+        #         return pyo.Constraint.Skip
+        #
+        # b_tec.const_upper_bound_dmin = pyo.Constraint(b_tec.set_t_reduced, s_search_indices, rule=init_upper_bound_dmin)
+        #
+        #
+        #
+        # # disjunction
+        # def init_min_dist(dis, t_red, t_search):
+        #     def init_lower_bound_dmin(const):
+        #         if (t_red + t_search >= 1) and (t_red + t_search <= max(b_tec.set_t_reduced)):
+        #             return (
+        #                 b_tec.var_d_min[t_red]
+        #                 >= b_tec.var_distance[t_red, t_search]
+        #             )
+        #         else:
+        #             return pyo.Constraint.Skip
+        #
+        #     dis.const_lower_bound = pyo.Constraint(rule=init_lower_bound_dmin)
+        #
+        #
+        #     #TPWL equation (note that t_red+t_search is the equivalent of i+1 in the paper)
+        #     def init_states_calc(const, mode):
+        #         if t_red > 1 and t_red<= max(b_tec.set_t_reduced):
+        #             return  (b_tec.var_states[t_red, mode] == epsilon[t_red + t_search -1, mode-1]
+        #                     - sum(invJred[t_red + t_search -1, mode-1, j-1]* (
+        #                     sum(Ared[t_red + t_search -1, j-1, k-1] * (b_tec.var_states[t_red-1, k] -
+        #                                                                   epsilon[t_red + t_search -2, k-1]) for k in b_tec.set_modes)
+        #                     +
+        #                         Bred[t_red + t_search - 1, j - 1] * (b_tec.var_average_inj_rate[t_red] -
+        #                                                                        u[0,t_red + t_search -1])
+        #                         )
+        #                     for j in b_tec.set_modes))
+        #         else:
+        #             return pyo.Constraint.Skip
+        #
+        #     dis.const_states_calc = pyo.Constraint( b_tec.set_modes, rule=init_states_calc)
+        #
+        # b_tec.dis_min_distance = gdp.Disjunct(
+        #     b_tec.set_t_reduced, s_search_indices, rule=init_min_dist
+        # )
+        #
+        # # Bind disjuncts
+        # def bind_disjunctions(dis, t_red):
+        #     return [b_tec.dis_min_distance[t_red, i] for i in s_search_indices]
+        # b_tec.disjunction_min_distance = gdp.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
+        #
+        #
+        #
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         # rewrite the states in the new base (only done for the cell of interest - top well)
         def init_retrieve_bhp(const, t_red):
@@ -375,17 +524,6 @@ class CO2storageDetailed(Technology):
                                                for k in b_tec.set_modes)
 
         b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
-
-
-
-
-
-
-
-
-
-
-
 
         # Electricity consumption for compression
         b_tec.var_pwellhead = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals)
@@ -461,5 +599,10 @@ class CO2storageDetailed(Technology):
             data=[model_block.var_storage_level[t].value for t in self.set_t_full],
         )
 
+        h5_group.create_dataset(
+            "bhp",
+            data=[model_block.var_bhp[t_red].value for t_red in model_block.set_t_reduced for t
+         in model_block.set_t_for_reduced_period[t_red]]
+        )
 
     #def convert2matrix(self, ):
