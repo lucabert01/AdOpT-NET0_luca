@@ -60,11 +60,19 @@ adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], car
 m = adopt.ModelHub()
 m.read_data(path, start_period=0, end_period=8)
 m.quick_solve()
-m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
-    "PermanentStorage_CO2_detailed"].var_distance.pprint()
-m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
-    "PermanentStorage_CO2_detailed"].var_bhp.pprint()
-m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
-    "PermanentStorage_CO2_detailed"].var_d_min.pprint()
+
+b_tec = m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+    "PermanentStorage_CO2_detailed"]
+tec_class = m.data.technology_data["period1"]["storage"][
+    "PermanentStorage_CO2_detailed"]
+
+b_tec.var_d_cuminj_auxneg.pprint()
+b_tec.var_d_cuminj_auxpos.pprint()
+b_tec.var_distance.pprint()
+b_tec.var_bhp.pprint()
+b_tec.var_d_min.pprint()
+b_tec.var_states.pprint()
+b_tec.var_average_inj_rate.pprint()
+
 
 a =1
