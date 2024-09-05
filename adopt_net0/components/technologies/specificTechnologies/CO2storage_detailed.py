@@ -194,25 +194,29 @@ class CO2storageDetailed(Technology):
         length_t_red = self.input_parameters.performance_data['time_step_length']
         num_reduced_period = int(np.ceil(len(self.set_t_full) / length_t_red))
         b_tec.set_t_reduced = pyo.Set(initialize=range(1, num_reduced_period + 1))
+        # TODO: check value of rho_co2_surface
+        rho_co2_surface = 550 # [kg/m3] density of CO2 at surface conditions
+        # TODO: remove *0+1 from convert_inj_rate
+        convert_inj_rate = 1/(rho_co2_surface*3.6)*0+1 # converts t/h to m3/s, which is the unit required in the TPWL-POD model
+
         def init_reduced_set_t(set, t_red):
             return [x + (t_red-1)*length_t_red for x in list(range(1, length_t_red+1))]
         b_tec.set_t_for_reduced_period = pyo.Set(b_tec.set_t_reduced, initialize=init_reduced_set_t)
 
-        # TODO: convert max injection_rate_max to m3/s
         b_tec.var_average_inj_rate = pyo.Var(b_tec.set_t_reduced, domain=pyo.NonNegativeReals,
                                bounds=[0, self.input_parameters.performance_data["injection_rate_max"]])
 
-        # TODO: convert max pyo.Var_average_inj_rate to m3/s
+        # Var_average_inj_rate in m3/s
         def init_average_inj_rate(const, t_red):
             if t_red * length_t_red <= max(self.set_t_full):
                 return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
                                                                 for t in list(range((t_red -1) * length_t_red +1,
-                                                                                    t_red * length_t_red+1)))/length_t_red
+                                                                                    t_red * length_t_red+1)))/length_t_red*convert_inj_rate
             else:
                 leftover_t_step = max(self.set_t_full) - (t_red-1) * length_t_red
                 return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
                                                                 for t in list(range((t_red-1) * length_t_red,
-                                                                                    (t_red-1) * length_t_red +leftover_t_step+1)))/leftover_t_step
+                                                                                    (t_red-1) * length_t_red +leftover_t_step+1)))/leftover_t_step*convert_inj_rate
 
         b_tec.const_average_inj = pyo.Constraint(b_tec.set_t_reduced, rule = init_average_inj_rate)
 
@@ -228,17 +232,15 @@ class CO2storageDetailed(Technology):
         Ared = coeff_ti['matrices_data']['Ared_mat']
         Bred = coeff_ti['matrices_data']['Bred_mat']
         phi = coeff_ti['matrices_data']['phi']
-        wi = coeff_ti['matrices_data']['WI']
-        mob = coeff_ti['matrices_data']['mobApprox']
+        WI = coeff_ti['matrices_data']['WI']
+        mobApprox = coeff_ti['matrices_data']['mobApprox']
+        convert2bar = 10**5
 
         b_tec.set_modes = pyo.Set(initialize=range(1, lp +1)) # also refers to the eigenvectors retrieved and not to grid blocks
         # TODO: fix bounds of all variables
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
-                                   bounds=(epsilon.min(), epsilon.max()))
-        # b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
-        #                            bounds=(-2000000000000000, 2000000000000000))
-        # b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals,bounds=(0, 1000))
-        b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals)
+                                   bounds=(epsilon.min()*3, epsilon.max()*3))
+        b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals, bounds=(100, 250))
 
 
 
@@ -253,17 +255,17 @@ class CO2storageDetailed(Technology):
         s_abs_index = [0, 1]
         # TODO: add proper bounds to the distance variables
         b_tec.var_distance = pyo.Var(b_tec.set_t_reduced, s_search_indices,
-                                     within=pyo.Reals, bounds=(0, 100000000000))
+                                     within=pyo.Reals, bounds=(0, 1000))
         b_tec.var_d_min = pyo.Var(b_tec.set_t_reduced,
-                                  within=pyo.Reals, bounds=(0, 100000000000))
+                                  within=pyo.Reals, bounds=(0, 100))
         # Distance cumulative injection
         b_tec.var_d_cuminj = pyo.Var(b_tec.set_t_reduced, s_search_indices,
-                                     within=pyo.Reals, bounds=(0, 100000000000))
+                                     within=pyo.Reals, bounds=(0, 1000))
         # auxiliary for abs value
         b_tec.var_d_cuminj_auxpos = pyo.Var(b_tec.set_t_reduced, s_search_indices,
-                                            within=pyo.Reals, bounds=(0, 100000000000))
+                                            within=pyo.Reals, bounds=(0, 1000))
         b_tec.var_d_cuminj_auxneg = pyo.Var(b_tec.set_t_reduced, s_search_indices,
-                                            within=pyo.Reals, bounds=(0, 100000000000))
+                                            within=pyo.Reals, bounds=(0, 1000))
 
         # Absolute value for cumulative injection distance disjunction
         # note: we use the inj_rate instead of inj_rate*length_timestep because we use constant timsteps, so they cancel out in the equation
@@ -380,7 +382,7 @@ class CO2storageDetailed(Technology):
         # rewrite the states in the new base (only done for the cell of interest - top well)
         def init_retrieve_bhp(const, t_red):
             return b_tec.var_bhp[t_red] == sum(phi[cell_topwell - 1, k - 1] * b_tec.var_states[t_red, k]
-                                               for k in b_tec.set_modes)
+                                               for k in b_tec.set_modes) + b_tec.var_average_inj_rate[t_red]/(WI*mobApprox)/convert2bar
 
         b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
 
