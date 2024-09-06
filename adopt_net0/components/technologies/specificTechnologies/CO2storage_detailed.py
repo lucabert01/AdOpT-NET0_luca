@@ -6,6 +6,7 @@ import pyomo.environ as pyo
 import pyomo.gdp as gdp
 import numpy as np
 import pandas as pd
+import json
 
 from ..technology import Technology
 from ....components.utilities import (
@@ -91,10 +92,20 @@ class CO2storageDetailed(Technology):
             performance_data_path
             / "data/technology_data/Sink/SalineAquifer_data/matrices_for_ROM.mat"
         )
+
         self.processed_coeff.time_independent["matrices_data"] = sci.loadmat(performance_data_path)
+        pump_performance_interp_path = (
+            performance_data_path
+            / "data/technology_data/Sink/SalineAquifer_data/pump_params.json"
+        )
+        with open(pump_performance_interp_path, "r") as f:
+            params_dict = json.load(f)
 
-
-
+        # Extract the parameters
+        a = params_dict.get("a")
+        b = params_dict.get("b")
+        self.processed_coeff.time_independent["pump_interp"] = params_dict
+        a=1
     def _calculate_bounds(self):
         """
         Calculates the bounds of the variables used
@@ -395,13 +406,32 @@ class CO2storageDetailed(Technology):
 
 
 
-
-
-        # Electricity consumption for compression
         b_tec.var_pwellhead = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals)
-        b_tec.var_pratio = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals, bounds=[0, 100])
-        # TODO add constraint on relationship bhp and wellhead pressure
+        g = 9.81
+        delta_h = 1000
+        # TODO: check if using rho_co2_surface is fine (and not an average value)
+        hydrostatic_pressure = g*delta_h*rho_co2_surface/convert2bar
+        # TODO: check proper value
+        eta_pump = 0.75
+        specific_vol_co2 = 1/rho_co2_surface
+        def init_pwellhad(const, t_red):
+            return b_tec.var_pwellhead[t_red] == b_tec.var_bhp[t_red] - hydrostatic_pressure
+        b_tec.const_pwellhead = pyo.Constraint(b_tec.set_t_reduced, rule=init_pwellhad)
 
+
+        # Electricity consumption Pump
+        for t_red in b_tec.set_t_reduced:
+            def init_output_pump(const, t):
+                if t <= max(self.set_t_full):
+                    return (
+                        self.input[t, "electricity"]
+                        == eta[ind - 1] * self.input[t, self.main_car]
+                )
+                else:
+                    return pyo.Constraint.Skip
+            b_tec.const_output_pump = pyo.Constraint(b_tec.set_t_for_reduced_period[t_red], rule=init_output_pump)
+        # Electricity consumption for compression (to be used if Co2 is transported in gas phase
+        b_tec.var_pratio = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals, bounds=[0, 100])
         def init_pressure_ratio(const, t):
             return b_tec.var_pratio[t] == 5
 
