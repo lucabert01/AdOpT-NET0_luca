@@ -20,7 +20,7 @@
   },
   "Performance": {
     "comment": "contains fitting data on unit of input, technology types and input/output carriers",
-    "plant_size": "small",
+    "plant_size": "large",
     "input_carrier": [
       "electricity",
       "heat"

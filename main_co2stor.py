@@ -4,10 +4,11 @@ import json
 import pandas as pd
 from pathlib import Path
 import numpy as np
+import pyomo.environ as pyo
 
 
 # Specify the path to your input data
-path = Path("./detailedCO2storage_test1")
+path = Path("./detailedCO2storage_test2")
 
 # Create template files (comment these lines if already defined)
 # adopt.create_optimization_templates(path)
@@ -42,7 +43,7 @@ adopt.create_input_data_folder_template(path)
 # Add technologies
 with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "r") as json_file:
     technologies = json.load(json_file)
-technologies["new"] = ["PermanentStorage_CO2_detailed"]
+technologies["new"] = ["PermanentStorage_CO2_detailed", "CementEmitter"]
 
 with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "w") as json_file:
     json.dump(technologies, json_file, indent=4)
@@ -59,7 +60,22 @@ adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], car
 # Construct and solve the model
 m = adopt.ModelHub()
 m.read_data(path, start_period=0, end_period=6)
-m.quick_solve()
+m.construct_model()
+m.construct_balances()
+
+# Force output of CementEmitter
+model = m.model[m.info_solving_algorithms["aggregation_model"]].periods["period1"]
+set_t_full = model.set_t_full
+emission_profile_cement = np.ones((8760,1))*50
+b_tec = m.model[m.info_solving_algorithms[
+    "aggregation_model"]].periods["period1"].node_blocks["storage"].tech_blocks_active[
+    "CementEmitter"]
+
+def init_cement_emissions(const,t):
+    return b_tec.var_output[t] == emission_profile_cement[t]
+b_tec.const_emission_cement = pyo.Constraint(set_t_full, rule=init_cement_emissions())
+
+m.solve()
 m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
     "PermanentStorage_CO2_detailed"].var_distance.pprint()
 m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
