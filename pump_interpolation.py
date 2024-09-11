@@ -5,7 +5,6 @@ import cmcrameri.cm as cmc
 from pathlib import Path
 import json
 
-
 # Given constants
 rho_co2 = 505           # kg/m3
 nu = 1/rho_co2           # Specific volume

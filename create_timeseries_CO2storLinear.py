@@ -67,4 +67,3 @@ range_co2_prices_fulll = np.append(range_co2_price_3040, range_co2_price_4050)
 
 fullprofile_co2_price = range_co2_prices_fulll[0:time_sim*365]
 
-a=1
