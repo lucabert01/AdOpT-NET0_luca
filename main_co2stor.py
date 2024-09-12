@@ -11,7 +11,7 @@ import pyomo.environ as pyo
 path = Path("./detailedCO2storage_test2")
 
 # Create template files (comment these lines if already defined)
-# adopt.create_optimization_templates(path)
+adopt.create_optimization_templates(path)
 
 # Load json template
 with open(path / "Topology.json", "r") as json_file:
@@ -19,7 +19,7 @@ with open(path / "Topology.json", "r") as json_file:
 # Nodes
 topology["nodes"] = ["storage"]
 # Carriers:
-topology["carriers"] = ["electricity", "CO2captured"]
+topology["carriers"] = ["electricity", "CO2captured", "cement", "heat"]
 # Investment periods:
 topology["investment_periods"] = ["period1"]
 # Save json template
@@ -43,7 +43,8 @@ adopt.create_input_data_folder_template(path)
 # Add technologies
 with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "r") as json_file:
     technologies = json.load(json_file)
-technologies["new"] = ["PermanentStorage_CO2_detailed", "CementEmitter"]
+# technologies["new"] = ["PermanentStorage_CO2_detailed", "CementEmitter"]
+technologies["new"] = ["PermanentStorage_CO2_simple", "CementEmitter"]
 
 with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "w") as json_file:
     json.dump(technologies, json_file, indent=4)
@@ -55,7 +56,15 @@ adopt.copy_technology_data(path)
 adopt.fill_carrier_data(path, value_or_data=0.0345, columns=['Import limit'], carriers=['CO2captured'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=-1500, columns=['Import price'], carriers=['CO2captured'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['electricity'], nodes=['storage'])
+adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['heat'], nodes=['storage'])
+adopt.fill_carrier_data(path, value_or_data=50, columns=['Demand'], carriers=['cement'], nodes=['storage'])
 
+carbon_price = np.ones(8760)*500
+carbon_cost_path = path / "period1" / "node_data" / "storage" /"CarbonCost.csv"
+carbon_cost_template = pd.read_csv(carbon_cost_path, sep=';', index_col=0, header=0)
+carbon_cost_template['price'] = carbon_price
+carbon_cost_template = carbon_cost_template.reset_index()
+carbon_cost_template.to_csv(carbon_cost_path, sep=';', index=False)
 
 # Construct and solve the model
 m = adopt.ModelHub()
@@ -63,17 +72,17 @@ m.read_data(path, start_period=0, end_period=6)
 m.construct_model()
 m.construct_balances()
 
-# Force output of CementEmitter
-model = m.model[m.info_solving_algorithms["aggregation_model"]].periods["period1"]
-set_t_full = model.set_t_full
-emission_profile_cement = np.ones((8760,1))*50
-b_tec = m.model[m.info_solving_algorithms[
-    "aggregation_model"]].periods["period1"].node_blocks["storage"].tech_blocks_active[
-    "CementEmitter"]
-
-def init_cement_emissions(const,t):
-    return b_tec.var_output[t] == emission_profile_cement[t]
-b_tec.const_emission_cement = pyo.Constraint(set_t_full, rule=init_cement_emissions())
+# # Force output of CementEmitter
+# model = m.model[m.info_solving_algorithms["aggregation_model"]].periods["period1"]
+# set_t_full = model.set_t_full
+# emission_profile_cement = np.ones((8760,1))*50
+# b_tec = m.model[m.info_solving_algorithms[
+#     "aggregation_model"]].periods["period1"].node_blocks["storage"].tech_blocks_active[
+#     "CementEmitter"]
+#
+# def init_cement_emissions(const,t):
+#     return b_tec.var_output[t, "cement"] == emission_profile_cement[t]
+# b_tec.const_emission_cement = pyo.Constraint(set_t_full, rule=init_cement_emissions)
 
 m.solve()
 m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
