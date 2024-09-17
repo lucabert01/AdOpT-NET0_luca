@@ -86,26 +86,26 @@ class CO2storageDetailed(Technology):
                 ]
             )
 
-        # Load the .mat file
-        performance_data_path = Path(__file__).parent.parent.parent.parent
-        performance_data_path = (
-            performance_data_path
+        # Load the .mat file for ROM model of saline aquifer
+        general_performance_data_path = Path(__file__).parent.parent.parent.parent
+        aquifer_performance_data_path = (
+            general_performance_data_path
             / "data/technology_data/Sink/SalineAquifer_data/matrices_for_ROM.mat"
         )
 
-        self.processed_coeff.time_independent["matrices_data"] = sci.loadmat(performance_data_path)
-        # pump_performance_interp_path = (
-        #     performance_data_path
-        #     / "data/technology_data/Sink/SalineAquifer_data/pump_params.json"
-        # )
-        # with open(pump_performance_interp_path, "r") as f:
-        #     params_dict = json.load(f)
-        #
-        # # Extract the parameters
-        # a = params_dict.get("a")
-        # b = params_dict.get("b")
-        # self.processed_coeff.time_independent["pump_interp"] = params_dict
-        # a=1
+        self.processed_coeff.time_independent["matrices_data"] = sci.loadmat(aquifer_performance_data_path)
+
+        # Load the data for pump performance interpolation
+        pump_performance_interp_path = (
+            general_performance_data_path
+            / "data/technology_data/Sink/SalineAquifer_data/pump_params.json"
+        )
+        with open(pump_performance_interp_path, "r") as f:
+            params_dict = json.load(f)
+
+        # Extract the parameters
+        self.processed_coeff.time_independent["pump_interp"] = params_dict
+
     def _calculate_bounds(self):
         """
         Calculates the bounds of the variables used
@@ -418,59 +418,74 @@ class CO2storageDetailed(Technology):
             return b_tec.var_pwellhead[t_red] == b_tec.var_bhp[t_red] - hydrostatic_pressure
         b_tec.const_pwellhead = pyo.Constraint(b_tec.set_t_reduced, rule=init_pwellhad)
 
+        # Electricity consumption pump
+        p_pump_in = 100  # Inlet pressure in bar (constant) NOTE: if changed, change also the pump_interpolation.py
+        # TODO: calculate value for p_loss in the offshore pipeline based on an assumed flowrate
+        p_loss_offshorepipeline = 10
+        a_pump = coeff_ti["pump_interp"]["a"]
+        b_pump = coeff_ti["pump_interp"]["b"]
 
 
-        # Electricity consumption for compression (to be used if Co2 is transported in gas phase
-        b_tec.var_pratio = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals, bounds=[0, 100])
-        def init_pressure_ratio(const, t):
-            return b_tec.var_pratio[t] == 5
 
-        b_tec.const_pratio1 = pyo.Constraint(expr=b_tec.var_pratio[1] == 5)
-        b_tec.const_pratio2 = pyo.Constraint(expr=b_tec.var_pratio[2] == 15)
-        nr_segments =2
-        b_tec.set_pieces = pyo.RangeSet(1, nr_segments)
-        eta = [0.2, 0.8]
-        pratio_range = [0, 10, 20]
+        def init_pump(const,t):
+            t_red = int((t-1)/length_t_red) +1
+            return self.input[t,'electricity'] == a_pump * self.input[t, self.main_car] + b_pump * (b_tec.var_pwellhead[t_red]) + b_pump * (b_tec.var_pwellhead[1])
 
-        self.big_m_transformation_required = 1
-        def init_input_output(dis, t_red, ind):
-            def init_output(const, t):
-                if t <= max(self.set_t_full):
-                    return (
-                        self.input[t, "electricity"]
-                        == eta[ind - 1] * self.input[t, self.main_car]
-                )
-                else:
-                    return pyo.Constraint.Skip
+        b_tec.const_pump = pyo.Constraint(set_t, rule=init_pump)
 
-            dis.const_output = pyo.Constraint(b_tec.set_t_for_reduced_period[t_red], rule=init_output)
+        a=1
 
-            # Lower bound on the energy input (eq. 5)
-            def init_input_low_bound(const):
-                return (
-                    pratio_range[ind - 1]
-                    <= b_tec.var_pratio[t_red]
-                )
-
-            dis.const_input_on1 = pyo.Constraint(rule=init_input_low_bound)
-
-            # Upper bound on the energy input (eq. 5)
-            def init_input_up_bound(const):
-                return (
-                    b_tec.var_pratio[t_red]
-                    <= pratio_range[ind]
-                )
-
-            dis.const_input_on2 = pyo.Constraint(rule=init_input_up_bound)
-
-        b_tec.dis_input_output = gdp.Disjunct(
-            b_tec.set_t_reduced, b_tec.set_pieces, rule=init_input_output
-        )
-
-        # Bind disjuncts
-        def bind_disjunctions(dis, t_red):
-            return [b_tec.dis_input_output[t_red, i] for i in b_tec.set_pieces]
-        b_tec.disjunction_input_output = gdp.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
+        # # Electricity consumption for compression (to be used if Co2 is transported in gas phase
+        # b_tec.var_pratio = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals, bounds=[0, 100])
+        # def init_pressure_ratio(const, t):
+        #     return b_tec.var_pratio[t] == 5
+        #
+        # b_tec.const_pratio1 = pyo.Constraint(expr=b_tec.var_pratio[1] == 5)
+        # b_tec.const_pratio2 = pyo.Constraint(expr=b_tec.var_pratio[2] == 15)
+        # nr_segments =2
+        # b_tec.set_pieces = pyo.RangeSet(1, nr_segments)
+        # eta = [0.2, 0.8]
+        # pratio_range = [0, 10, 20]
+        #
+        # self.big_m_transformation_required = 1
+        # def init_input_output(dis, t_red, ind):
+        #     def init_output(const, t):
+        #         if t <= max(self.set_t_full):
+        #             return (
+        #                 self.input[t, "electricity"]
+        #                 == eta[ind - 1] * self.input[t, self.main_car]
+        #         )
+        #         else:
+        #             return pyo.Constraint.Skip
+        #
+        #     dis.const_output = pyo.Constraint(b_tec.set_t_for_reduced_period[t_red], rule=init_output)
+        #
+        #     # Lower bound on the energy input (eq. 5)
+        #     def init_input_low_bound(const):
+        #         return (
+        #             pratio_range[ind - 1]
+        #             <= b_tec.var_pratio[t_red]
+        #         )
+        #
+        #     dis.const_input_on1 = pyo.Constraint(rule=init_input_low_bound)
+        #
+        #     # Upper bound on the energy input (eq. 5)
+        #     def init_input_up_bound(const):
+        #         return (
+        #             b_tec.var_pratio[t_red]
+        #             <= pratio_range[ind]
+        #         )
+        #
+        #     dis.const_input_on2 = pyo.Constraint(rule=init_input_up_bound)
+        #
+        # b_tec.dis_input_output = gdp.Disjunct(
+        #     b_tec.set_t_reduced, b_tec.set_pieces, rule=init_input_output
+        # )
+        #
+        # # Bind disjuncts
+        # def bind_disjunctions(dis, t_red):
+        #     return [b_tec.dis_input_output[t_red, i] for i in b_tec.set_pieces]
+        # b_tec.disjunction_input_output = gdp.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
 
 
 

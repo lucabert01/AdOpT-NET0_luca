@@ -43,8 +43,8 @@ adopt.create_input_data_folder_template(path)
 # Add technologies
 with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "r") as json_file:
     technologies = json.load(json_file)
-# technologies["new"] = ["PermanentStorage_CO2_detailed", "CementEmitter"]
-technologies["new"] = ["PermanentStorage_CO2_simple", "CementEmitter"]
+technologies["new"] = ["PermanentStorage_CO2_detailed", "CementEmitter"]
+# technologies["new"] = ["PermanentStorage_CO2_simple", "CementEmitter"]
 
 with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "w") as json_file:
     json.dump(technologies, json_file, indent=4)
@@ -57,7 +57,7 @@ adopt.fill_carrier_data(path, value_or_data=0.0345, columns=['Import limit'], ca
 adopt.fill_carrier_data(path, value_or_data=-1500, columns=['Import price'], carriers=['CO2captured'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['electricity'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['heat'], nodes=['storage'])
-adopt.fill_carrier_data(path, value_or_data=50, columns=['Demand'], carriers=['cement'], nodes=['storage'])
+adopt.fill_carrier_data(path, value_or_data=0, columns=['Demand'], carriers=['cement'], nodes=['storage'])
 
 carbon_price = np.ones(8760)*500
 carbon_cost_path = path / "period1" / "node_data" / "storage" /"CarbonCost.csv"

@@ -15,8 +15,8 @@ def compute_W_pump(m_dot, p_pump_out):
     return m_dot * nu * (p_pump_out - p_pump_in) / eta_pump *0.1/3.6 # power in MW
 
 # Define the ranges for p_pump_out (delta_p) and m_dot (flowrate)
-range_delta_p = [150, 250] # in bar
-range_flowrate = [0, 100] # in t/h
+range_delta_p = [101, 130] # in bar
+range_flowrate = [0, 10] # in t/h
 
 # Create linearly spaced values within the given ranges
 p_pump_out_range = np.linspace(range_delta_p[0], range_delta_p[1], 100)  # Pump exit pressure  bar
@@ -31,7 +31,7 @@ W_pump_values = compute_W_pump(m_dot_grid, p_pump_out_grid)
 # fit W_pump with a plane W = a * p_pump_out + b * m_dot
 def plane_model(X, a, b):
     p_pump_out, m_dot = X
-    return a * p_pump_out + b * m_dot
+    return a * m_dot + b * p_pump_out - b * p_pump_out_range[0]
 
 # Flatten the grids for curve fitting
 p_pump_out_flat = p_pump_out_grid.flatten()
