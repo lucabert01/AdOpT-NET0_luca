@@ -53,7 +53,7 @@ with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "w")
 adopt.copy_technology_data(path)
 
 # Set import limits/cost
-adopt.fill_carrier_data(path, value_or_data=0.0345, columns=['Import limit'], carriers=['CO2captured'], nodes=['storage'])
+adopt.fill_carrier_data(path, value_or_data=0.0345*0, columns=['Import limit'], carriers=['CO2captured'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=-1500, columns=['Import price'], carriers=['CO2captured'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['electricity'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['heat'], nodes=['storage'])
@@ -91,5 +91,6 @@ m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
     "PermanentStorage_CO2_detailed"].var_bhp.pprint()
 m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
     "PermanentStorage_CO2_detailed"].var_d_min.pprint()
+
 
 a =1
