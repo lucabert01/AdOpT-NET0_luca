@@ -15,8 +15,8 @@ def compute_W_pump(m_dot, p_pump_out):
     return m_dot * nu * (p_pump_out - p_pump_in) / eta_pump *0.1/3.6 # power in MW
 
 # Define the ranges for p_pump_out (delta_p) and m_dot (flowrate)
-range_delta_p = [101, 130] # in bar
-range_flowrate = [0, 10] # in t/h
+range_delta_p = [99, 130] # in bar
+range_flowrate = [0, 100] # in t/h
 
 # Create linearly spaced values within the given ranges
 p_pump_out_range = np.linspace(range_delta_p[0], range_delta_p[1], 100)  # Pump exit pressure  bar

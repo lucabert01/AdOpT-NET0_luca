@@ -426,10 +426,10 @@ class CO2storageDetailed(Technology):
         b_pump = coeff_ti["pump_interp"]["b"]
 
 
-
+        # Mulitplied times 0.99 to make sure that el consumption is not negative when the mass flow rate is 0
         def init_pump(const,t):
             t_red = int((t-1)/length_t_red) +1
-            return self.input[t,'electricity'] == a_pump * self.input[t, self.main_car] + b_pump * (b_tec.var_pwellhead[t_red]) + b_pump * (b_tec.var_pwellhead[1])
+            return self.input[t,'electricity'] == a_pump * self.input[t, self.main_car] + b_pump * (b_tec.var_pwellhead[t_red]) - b_pump * (b_tec.var_pwellhead[1]*0.99)
 
         b_tec.const_pump = pyo.Constraint(set_t, rule=init_pump)
 
