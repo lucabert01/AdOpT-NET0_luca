@@ -58,7 +58,7 @@ adopt.fill_carrier_data(path, value_or_data=-1500, columns=['Import price'], car
 adopt.fill_carrier_data(path, value_or_data=50, columns=['Import limit'], carriers=['electricity'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['heat'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['gas'], nodes=['storage'])
-adopt.fill_carrier_data(path, value_or_data=380/24, columns=['Demand'], carriers=['cement'], nodes=['storage'])
+adopt.fill_carrier_data(path, value_or_data=480/24, columns=['Demand'], carriers=['cement'], nodes=['storage'])
 
 carbon_price = np.ones(8760)*500
 carbon_cost_path = path / "period1" / "node_data" / "storage" /"CarbonCost.csv"
@@ -86,11 +86,29 @@ m.construct_balances()
 # b_tec.const_emission_cement = pyo.Constraint(set_t_full, rule=init_cement_emissions)
 
 m.solve()
-m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
-    "PermanentStorage_CO2_detailed"].var_distance.pprint()
-m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
-    "PermanentStorage_CO2_detailed"].var_bhp.pprint()
-m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
-    "PermanentStorage_CO2_detailed"].var_d_min.pprint()
+# m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+#     "PermanentStorage_CO2_detailed"].var_distance.pprint()
+# m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+#     "PermanentStorage_CO2_detailed"].var_bhp.pprint()
+# m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+#     "PermanentStorage_CO2_detailed"].var_d_min.pprint()
 
 
+t_end = 73
+compare_co2_stored = sum(m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+    "PermanentStorage_CO2_simple"].var_input[t, "CO2captured"].value for t in range(1,t_end))
+compare_el_storage = sum(m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+    "PermanentStorage_CO2_simple"].var_input[t, "electricity"].value for t in range(1,t_end))
+compare_heat_ccs = sum(m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+    "CementEmitter"].var_input_ccs[t, "heat"].value for t in range(1,t_end))
+compare_el_ccs = sum(m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+    "CementEmitter"].var_input_ccs[t, "electricity"].value for t in range(1,t_end))
+compare_capex_ccs = m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
+    "CementEmitter"].var_capex_ccs.value
+
+print("Comparison of Values:")
+print(f"CO2 Stored (Period 1-73): {compare_co2_stored:.2f}")
+print(f"Electricity for Storage (Period 1-73): {compare_el_storage:.2f}")
+print(f"Heat for CCS (Period 1-73): {compare_heat_ccs:.2f}")
+print(f"Electricity for CCS (Period 1-73): {compare_el_ccs:.2f}")
+print(f"CapEx for CCS: {compare_capex_ccs:.2f}")
