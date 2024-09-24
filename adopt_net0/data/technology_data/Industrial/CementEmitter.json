@@ -28,7 +28,7 @@
     "min_part_load": 0,
     "ccs": {
       "possible": 1,
-      "co2_concentration" : 0.08,
+      "co2_concentration" : 0.1,
       "ccs_type": "MEA_medium"
     },
     "ramping_rate": -1,
