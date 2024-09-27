@@ -7,6 +7,8 @@ import pyomo.gdp as gdp
 import numpy as np
 import pandas as pd
 import json
+from scipy.optimize import curve_fit
+
 
 from ..technology import Technology
 from ....components.utilities import (
@@ -95,17 +97,50 @@ class CO2storageDetailed(Technology):
 
         self.processed_coeff.time_independent["matrices_data"] = sci.loadmat(aquifer_performance_data_path)
 
-        # Load the data for pump performance interpolation
-        pump_performance_interp_path = (
-            general_performance_data_path
-            / "data/technology_data/Sink/SalineAquifer_data/pump_params.json"
-        )
-        with open(pump_performance_interp_path, "r") as f:
-            params_dict = json.load(f)
+        # Perform pump interpolation
+        # TODO: calculate value for p_loss in the offshore pipeline based on an assumed flowrate
+        # TODO: check proper value for efficiency of the pump
+        self.processed_coeff.time_independent["rho_co2_surface"] = 550 #kg/m3
+        offshore_transport = {}
+        offshore_transport["p_pump_in"] = 100 # Inlet pressure in bar (constant)
+        offshore_transport["p_loss_offshorepipeline"] = 10 # Inlet pressure in bar (constant)
+        p_pump_in = offshore_transport["p_pump_in"]
+        p_loss_offshorepipeline = offshore_transport["p_loss_offshorepipeline"]
+        nu = 1/self.processed_coeff.time_independent["rho_co2_surface"]
+        eta_pump = 0.85
+        pout_min = 99 + p_loss_offshorepipeline
+        range_delta_p = [pout_min, 140]  # in bar
+        range_flowrate = [0, 100]  # in t/h
 
-        # Extract the parameters
-        self.processed_coeff.time_independent["pump_interp"] = params_dict
+        def compute_W_pump(m_dot, p_pump_out):
+            return m_dot * nu * (p_pump_out - p_pump_in) / eta_pump * 0.1 / 3.6  # power in MW
 
+        # Create linearly spaced values within the given ranges
+        p_pump_out_range = np.linspace(range_delta_p[0], range_delta_p[1], 100)  # Pump exit pressure  bar
+        m_dot_range = np.linspace(range_flowrate[0], range_flowrate[1], 100)  # Mass flow rate  t/h
+
+        # Create a meshgrid of values for p_pump_out and m_dot
+        p_pump_out_grid, m_dot_grid = np.meshgrid(p_pump_out_range, m_dot_range)
+
+        # Calculate the pump power for each pair of (m_dot, p_pump_out)
+        W_pump_values = compute_W_pump(m_dot_grid, p_pump_out_grid)
+
+        # fit W_pump with a plane W = a * m_dot + b * p_pump_out + constant
+        def plane_model(X, a, b):
+            p_pump_out, m_dot = X
+            return a * m_dot + b * p_pump_out - b * p_pump_out_range[0]
+
+        # Flatten the grids for curve fitting
+        p_pump_out_flat = p_pump_out_grid.flatten()
+        m_dot_flat = m_dot_grid.flatten()
+        W_pump_flat = W_pump_values.flatten()
+
+        # Perform curve fitting to get the coefficients a and b
+        params, _ = curve_fit(plane_model, (p_pump_out_flat, m_dot_flat), W_pump_flat)
+
+
+        self.processed_coeff.time_independent["pump_interp"] = params
+        self.processed_coeff.time_independent["offshore_transport"] = offshore_transport
     def _calculate_bounds(self):
         """
         Calculates the bounds of the variables used
@@ -206,7 +241,7 @@ class CO2storageDetailed(Technology):
         num_reduced_period = int(np.ceil(len(self.set_t_full) / length_t_red))
         b_tec.set_t_reduced = pyo.Set(initialize=range(1, num_reduced_period + 1))
         # TODO: check value of rho_co2_surface
-        rho_co2_surface = 550 # [kg/m3] density of CO2 at surface conditions
+        rho_co2_surface = coeff_ti["rho_co2_surface"] # [kg/m3] density of CO2 at surface conditions
         # TODO: remove *0+1 from convert_inj_rate
         convert_inj_rate = 1/(rho_co2_surface*3.6)*0+1 # converts t/h to m3/s, which is the unit required in the TPWL-POD model
 
@@ -409,31 +444,25 @@ class CO2storageDetailed(Technology):
         b_tec.var_pwellhead = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals)
         g = 9.81
         delta_h = 1000
+        rho_co2_surface = coeff_ti["rho_co2_surface"]
         # TODO: check if using rho_co2_surface is fine (and not an average value)
         hydrostatic_pressure = g*delta_h*rho_co2_surface/convert2bar
-        # TODO: check proper value for efficiency of the pump
-        eta_pump = 0.85
-        specific_vol_co2 = 1/rho_co2_surface
         def init_pwellhad(const, t_red):
             return b_tec.var_pwellhead[t_red] == b_tec.var_bhp[t_red] - hydrostatic_pressure
         b_tec.const_pwellhead = pyo.Constraint(b_tec.set_t_reduced, rule=init_pwellhad)
 
         # Electricity consumption pump
-        p_pump_in = 100  # Inlet pressure in bar (constant) NOTE: if changed, change also the pump_interpolation.py
-        # TODO: calculate value for p_loss in the offshore pipeline based on an assumed flowrate
-        p_loss_offshorepipeline = 10
-        a_pump = coeff_ti["pump_interp"]["a"]
-        b_pump = coeff_ti["pump_interp"]["b"]
-
-
+        a_pump, b_pump = coeff_ti["pump_interp"]
+        p_loss_offshorepipeline = coeff_ti["offshore_transport"]["p_loss_offshorepipeline"]
         # Mulitplied times 0.99 to make sure that el consumption is not negative when the mass flow rate is 0
         def init_pump(const,t):
             t_red = int((t-1)/length_t_red) +1
-            return self.input[t,'electricity'] == a_pump * self.input[t, self.main_car] + b_pump * (b_tec.var_pwellhead[t_red]) - b_pump * (b_tec.var_pwellhead[1]*0.99)
+            return (self.input[t,'electricity'] == a_pump * self.input[t, self.main_car] + b_pump *
+                    (b_tec.var_pwellhead[t_red] + p_loss_offshorepipeline)
+                    - b_pump * ((b_tec.var_pwellhead[1]+p_loss_offshorepipeline)*0.99))
 
         b_tec.const_pump = pyo.Constraint(set_t, rule=init_pump)
 
-        a=1
 
         # # Electricity consumption for compression (to be used if Co2 is transported in gas phase
         # b_tec.var_pratio = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals, bounds=[0, 100])
@@ -491,6 +520,8 @@ class CO2storageDetailed(Technology):
 
 
         return b_tec
+
+
 
     def write_results_tec_operation(self, h5_group, model_block):
         """
