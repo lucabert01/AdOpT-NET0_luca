@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+from pathlib import Path
+
 
 # Case studies parameters
 time_sim = 10 # years simulated
@@ -66,4 +68,11 @@ range_co2_price_4050 = np.linspace(co2_price_2040,co2_price_2050, num=365*10)
 range_co2_prices_fulll = np.append(range_co2_price_3040, range_co2_price_4050)
 
 fullprofile_co2_price = range_co2_prices_fulll[0:time_sim*365]
+
+# Save data
+data_path = Path(__file__).parent/'data_simulations_co2stor_linear'
+
+np.save(data_path/'fullprofile_emissions_cement.npy', fullprofile_emissions_cement)
+np.save(data_path/'fullprofile_emissions_w2e.npy', fullprofile_emissions_w2e)
+np.save(data_path/'fullprofile_co2_price.npy', fullprofile_co2_price)
 

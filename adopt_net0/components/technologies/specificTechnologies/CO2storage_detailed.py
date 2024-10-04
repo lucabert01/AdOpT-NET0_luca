@@ -242,8 +242,7 @@ class CO2storageDetailed(Technology):
         b_tec.set_t_reduced = pyo.Set(initialize=range(1, num_reduced_period + 1))
         # TODO: check value of rho_co2_surface
         rho_co2_surface = coeff_ti["rho_co2_surface"] # [kg/m3] density of CO2 at surface conditions
-        # TODO: remove *0+1 from convert_inj_rate
-        convert_inj_rate = 1/(rho_co2_surface*3.6)*0+1 # converts t/h to m3/s, which is the unit required in the TPWL-POD model
+        convert_inj_rate = 1/(rho_co2_surface*3.6) # converts t/h to m3/s, which is the unit required in the TPWL-POD model
 
         def init_reduced_set_t(set, t_red):
             return [x + (t_red-1)*length_t_red for x in list(range(1, length_t_red+1))]

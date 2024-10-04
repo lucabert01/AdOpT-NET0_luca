@@ -5,6 +5,16 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 import pyomo.environ as pyo
+import scipy.io as sci
+
+# Function for later
+def prepare_data_series(array, type, end_period):
+    array = array[:end_period].flatten()
+    full_series = np.zeros(8760)
+    full_series[:len(array)] = array
+    full_series = pd.DataFrame(full_series, columns=[type])
+    return full_series
+
 
 
 # Specify the path to your input data
@@ -25,6 +35,8 @@ topology["investment_periods"] = ["period1"]
 # Save json template
 with open(path / "Topology.json", "w") as json_file:
     json.dump(topology, json_file, indent=4)
+
+end_period = 8
 
 
 # Load json template
@@ -52,13 +64,35 @@ with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "w")
 # Copy over technology files
 adopt.copy_technology_data(path)
 
+# Load the .mat file for ROM model of saline aquifer
+general_performance_data_path = Path(__file__).parent
+aquifer_performance_data_path = (
+        general_performance_data_path
+        / "adopt_net0/data/technology_data/Sink/SalineAquifer_data/matrices_for_ROM.mat"
+)
+
+
+co2stor_data = sci.loadmat(aquifer_performance_data_path)
+inj_rate = co2stor_data["uNew"]
+inj_rate = inj_rate[:end_period, 0]
+conversion_factor = 550*3.6
+tot_inj_rate = np.zeros(8760)
+tot_inj_rate[:len(inj_rate)] = inj_rate*conversion_factor
+tot_inj_rate = pd.DataFrame(tot_inj_rate, columns=['Import limit'])
+
+# Load and prepare data series
+data_path = Path(__file__).parent/"data_simulations_co2stor_linear"
+cement_emissions = np.load(data_path/"fullprofile_emissions_cement.npy", allow_pickle=True)
+cement_emissions = prepare_data_series(cement_emissions, "Import limit", end_period)
+
+
 # Set import limits/cost
-adopt.fill_carrier_data(path, value_or_data=0.0345*0, columns=['Import limit'], carriers=['CO2captured'], nodes=['storage'])
+adopt.fill_carrier_data(path, value_or_data=tot_inj_rate, columns=['Import limit'], carriers=['CO2captured'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=-1500, columns=['Import price'], carriers=['CO2captured'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=50, columns=['Import limit'], carriers=['electricity'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['heat'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['gas'], nodes=['storage'])
-adopt.fill_carrier_data(path, value_or_data=480/24, columns=['Demand'], carriers=['cement'], nodes=['storage'])
+#adopt.fill_carrier_data(path, value_or_data=480/24, columns=['Demand'], carriers=['cement'], nodes=['storage'])
 
 carbon_price = np.ones(8760)*500
 carbon_cost_path = path / "period1" / "node_data" / "storage" /"CarbonCost.csv"
@@ -69,7 +103,7 @@ carbon_cost_template.to_csv(carbon_cost_path, sep=';', index=False)
 
 # Construct and solve the model
 m = adopt.ModelHub()
-m.read_data(path, start_period=0, end_period=6)
+m.read_data(path, start_period=0, end_period=end_period)
 m.construct_model()
 m.construct_balances()
 
@@ -118,3 +152,5 @@ print(f"Electricity for CCS (Period 1-72): {compare_el_ccs:.2f}")
 print(f"CO2 captured CCS (Period 1-72): {compare_co2_ccs:.2f}")
 print(f"CapEx for CCS: {compare_capex_ccs:.2f}")
 print(f"Size CCS: {compare_size_ccs:.2f}")
+
+
