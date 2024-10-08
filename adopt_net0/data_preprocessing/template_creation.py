@@ -250,6 +250,7 @@ def initialize_topology_templates() -> dict:
         "end_date": "2022-12-31 23:00",
         "resolution": "1h",
         "investment_period_length": 1,
+        "timestep_length": 24,
     }
     return topology_template
 

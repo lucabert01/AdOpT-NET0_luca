@@ -130,9 +130,10 @@ class DataHandle:
         self.topology["time_index"]["full"] = time_index[
             self.start_period : self.end_period
         ]
+        timestep_length = self.topology["timestep_length"]
         new_number_timesteps = len(self.topology["time_index"]["full"])
         self.topology["fraction_of_year_modelled"] = (
-            new_number_timesteps / original_number_timesteps
+            new_number_timesteps * timestep_length / original_number_timesteps
         )
 
         # Resolution in hours

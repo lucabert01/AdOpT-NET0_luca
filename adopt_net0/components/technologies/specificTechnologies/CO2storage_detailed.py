@@ -256,12 +256,12 @@ class CO2storageDetailed(Technology):
             if t_red * length_t_red <= max(self.set_t_full):
                 return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
                                                                 for t in list(range((t_red -1) * length_t_red +1,
-                                                                                    t_red * length_t_red+1)))/length_t_red*convert_inj_rate
+                                                                                    t_red * length_t_red+1)))/length_t_red*convert_inj_rate/24
             else:
                 leftover_t_step = max(self.set_t_full) - (t_red-1) * length_t_red
                 return b_tec.var_average_inj_rate[t_red] == sum(self.input[t, self.main_car]
                                                                 for t in list(range((t_red-1) * length_t_red,
-                                                                                    (t_red-1) * length_t_red +leftover_t_step+1)))/leftover_t_step*convert_inj_rate
+                                                                                    (t_red-1) * length_t_red +leftover_t_step+1)))/leftover_t_step*convert_inj_rate/24
 
         b_tec.const_average_inj = pyo.Constraint(b_tec.set_t_reduced, rule = init_average_inj_rate)
 
@@ -542,4 +542,8 @@ class CO2storageDetailed(Technology):
          in model_block.set_t_for_reduced_period[t_red]]
         )
 
-    #def convert2matrix(self, ):
+        h5_group.create_dataset(
+            "average_inj_rate",
+            data=[model_block.var_average_inj_rate[t_red].value for t_red in model_block.set_t_reduced for t
+         in model_block.set_t_for_reduced_period[t_red]]
+        )
