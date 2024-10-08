@@ -92,11 +92,12 @@ class Sink(Technology):
 
         # For a flexibly optimized storage technology (i.e., not a fixed P-E ratio), an adapted CAPEX function is used
         # to account for charging and discharging capacity costs.
+        timestep_length = 24
         if self.flexibility_data["injection_capacity_is_decision_var"]:
             self.economics.capex_model = 4
 
         self.processed_coeff.time_independent["injection_rate_max"] = (
-            self.flexibility_data["injection_rate_max"]
+            self.flexibility_data["injection_rate_max"]*timestep_length
         )
         if (
             "energy_consumption"

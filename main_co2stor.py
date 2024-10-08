@@ -36,7 +36,7 @@ topology["investment_periods"] = ["period1"]
 with open(path / "Topology.json", "w") as json_file:
     json.dump(topology, json_file, indent=4)
 
-end_period = 8
+end_period = 180
 
 
 # Load json template
@@ -56,7 +56,6 @@ adopt.create_input_data_folder_template(path)
 with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "r") as json_file:
     technologies = json.load(json_file)
 technologies["new"] = ["PermanentStorage_CO2_detailed", "CementEmitter"]
-#technologies["new"] = ["PermanentStorage_CO2_simple", "CementEmitter"]
 
 with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "w") as json_file:
     json.dump(technologies, json_file, indent=4)
@@ -83,16 +82,16 @@ tot_inj_rate = pd.DataFrame(tot_inj_rate, columns=['Import limit'])
 # Load and prepare data series
 data_path = Path(__file__).parent/"data_simulations_co2stor_linear"
 cement_emissions = np.load(data_path/"fullprofile_emissions_cement.npy", allow_pickle=True)
-cement_emissions = prepare_data_series(cement_emissions, "Import limit", end_period)
+cement_emissions = prepare_data_series(cement_emissions, "Demand", end_period)
 
 
 # Set import limits/cost
-adopt.fill_carrier_data(path, value_or_data=tot_inj_rate, columns=['Import limit'], carriers=['CO2captured'], nodes=['storage'])
+adopt.fill_carrier_data(path, value_or_data=0, columns=['Import limit'], carriers=['CO2captured'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=-1500, columns=['Import price'], carriers=['CO2captured'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=50, columns=['Import limit'], carriers=['electricity'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['heat'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['gas'], nodes=['storage'])
-#adopt.fill_carrier_data(path, value_or_data=480/24, columns=['Demand'], carriers=['cement'], nodes=['storage'])
+adopt.fill_carrier_data(path, value_or_data=cement_emissions/3, columns=['Demand'], carriers=['cement'], nodes=['storage'])
 
 carbon_price = np.ones(8760)*500
 carbon_cost_path = path / "period1" / "node_data" / "storage" /"CarbonCost.csv"
@@ -130,9 +129,9 @@ m.solve()
 
 t_end = 73
 compare_co2_stored = sum(m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
-    "PermanentStorage_CO2_simple"].var_input[t, "CO2captured"].value for t in range(1,t_end))
+    "PermanentStorage_CO2_detailed"].var_input[t, "CO2captured"].value for t in range(1,t_end))
 compare_el_storage = sum(m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
-    "PermanentStorage_CO2_simple"].var_input[t, "electricity"].value for t in range(1,t_end))
+    "PermanentStorage_CO2_detailed"].var_input[t, "electricity"].value for t in range(1,t_end))
 compare_heat_ccs = sum(m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
     "CementEmitter"].var_input_ccs[t, "heat"].value for t in range(1,t_end))
 compare_el_ccs = sum(m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
