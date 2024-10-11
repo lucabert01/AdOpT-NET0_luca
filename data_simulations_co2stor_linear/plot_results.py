@@ -7,9 +7,11 @@ from adopt_net0.result_management.read_results import (
 )
 import pandas as pd
 import matplotlib.pyplot as plt
+import json
+import numpy as np
 
 
-file_path = Path(__file__).parent.parent/"userData/20241011140627-1/optimization_results.h5"
+file_path = Path(__file__).parent.parent/"userData/20241011172455-1/optimization_results.h5"
 
 
 print_h5_tree(file_path)
@@ -66,29 +68,45 @@ plt.tight_layout()
 plt.show(block=False)
 
 # Plotting power pump
-rho_co2_surface = 550
-nu = 1/rho_co2_surface
-eta_pump = 0.85
-p_pump_out = 114.8
-p_pump_in = 100
-pump_without_model = tot_co2_captured * nu * (p_pump_out - p_pump_in) / eta_pump * 0.1 / 3.6  # power in MW
+file_path = Path(__file__).parent/ "pump_coefficients.json"
+
+# Read the data from the JSON file
+with open(file_path, "r") as file:
+    data_loaded = json.load(file)
+
+# Access the data
+a = data_loaded["a"]
+b = data_loaded["b"]
+p_pump_out_min = data_loaded["p_pump_out_min"]
+p_loss_offshore = data_loaded["p_loss_offshore"]
+nu = data_loaded["nu"]
+eta_pump = data_loaded["eta"]
+p_pump_in = data_loaded["p_pump_in"]
+p_pump_out = whp + p_loss_offshore
+
+pump_unfitted_power = tot_co2_captured * nu * (p_pump_out - p_pump_in) / eta_pump * 0.1 / 3.6  # power in MWh/day
+ratio_fit_pump = power_pump/pump_unfitted_power
+fixed_pump_power = pump_unfitted_power[0]
+
 
 plt.figure(figsize=(10, 6))
-plt.plot(days, power_pump, color='#66B2A5', linewidth=2, label='Pump energy input')
-plt.plot(days, pump_without_model, color='#F46D43', linewidth=2, linestyle='--', label='Pump energy input (no model)')
+plt.plot(days, ratio_fit_pump, color='#294B6C', linewidth=2, label='Fitted pump power over real one')
+plt.axhline(y=1.0, color="#DCE391", linestyle='--', linewidth=1, label='Perfect fit')
 plt.xlabel('Time [day]')
-plt.ylabel('Power [MW]')
-plt.ylim(0, max(power_pump) * 1.1)
+plt.ylabel('Ratio')
+plt.ylim(0.6, max(ratio_fit_pump) * 1.1)
+plt.title('Quality of the pump fit')
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)
 
 plt.figure(figsize=(10, 6))
-plt.plot(days, power_pump/pump_without_model, color='#66B2A5', linewidth=2, label='With model')
+plt.plot(days, power_pump/fixed_pump_power, color='#66B2A5', linewidth=2, label='With model')
 plt.axhline(y=1.0, color="#082D48", linestyle='--', linewidth=1, label='Without model')
 plt.xlabel('Time [day]')
 plt.ylabel('Normalized specific pump consumption')
-plt.ylim(0, max(power_pump/pump_without_model)*1.1)
+plt.ylim(0, max(power_pump/fixed_pump_power)*1.1)
+plt.title('Impact of bhp variations on the pump power consumption')
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)

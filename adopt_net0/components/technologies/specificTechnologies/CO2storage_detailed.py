@@ -141,6 +141,22 @@ class CO2storageDetailed(Technology):
 
         self.processed_coeff.time_independent["pump_interp"] = params
         self.processed_coeff.time_independent["offshore_transport"] = offshore_transport
+
+        # Get the values to save for result plotting and processing
+        a, b = params
+        p_pump_out_min = p_pump_out_range[0]
+        data_to_save = {
+            "a": a,
+            "b": b,
+            "p_pump_out_min": p_pump_out_min,
+            "p_loss_offshore": offshore_transport["p_loss_offshorepipeline"],
+            "nu": nu,
+            "eta": eta_pump,
+            "p_pump_in": offshore_transport["p_pump_in"]
+        }
+        file_path = Path(__file__).parent.parent.parent.parent.parent/"data_simulations_co2stor_linear/pump_coefficients.json"
+        with open(file_path, "w") as file:
+            json.dump(data_to_save, file, indent=4)
     def _calculate_bounds(self):
         """
         Calculates the bounds of the variables used
