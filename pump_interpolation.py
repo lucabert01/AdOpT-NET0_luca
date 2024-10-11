@@ -15,8 +15,8 @@ def compute_W_pump(m_dot, p_pump_out):
     return m_dot * nu * (p_pump_out - p_pump_in) / eta_pump *0.1/3.6 # power in MW
 
 # Define the ranges for p_pump_out (delta_p) and m_dot (flowrate)
-range_delta_p = [99, 130] # in bar
-range_flowrate = [0, 100] # in t/h
+range_delta_p = [104, 130] # in bar
+range_flowrate = [0, 3000] # in t/h
 
 # Create linearly spaced values within the given ranges
 p_pump_out_range = np.linspace(range_delta_p[0], range_delta_p[1], 100)  # Pump exit pressure  bar
@@ -47,22 +47,27 @@ print(f"Fitted parameters: a = {a:.5f}, b = {b:.5f}")
 
 # Visualization of the fitted plane and the original data
 batlow_cmap = cmc.batlow
-
+W_fitted = plane_model((p_pump_out_grid, m_dot_grid), a, b)
+ratio = (W_fitted)/(W_pump_values)
 fig = plt.figure(figsize=(10, 7))
 ax = fig.add_subplot(111, projection='3d')
 
 # Plot the original W_pump data points
 ax.scatter(p_pump_out_grid, m_dot_grid, W_pump_values, color=batlow_cmap(0.1), label='Original Data')
-
-# Generate the interpolated (fitted) plane
-W_fitted = plane_model((p_pump_out_grid, m_dot_grid), a, b)
 ax.plot_surface(p_pump_out_grid, m_dot_grid, W_fitted, color=batlow_cmap(0.8), alpha=0.5, label='Fitted Plane')
-
-# Labels and plot settings
 ax.set_xlabel('Pump exit pressure [bar]]')
 ax.set_ylabel('Mass flow rate [t/h]')
 ax.set_zlabel('Power consumption [MW]]')
 plt.legend()
+plt.show(block=False)
+
+skip_m = 50
+skip_p = 30
+plt.figure(figsize=(8, 6))
+plt.contourf(p_pump_out_grid[skip_m:, skip_p:], m_dot_grid[skip_m:, skip_p:], ratio[skip_m:, skip_p:], levels=100, cmap=cmc.batlow)
+plt.colorbar(label='Ratio (W_fitted / W_pump_values)')
+plt.xlabel('Pump exit pressure [bar]')
+plt.ylabel('Mass flow rate [t/h]')
 plt.show()
 
 
