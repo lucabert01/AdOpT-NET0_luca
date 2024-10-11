@@ -108,12 +108,12 @@ class CO2storageDetailed(Technology):
         p_loss_offshorepipeline = offshore_transport["p_loss_offshorepipeline"]
         nu = 1/self.processed_coeff.time_independent["rho_co2_surface"]
         eta_pump = 0.85
-        pout_min = 99 + p_loss_offshorepipeline
-        range_delta_p = [pout_min, 140]  # in bar
-        range_flowrate = [0, 100]  # in t/h
+        pout_min = 104.8 + p_loss_offshorepipeline
+        range_delta_p = [pout_min, 125]  # in bar
+        range_flowrate = [0, 3000]  # in t/day
 
         def compute_W_pump(m_dot, p_pump_out):
-            return m_dot * nu * (p_pump_out - p_pump_in) / eta_pump * 0.1 / 3.6  # power in MW
+            return m_dot * nu * (p_pump_out - p_pump_in) / eta_pump * 0.1 / 3.6  # power in MWh/day
 
         # Create linearly spaced values within the given ranges
         p_pump_out_range = np.linspace(range_delta_p[0], range_delta_p[1], 100)  # Pump exit pressure  bar
@@ -451,6 +451,12 @@ class CO2storageDetailed(Technology):
         b_tec.const_pwellhead = pyo.Constraint(b_tec.set_t_reduced, rule=init_pwellhad)
 
         # Electricity consumption pump
+        b_tec.var_size_pump = pyo.Var(within=pyo.NonNegativeReals, bounds=(0,3))
+
+        def init_const_size_pump(const, t):
+            return self.input[t,'electricity'] <= b_tec.var_size_pump
+        b_tec.const_size_pump = pyo.Constraint(set_t, rule=init_const_size_pump)
+
         a_pump, b_pump = coeff_ti["pump_interp"]
         p_loss_offshorepipeline = coeff_ti["offshore_transport"]["p_loss_offshorepipeline"]
         # Mulitplied times 0.99 to make sure that el consumption is not negative when the mass flow rate is 0
@@ -545,5 +551,11 @@ class CO2storageDetailed(Technology):
         h5_group.create_dataset(
             "average_inj_rate",
             data=[model_block.var_average_inj_rate[t_red].value for t_red in model_block.set_t_reduced for t
+         in model_block.set_t_for_reduced_period[t_red]]
+        )
+
+        h5_group.create_dataset(
+            "whp",
+            data=[model_block.var_pwellhead[t_red].value for t_red in model_block.set_t_reduced for t
          in model_block.set_t_for_reduced_period[t_red]]
         )

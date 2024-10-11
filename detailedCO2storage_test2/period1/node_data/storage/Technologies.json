@@ -1,0 +1,8 @@
+{
+    "existing": {},
+    "new": [
+        "PermanentStorage_CO2_detailed",
+        "CementEmitter",
+        "WasteToEnergyEmitter"
+    ]
+}
