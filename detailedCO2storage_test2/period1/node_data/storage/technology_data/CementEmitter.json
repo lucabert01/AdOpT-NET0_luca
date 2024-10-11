@@ -11,16 +11,16 @@
     "unit_CAPEX": 0,
     "OPEX_variable": 0,
     "OPEX_fixed": 0,
-    "discount_rate": 0,
+    "discount_rate": 0.1,
     "lifetime": 15,
     "decommission_cost": 0
   },
   "Performance": {
     "comment": "contains fitting data on unit of input, technology types and input/output carriers",
     "performance_function_type": 1,
-    "main_output_carrier": "waste",
+    "main_output_carrier": "cement",
     "output_carrier": [
-      "waste"
+      "cement"
     ],
     "output_ratios": {
     },
@@ -28,7 +28,7 @@
     "min_part_load": 0,
     "ccs": {
       "possible": 1,
-      "co2_concentration" : 0.07,
+      "co2_concentration" : 0.1,
       "ccs_type": "MEA_medium"
     },
     "ramping_rate": -1,
