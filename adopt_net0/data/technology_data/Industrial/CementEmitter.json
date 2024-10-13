@@ -29,7 +29,7 @@
     "ccs": {
       "possible": 1,
       "co2_concentration" : 0.1,
-      "ccs_type": "MEA_medium"
+      "ccs_type": "MEA_large"
     },
     "ramping_rate": -1,
     "standby_power": -1,
