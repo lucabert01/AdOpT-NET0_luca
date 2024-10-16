@@ -36,7 +36,7 @@ topology["investment_periods"] = ["period1"]
 with open(path / "Topology.json", "w") as json_file:
     json.dump(topology, json_file, indent=4)
 
-end_period = 15*30
+end_period = 4*180
 
 
 # Load json template

@@ -58,11 +58,13 @@ plt.show(block=False)
 
 
 # Plotting BHP
+pmax = 175
 plt.figure(figsize=(10, 6))
 plt.plot(days, bhp, color='#782D5D', linewidth=2, label='Bottomhole pressure')
+plt.axhline(y=pmax, color="#082D48", linestyle='--', linewidth=1, label='Caprock fracture pressure')
 plt.xlabel('Time [day]')
 plt.ylabel('Bottomhole pressure [bar]')
-plt.ylim(155, max(bhp) * 1.02)
+plt.ylim(155, pmax * 1.02)
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)

@@ -107,8 +107,8 @@ class CO2storageDetailed(Technology):
         p_pump_in = offshore_transport["p_pump_in"]
         p_loss_offshorepipeline = offshore_transport["p_loss_offshorepipeline"]
         nu = 1/self.processed_coeff.time_independent["rho_co2_surface"]
-        eta_pump = 0.85
-        pout_min = 104.8 + p_loss_offshorepipeline
+        eta_pump = 0.75
+        pout_min = 110 + p_loss_offshorepipeline
         range_delta_p = [pout_min, 125]  # in bar
         range_flowrate = [0, 3000]  # in t/day
 
@@ -467,7 +467,7 @@ class CO2storageDetailed(Technology):
         b_tec.const_pwellhead = pyo.Constraint(b_tec.set_t_reduced, rule=init_pwellhad)
 
         # Electricity consumption pump
-        b_tec.var_size_pump = pyo.Var(within=pyo.NonNegativeReals, bounds=(0,3))
+        b_tec.var_size_pump = pyo.Var(within=pyo.NonNegativeReals, bounds=(0,15))
 
         def init_const_size_pump(const, t):
             return self.input[t,'electricity'] <= b_tec.var_size_pump
