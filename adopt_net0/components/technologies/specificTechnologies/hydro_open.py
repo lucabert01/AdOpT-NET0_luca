@@ -43,15 +43,15 @@ class HydroOpen(Technology):
     - Maximal charging and discharging:
 
       .. math::
-        Input_{t} \leq Input_{max}
+        Input_{t} \\leq Input_{max}
 
       .. math::
-        Output_{t} \leq Output_{max}
+        Output_{t} \\leq Output_{max}
 
     - Size constraint:
 
       .. math::
-        E_{t} \leq S
+        E_{t} \\leq S
 
     - Storage level calculation:
 
@@ -65,10 +65,10 @@ class HydroOpen(Technology):
       output).
 
       .. math::
-         -rampingrate \leq Input_{t, maincar} - Input_{t-1, maincar} \leq rampingrate
+         -rampingrate \\leq Input_{t, maincar} - Input_{t-1, maincar} \\leq rampingrate
 
       .. math::
-         -rampingrate \leq \sum(Input_{t, car}) - \sum(Input_{t-1, car}) \leq rampingrate
+         -rampingrate \\leq \\sum(Input_{t, car}) - \\sum(Input_{t-1, car}) \\leq rampingrate
 
     """
 
@@ -611,7 +611,7 @@ class HydroOpen(Technology):
                 if t > 1:
                     return -ramping_rate <= sum(
                         output_aux_rr[t, car_output] - output_aux_rr[t - 1, car_output]
-                        for car_output in b_tec.set_ouput_carriers
+                        for car_output in b_tec.set_output_carriers
                     )
                 else:
                     return pyo.Constraint.Skip
@@ -627,7 +627,7 @@ class HydroOpen(Technology):
                         sum(
                             output_aux_rr[t, car_output]
                             - output_aux_rr[t - 1, car_output]
-                            for car_output in b_tec.set_ouput_carriers
+                            for car_output in b_tec.set_output_carriers
                         )
                         <= ramping_rate
                     )

@@ -31,7 +31,7 @@ class Conv3(Technology):
     - Size constraints are formulated on the input.
 
       .. math::
-         Input_{t, maincarrier} \leq S
+         Input_{t, maincarrier} \\leq S
 
     - The ratios of inputs are fixed and given as:
 
@@ -47,7 +47,7 @@ class Conv3(Technology):
         Output_{t, car} = {\\alpha}_{1, car} Input_{t, maincarrier}
 
       .. math::
-        \min_part_load * S \leq {\\alpha}_1 Input_{t, maincarrier}
+        min_part_load * S \\leq {\\alpha}_1 Input_{t, maincarrier}
 
     - ``performance_function_type == 2``: Linear with minimal partload. If the
       technology is in on, it holds:
@@ -58,7 +58,7 @@ class Conv3(Technology):
         Output_{t, car} = {\\alpha}_{1, car} Input_{t, maincarrier} + {\\alpha}_{2, car}
 
       .. math::
-        Input_{maincarrier} \geq Input_{min} * S
+        Input_{maincarrier} \\geq Input_{min} * S
 
     - If the technology is off, input and output are set to 0:
 
@@ -75,7 +75,7 @@ class Conv3(Technology):
 
     - ``performance_function_type == 4``:Piece-wise linear, minimal partload. Enables the modeling
       of technologies with slow (>1h) startup and shutdown trajectories. For more information
-      please refer to :func:`dynamics`. Based on Equations 9-11, 13 and 15 in Morales-España, G., Ramírez-Elizondo, L.,
+      please refer to dynamics under advanced topics. Based on Equations 9-11, 13 and 15 in Morales-España, G., Ramírez-Elizondo, L.,
       & Hobbs, B. F. (2017). Hidden power system inflexibilities imposed by
       traditional unit commitment formulations. Applied Energy, 191, 223–238.
       https://doi.org/10.1016/J.APENERGY.2017.01.089
@@ -83,7 +83,7 @@ class Conv3(Technology):
     - Additionally, ramping rates of the technology can be constrained.
 
       .. math::
-         -rampingrate \leq Input_{t, main-car} - Input_{t-1, car} \leq rampingrate
+         -rampingrate \\leq Input_{t, main-car} - Input_{t-1, car} \\leq rampingrate
 
     """
 
@@ -196,7 +196,7 @@ class Conv3(Technology):
         standby_power = coeff_ti["standby_power"]
         phi = coeff_ti["phi"]
 
-        if standby_power == -1:
+        if self.component_options.performance_function_type == 1 or standby_power == -1:
 
             def init_input_input(const, t, car_input):
                 if car_input == self.component_options.main_input_carrier:
@@ -240,12 +240,15 @@ class Conv3(Technology):
                     dis.const_x_on = pyo.Constraint(expr=b_tec.var_x[t] == 1)
 
                     def init_input_on(const, car_input):
-                        if car_input == car_standby_power:
+                        if car_input == self.component_options.main_input_carrier:
                             return pyo.Constraint.Skip
                         else:
                             return (
                                 self.input[t, car_input]
-                                == phi[car_input] * self.input[t, car_standby_power]
+                                == phi[car_input]
+                                * self.input[
+                                    t, self.component_options.main_input_carrier
+                                ]
                             )
 
                     dis.const_input_on = pyo.Constraint(
