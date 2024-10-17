@@ -17,7 +17,7 @@
   "Performance": {
     "comment": "contains fitting data on unit of input, technology types and input/output carriers. Timestep length in hours",
     "injection_rate_max": 1500,
-    "time_step_length": 30,
+    "time_step_length": 180,
     "input_carrier": [
       "CO2captured",
       "electricity"

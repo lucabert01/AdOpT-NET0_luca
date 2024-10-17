@@ -9,9 +9,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import json
 import numpy as np
+import matplotlib.cm as cm
 
 
-file_path = Path(__file__).parent.parent/"userData/20241011172455-1/optimization_results.h5"
+
+file_path = Path(__file__).parent.parent/"userData/20241016232530-1/optimization_results.h5"
 
 
 print_h5_tree(file_path)
@@ -32,42 +34,61 @@ co2_captured_cement = cement_output_df['CO2captured_var_output_ccs']
 co2_captured_w2e = w2e_output_df['CO2captured_var_output_ccs']
 bhp = co2stor_results_df['bhp']
 whp = co2stor_results_df['whp']
+average_inj_rate = co2stor_results_df['average_inj_rate']
 storage_level = co2stor_results_df['storage_level']
 power_pump = co2stor_results_df['electricity_input']
-size_ccs = df_design[('CementEmitter','size_ccs')]
+size_pump = df_design[('PermanentStorage_CO2_detailed','size_pump')]
+size_ccs_cement = df_design[('CementEmitter','size_ccs')]
+size_ccs_w2e = df_design[('WasteToEnergyEmitter','size_ccs')]
 
 emission_tot = emission_w2e + emission_cement
 tot_co2_captured = co2_captured_cement +co2_captured_w2e
 # Create a range of days
-days = range(0, len(cement_output_df) )
+days = np.array(range(0, len(cement_output_df) ))
+
+# Printing the values
+print("Pump Size:", size_pump)
+print("Cement CCS Size:", size_ccs_cement)
+print("Waste to Energy CCS Size:", size_ccs_w2e)
+path_plot = Path(__file__).parent.parent.parent/"PhD Luca/Papers/Geological CO2 storage/Paper/Figures"
 
 # Plotting CO2 emissions and capture
 plt.figure(figsize=(10, 6))
 # Fill the area under the captured CO2 curve (Light Pink from Crameri Batlow)
-plt.fill_between(days, 0, tot_co2_captured, color='#F6C6D6', alpha=0.7, label='Captured CO2')
+plt.fill_between(days/365, 0, tot_co2_captured, color='#F6C6D6', alpha=0.7, label='Captured CO2')
 # Fill the area between captured and emitted CO2 (Dark Blue from Crameri Batlow)
-plt.fill_between(days, tot_co2_captured, emission_tot, color='#012E4D', alpha=0.7, label='Emitted CO2')
-plt.xlabel('Time [day]')
+plt.fill_between(days/365, tot_co2_captured, emission_tot, color='#012E4D', alpha=0.7, label='Emitted CO2')
+plt.xlabel('Time [year]')
 plt.ylabel('CO2 emissions [t/day]')
 plt.ylim(0, max(emission_tot) * 1.1)
-plt.xlim(0, max(days))
+plt.xlim(0, max(days/365))
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)
+plt.savefig(path_plot/"emissions.jpg", format='jpeg', dpi=500)
 
 
 
 # Plotting BHP
+rho_co2_surface = 505.71
+convert_inj_rate = 1/(rho_co2_surface*3.6)
 pmax = 175
-plt.figure(figsize=(10, 6))
-plt.plot(days, bhp, color='#782D5D', linewidth=2, label='Bottomhole pressure')
-plt.axhline(y=pmax, color="#082D48", linestyle='--', linewidth=1, label='Caprock fracture pressure')
-plt.xlabel('Time [day]')
-plt.ylabel('Bottomhole pressure [bar]')
-plt.ylim(155, pmax * 1.02)
-plt.legend()
+batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C']
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+ax1.plot(days/365, average_inj_rate/convert_inj_rate, color=batlow_colors[1], linewidth=2, label='Injection Rate')
+ax1.set_ylabel('Average injection rate [t/day]')  # Replace 'units' with the appropriate unit for injection rate
+ax1.legend()
+ax1.set_ylim(max(average_inj_rate/convert_inj_rate)*0.6, max(average_inj_rate/convert_inj_rate) * 1.1)
+ax2.plot(days/365, bhp, color=batlow_colors[2], linewidth=2, label='Bottomhole pressure')
+ax2.axhline(y=pmax, color=batlow_colors[0], linestyle='--', linewidth=1, label='Caprock fracture pressure')
+ax2.set_xlabel('Time [year]')
+ax2.set_ylabel('Bottomhole pressure [bar]')
+ax2.set_ylim(min(bhp)*0.98, pmax * 1.02)
+ax2.legend()
 plt.tight_layout()
-plt.show(block=False)
+plt.savefig(path_plot/"bhp_case_study.jpg", format='jpeg', dpi=500)
+
+
 
 # Plotting power pump
 file_path = Path(__file__).parent/ "pump_coefficients.json"
@@ -92,25 +113,28 @@ fixed_pump_power = pump_unfitted_power[0]
 
 
 plt.figure(figsize=(10, 6))
-plt.plot(days, ratio_fit_pump, color='#294B6C', linewidth=2, label='Fitted pump power over real one')
+plt.plot(days/365, ratio_fit_pump, color='#294B6C', linewidth=2, label='Fitted pump power over real one')
 plt.axhline(y=1.0, color="#DCE391", linestyle='--', linewidth=1, label='Perfect fit')
-plt.xlabel('Time [day]')
+plt.xlabel('Time [year]')
 plt.ylabel('Ratio')
 plt.ylim(0.6, max(ratio_fit_pump) * 1.1)
 plt.title('Quality of the pump fit')
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)
+plt.savefig(path_plot/"fit_pump.jpg", format='jpeg', dpi=500)
+
 
 plt.figure(figsize=(10, 6))
-plt.plot(days, power_pump/fixed_pump_power, color='#66B2A5', linewidth=2, label='With model')
+plt.plot(days/365, power_pump/fixed_pump_power, color='#66B2A5', linewidth=2, label='With model')
 plt.axhline(y=1.0, color="#082D48", linestyle='--', linewidth=1, label='Without model')
-plt.xlabel('Time [day]')
+plt.xlabel('Time [year]')
 plt.ylabel('Normalized specific pump consumption')
 plt.ylim(0, max(power_pump/fixed_pump_power)*1.1)
 plt.title('Impact of bhp variations on the pump power consumption')
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)
+plt.savefig(path_plot/"power_pump.jpg", format='jpeg', dpi=500)
 
 plt.show()

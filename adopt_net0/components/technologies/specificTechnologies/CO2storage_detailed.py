@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import json
 from scipy.optimize import curve_fit
+import h5py
+
 
 
 from ..technology import Technology
@@ -96,11 +98,25 @@ class CO2storageDetailed(Technology):
         )
 
         self.processed_coeff.time_independent["matrices_data"] = sci.loadmat(aquifer_performance_data_path)
-
+        phi = self.processed_coeff.time_independent['matrices_data']['phi']
+        WI = self.processed_coeff.time_independent['matrices_data']['WI']
+        mobApprox = self.processed_coeff.time_independent['matrices_data']['mobApprox']
+        epsilon = self.processed_coeff.time_independent['matrices_data']['epsilon_mat']
+        convert2bar = 10 ** 5
+        cell_topwell = int(self.processed_coeff.time_independent['matrices_data']['cellTopWell'][0])
+        lp = int(self.processed_coeff.time_independent['matrices_data']['lp']) # a mode is the equivalent of a grid block, but in the reduced space. So there is a pressure for every mode etc
+        u = self.processed_coeff.time_independent['matrices_data']['u']
+        g = 9.81
+        delta_h = 1000
+        self.processed_coeff.time_independent["rho_co2_surface"] = 505.71
+        # TODO: check if using rho_co2_surface is fine (and not an average value)
+        hydrostatic_pressure = g * delta_h * self.processed_coeff.time_independent["rho_co2_surface"] / convert2bar
+        bhp_t0 = sum(phi[cell_topwell - 1, k] * epsilon[0, k]
+                                               for k in range(0, lp)) + u[0,1]/(WI*mobApprox)/convert2bar
+        whp_t0 = bhp_t0 - hydrostatic_pressure
+        self.processed_coeff.time_independent["hydrostatic_pressure"] = hydrostatic_pressure
         # Perform pump interpolation
         # TODO: calculate value for p_loss in the offshore pipeline based on an assumed flowrate
-        # TODO: check proper value for efficiency of the pump
-        self.processed_coeff.time_independent["rho_co2_surface"] = 550 #kg/m3
         offshore_transport = {}
         offshore_transport["p_pump_in"] = 100 # Inlet pressure in bar (constant)
         offshore_transport["p_loss_offshorepipeline"] = 10 # Inlet pressure in bar (constant)
@@ -108,7 +124,7 @@ class CO2storageDetailed(Technology):
         p_loss_offshorepipeline = offshore_transport["p_loss_offshorepipeline"]
         nu = 1/self.processed_coeff.time_independent["rho_co2_surface"]
         eta_pump = 0.75
-        pout_min = 110 + p_loss_offshorepipeline
+        pout_min = whp_t0[0,0] + p_loss_offshorepipeline
         range_delta_p = [pout_min, 125]  # in bar
         range_flowrate = [0, 3000]  # in t/day
 
@@ -447,6 +463,13 @@ class CO2storageDetailed(Technology):
 
         b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
 
+        # limit bhp to prevent fracture
+        p_max = 180
+
+        def init_p_max(const, t_red):
+            return b_tec.var_bhp[t_red] <= p_max
+        b_tec.const_limit_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_p_max)
+
 
 
 
@@ -457,17 +480,20 @@ class CO2storageDetailed(Technology):
 
 
         b_tec.var_pwellhead = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals)
-        g = 9.81
-        delta_h = 1000
-        rho_co2_surface = coeff_ti["rho_co2_surface"]
         # TODO: check if using rho_co2_surface is fine (and not an average value)
-        hydrostatic_pressure = g*delta_h*rho_co2_surface/convert2bar
+        hydrostatic_pressure = self.processed_coeff.time_independent["hydrostatic_pressure"]
         def init_pwellhad(const, t_red):
             return b_tec.var_pwellhead[t_red] == b_tec.var_bhp[t_red] - hydrostatic_pressure
         b_tec.const_pwellhead = pyo.Constraint(b_tec.set_t_reduced, rule=init_pwellhad)
 
+
+
+
+
+
+
         # Electricity consumption pump
-        b_tec.var_size_pump = pyo.Var(within=pyo.NonNegativeReals, bounds=(0,15))
+        b_tec.var_size_pump = pyo.Var(within=pyo.NonNegativeReals, bounds=(0,100))
 
         def init_const_size_pump(const, t):
             return self.input[t,'electricity'] <= b_tec.var_size_pump
@@ -574,4 +600,17 @@ class CO2storageDetailed(Technology):
             "whp",
             data=[model_block.var_pwellhead[t_red].value for t_red in model_block.set_t_reduced for t
          in model_block.set_t_for_reduced_period[t_red]]
+        )
+
+    def write_results_tec_design(self, h5_group: h5py.Group, model_block: pyo.Block):
+        """
+        Function to report results of technologies design after optimization
+
+        :param  h5py.Group h5_group: h5 file structure
+        :param Block b_tec: technology model block
+        """
+        super(CO2storageDetailed, self).write_results_tec_design(h5_group, model_block)
+
+        h5_group.create_dataset(
+            "size_pump", data=[model_block.var_size_pump.value]
         )
