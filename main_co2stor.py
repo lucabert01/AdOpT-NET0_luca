@@ -36,7 +36,7 @@ topology["investment_periods"] = ["period1"]
 with open(path / "Topology.json", "w") as json_file:
     json.dump(topology, json_file, indent=4)
 
-end_period = 4*180
+end_period = 10*180
 
 
 # Load json template
@@ -93,12 +93,13 @@ adopt.fill_carrier_data(path, value_or_data=0, columns=['Import limit'], carrier
 adopt.fill_carrier_data(path, value_or_data=-1500, columns=['Import price'], carriers=['CO2captured'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=5000, columns=['Import limit'], carriers=['electricity'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=20000, columns=['Import limit'], carriers=['heat'], nodes=['storage'])
-adopt.fill_carrier_data(path, value_or_data=30, columns=['Import price'], carriers=['electricity'], nodes=['storage'])
-adopt.fill_carrier_data(path, value_or_data=10, columns=['Import price'], carriers=['heat'], nodes=['storage'])
+adopt.fill_carrier_data(path, value_or_data=100, columns=['Import price'], carriers=['electricity'], nodes=['storage'])
+adopt.fill_carrier_data(path, value_or_data=40, columns=['Import price'], carriers=['heat'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=cement_emissions/3, columns=['Demand'], carriers=['cement'], nodes=['storage'])
 adopt.fill_carrier_data(path, value_or_data=waste_emissions/2, columns=['Demand'], carriers=['waste'], nodes=['storage'])
 
 carbon_price = carbon_price_timeseries['price'].values
+carbon_price = np.linspace(90, 300, 8760)
 carbon_cost_path = path / "period1" / "node_data" / "storage" /"CarbonCost.csv"
 carbon_cost_template = pd.read_csv(carbon_cost_path, sep=';', index_col=0, header=0)
 carbon_cost_template['price'] = carbon_price

@@ -39,7 +39,7 @@ def fit_ccs_coeff(co2_concentration: float, ccs_data: dict, climate_data: pd.Dat
     ccs_data = ModelComponent(ccs_data)
 
     molar_mass_CO2 = 44.01
-    # TODO: retrieve timestep_length from Topology instead of wrtining it here
+    # TODO: retrieve timestep_length from Topology instead of writing it here
     timestep_length = 24
 
     # Recalculate min/max size to have it in t/hCO2_in
