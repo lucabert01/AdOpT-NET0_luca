@@ -9,7 +9,7 @@ import pandas as pd
 import json
 from scipy.optimize import curve_fit
 import h5py
-
+from ..technology import Technology, set_capex_model
 
 
 from ..technology import Technology
@@ -464,10 +464,10 @@ class CO2storageDetailed(Technology):
         b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
 
         # limit bhp to prevent fracture
-        p_max = 180
+        b_tec.para_p_max = 180
 
         def init_p_max(const, t_red):
-            return b_tec.var_bhp[t_red] <= p_max
+            return b_tec.var_bhp[t_red] <= b_tec.para_p_max
         b_tec.const_limit_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_p_max)
 
 
@@ -564,10 +564,165 @@ class CO2storageDetailed(Technology):
         # b_tec.disjunction_input_output = gdp.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
 
 
+        return b_tec
 
+    def _define_capex_parameters(self, b_tec, data: dict):
+        """
+        Defines the capex parameters for a flexible storage technology of capex model 4 (for all other capex models,
+        the parameters are defined in the Technology class).
+
+        For capex model 4:
+        - para_unit_capex_charging_cap: the capex per unit of charging capacity (i.e., per MW charging).
+        - para_unit_capex_charging_cap_annual: annualized capex per unit of charging capacity.
+        - para_unit_capex_discharging_cap: the capex per unit of discharging capacity (i.e., per MW discharging).
+        - para_unit_capex_discharging_cap_annual: annualized capex per unit of discharging capacity.
+        - para_unit_capex: capex per unit of energy storage capacity (i.e., per MWh storage).
+        - para_unit_capex_annual: annualized capex per unit of storage capacity.
+
+        :param b_tec: pyomo block with technology model
+        :param dict data: dict containing model information
+        :return: pyomo block with technology model
+        """
+        super(CO2storageDetailed, self)._define_capex_parameters(b_tec, data)
+
+        config = data["config"]
+        economics = self.economics
+
+        # CAPEX PARAMETERS
+        capex_model = set_capex_model(config, economics)
+
+        if capex_model == 4:
+            discount_rate = set_discount_rate(config, economics)
+            fraction_of_year_modelled = data["topology"]["fraction_of_year_modelled"]
+            annualization_factor = annualize(
+                discount_rate, economics.lifetime, fraction_of_year_modelled
+            )
+            flexibility = self.flexibility_data
+
+            # additional parameters needed for a flexible storage system
+            b_tec.para_unit_capex_pump = pyo.Param(
+                domain=pyo.Reals,
+                initialize=economics["pump_CAPEX"],
+                mutable=True,
+            )
+            b_tec.para_unit_capex_offshore_pipeline = pyo.Param(
+                domain=pyo.Reals,
+                initialize=economics["offshore_pipeline_CAPEX"],
+                mutable=True,
+            )
+
+
+            # annualized parameters
+            b_tec.para_unit_capex_capex_pump_annual = pyo.Param(
+                domain=pyo.Reals,
+                initialize=(annualization_factor * b_tec.para_unit_capex_pump),
+                mutable=True,
+            )
+            b_tec.para_unit_capex_offshore_pipeline_annual = pyo.Param(
+                domain=pyo.Reals,
+                initialize=(
+                    annualization_factor * b_tec.para_unit_capex_offshore_pipeline
+                ),
+                mutable=True,
+            )
 
         return b_tec
 
+    def _define_capex_variables(self, b_tec, data: dict):
+        """
+        Defines variables related to storage technology capex for a flexible storage technology (with capex model 4).
+
+        - var_capex_charging_cap: the capex of the charging capacity (MW) installed.
+        - var_capex_discharging_cap: the capex of the discharging capacity (MW) installed.
+        - var_capex_energy_cap: the capex of the energy storage capacity (MWh) installed.
+
+        For a non-flexible storage technology (with fixed charging and discharging capacities), the capex
+        variables are taken from the parent class (Technology).
+
+        :param b_tec: pyomo block with technology model
+        :param dict data: dict containing model information
+        :return: pyomo block with technology model
+        """
+
+        super(CO2storageDetailed, self)._define_capex_variables(b_tec, data)
+
+        config = data["config"]
+        economics = self.economics
+        capex_model = set_capex_model(config, economics)
+
+        if capex_model == 4:
+            coeff_ti = self.processed_coeff.time_independent
+
+            # BOUNDS
+            max_capex_pump = (
+                b_tec.para_unit_capex_pump_annual
+                * b_tec.para_pump_max
+            )
+            max_capex_offshore_pipeline = (
+                b_tec.para_unit_capex_offshore_pipeline_annual
+                * b_tec.para_size_max
+            )
+            max_capex_energy_cap = b_tec.para_unit_capex_annual * b_tec.para_size_max
+
+            # VARIABLES
+            b_tec.var_capex_pump = pyo.Var(
+                domain=pyo.NonNegativeReals, bounds=(0, max_capex_pump)
+            )
+            b_tec.var_capex_offshore_pipeline = pyo.Var(
+                domain=pyo.NonNegativeReals, bounds=(0, max_capex_offshore_pipeline)
+            )
+            b_tec.var_capex_energy_cap = pyo.Var(
+                domain=pyo.NonNegativeReals, bounds=(0, max_capex_energy_cap)
+            )
+
+        return b_tec
+
+    def _define_capex_constraints(self, b_tec, data: dict):
+        """
+        Defines constraints related to capex for a flexible storage technology of capex model 4, for which the capex
+        comprises the capex for the charging capacity, the discharging capacity and the energy storage capacity.
+        For a non-flexible storage technology, the capex constraints are taken from the parent class (Technology).
+
+        :param b_tec: pyomo block with technology model
+        :param dict data: dict containing model information
+        :return: pyomo block with technology model
+        """
+
+        super(Stor, self)._define_capex_constraints(b_tec, data)
+
+        config = data["config"]
+        economics = self.economics
+        capex_model = set_capex_model(config, economics)
+
+        if capex_model == 4:
+
+            # CAPEX constraints for flexible storage technologies
+            # CAPEX_chargeCapacity = chargeCapacity * unitCost_chargeCapacity
+            b_tec.const_capex_pump = pyo.Constraint(
+                expr=b_tec.var_capacity_charge
+                * b_tec.para_unit_capex_pump_annual
+                == b_tec.var_capex_pump
+            )
+            # CAPEX_dischargeCapacity = dischargeCapacity * unitCost_dischargeCapacity
+            b_tec.const_capex_offshore_pipeline = pyo.Constraint(
+                expr=b_tec.var_capacity_discharge
+                * b_tec.para_unit_capex_offshore_pipeline_annual
+                == b_tec.var_capex_offshore_pipeline
+            )
+            # CAPEX_storSize = storSize * unitCost_storSize
+            b_tec.const_capex_energy_cap = pyo.Constraint(
+                expr=b_tec.var_size * b_tec.para_unit_capex_annual
+                == b_tec.var_capex_energy_cap
+            )
+            # CAPEX = CAPEX_chargeCapacity + CAPEX_dischargeCapacity + CAPEX_storSize
+            b_tec.const_capex_aux = pyo.Constraint(
+                expr=b_tec.var_capex_charging_cap
+                + b_tec.var_capex_offshore_pipeline
+                + b_tec.var_capex_energy_cap
+                == b_tec.var_capex_aux
+            )
+
+        return b_tec
 
 
     def write_results_tec_operation(self, h5_group, model_block):
