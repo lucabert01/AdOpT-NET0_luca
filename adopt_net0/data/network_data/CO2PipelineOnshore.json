@@ -18,21 +18,11 @@
   "Performance": {
     "carrier": "CO2captured",
     "allow_only_one_direction": 0,
-    "loss": 1.25E-7,
+    "loss": 0,
     "min_transport": 0,
     "loss2emissions": 1,
     "emissionfactor": 0,
-    "energyconsumption": {
-      "electricity": {
-        "cons_model": 2,
-        "p": 500,
-        "c": 0.000234,
-        "T": 300,
-        "eta": 0.65,
-        "gam": 1.289,
-        "LHV": 0.001
-      }
-    }
+    "energyconsumption": 0
   },
   "Units": {
     "size": "t/h",
