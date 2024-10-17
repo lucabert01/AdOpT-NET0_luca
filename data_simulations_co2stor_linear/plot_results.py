@@ -2,30 +2,28 @@ import h5py
 from pathlib import Path
 from adopt_net0.result_management.read_results import (
     print_h5_tree,
-    extract_dataset_from_h5,
     extract_datasets_from_h5group,
 )
 import pandas as pd
 import matplotlib.pyplot as plt
 import json
 import numpy as np
-import matplotlib.cm as cm
 
 
 
-file_path = Path(__file__).parent.parent/"userData/20241016232530-1/optimization_results.h5"
+file_path = Path(__file__).parent.parent/"userData/20241017162052-1/optimization_results.h5"
 
 
 print_h5_tree(file_path)
 
 with h5py.File(file_path, 'r') as hdf_file:
     df_operation = extract_datasets_from_h5group(hdf_file["operation"])
-    df_design = extract_datasets_from_h5group(hdf_file["design/nodes/period1/storage"])
+    df_design = extract_datasets_from_h5group(hdf_file["design/nodes/period1"])
 
 print(df_operation)
 
-cement_output_df = df_operation[('technology_operation', 'period1', 'storage', 'CementEmitter')]
-w2e_output_df = df_operation[('technology_operation', 'period1', 'storage', 'WasteToEnergyEmitter')]
+cement_output_df = df_operation[('technology_operation', 'period1', 'industrial_cluster', 'CementEmitter')]
+w2e_output_df = df_operation[('technology_operation', 'period1', 'industrial_cluster', 'WasteToEnergyEmitter')]
 co2stor_results_df = df_operation[("technology_operation", "period1","storage", "PermanentStorage_CO2_detailed")]
 
 emission_cement = cement_output_df['cement_output']
@@ -37,9 +35,9 @@ whp = co2stor_results_df['whp']
 average_inj_rate = co2stor_results_df['average_inj_rate']
 storage_level = co2stor_results_df['storage_level']
 power_pump = co2stor_results_df['electricity_input']
-size_pump = df_design[('PermanentStorage_CO2_detailed','size_pump')]
-size_ccs_cement = df_design[('CementEmitter','size_ccs')]
-size_ccs_w2e = df_design[('WasteToEnergyEmitter','size_ccs')]
+size_pump = df_design[('storage','PermanentStorage_CO2_detailed','size_pump')]
+size_ccs_cement = df_design[('industrial_cluster','CementEmitter','size_ccs')]
+size_ccs_w2e = df_design[('industrial_cluster','WasteToEnergyEmitter','size_ccs')]
 
 emission_tot = emission_w2e + emission_cement
 tot_co2_captured = co2_captured_cement +co2_captured_w2e
@@ -112,29 +110,29 @@ ratio_fit_pump = power_pump/pump_unfitted_power
 fixed_pump_power = pump_unfitted_power[0]
 
 
-plt.figure(figsize=(10, 6))
-plt.plot(days/365, ratio_fit_pump, color='#294B6C', linewidth=2, label='Fitted pump power over real one')
-plt.axhline(y=1.0, color="#DCE391", linestyle='--', linewidth=1, label='Perfect fit')
-plt.xlabel('Time [year]')
-plt.ylabel('Ratio')
-plt.ylim(0.6, max(ratio_fit_pump) * 1.1)
-plt.title('Quality of the pump fit')
-plt.legend()
-plt.tight_layout()
-plt.show(block=False)
-plt.savefig(path_plot/"fit_pump.jpg", format='jpeg', dpi=500)
-
-
-plt.figure(figsize=(10, 6))
-plt.plot(days/365, power_pump/fixed_pump_power, color='#66B2A5', linewidth=2, label='With model')
-plt.axhline(y=1.0, color="#082D48", linestyle='--', linewidth=1, label='Without model')
-plt.xlabel('Time [year]')
-plt.ylabel('Normalized specific pump consumption')
-plt.ylim(0, max(power_pump/fixed_pump_power)*1.1)
-plt.title('Impact of bhp variations on the pump power consumption')
-plt.legend()
-plt.tight_layout()
-plt.show(block=False)
-plt.savefig(path_plot/"power_pump.jpg", format='jpeg', dpi=500)
+# plt.figure(figsize=(10, 6))
+# plt.plot(days/365, ratio_fit_pump, color='#294B6C', linewidth=2, label='Fitted pump power over real one')
+# plt.axhline(y=1.0, color="#DCE391", linestyle='--', linewidth=1, label='Perfect fit')
+# plt.xlabel('Time [year]')
+# plt.ylabel('Ratio')
+# plt.ylim(0.6, max(ratio_fit_pump) * 1.1)
+# plt.title('Quality of the pump fit')
+# plt.legend()
+# plt.tight_layout()
+# plt.show(block=False)
+# plt.savefig(path_plot/"fit_pump.jpg", format='jpeg', dpi=500)
+#
+#
+# plt.figure(figsize=(10, 6))
+# plt.plot(days/365, power_pump/fixed_pump_power, color='#66B2A5', linewidth=2, label='With model')
+# plt.axhline(y=1.0, color="#082D48", linestyle='--', linewidth=1, label='Without model')
+# plt.xlabel('Time [year]')
+# plt.ylabel('Normalized specific pump consumption')
+# plt.ylim(0, max(power_pump/fixed_pump_power)*1.1)
+# plt.title('Impact of bhp variations on the pump power consumption')
+# plt.legend()
+# plt.tight_layout()
+# plt.show(block=False)
+# plt.savefig(path_plot/"power_pump.jpg", format='jpeg', dpi=500)
 
 plt.show()

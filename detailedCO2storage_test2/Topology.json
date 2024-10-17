@@ -1,6 +1,7 @@
 {
     "nodes": [
-        "storage"
+        "storage",
+        "industrial_cluster"
     ],
     "carriers": [
         "electricity",
