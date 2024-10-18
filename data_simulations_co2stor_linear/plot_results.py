@@ -11,7 +11,7 @@ import numpy as np
 
 
 
-file_path = Path(__file__).parent.parent/"userData/20241017175435-1/optimization_results.h5"
+file_path = Path(__file__).parent.parent/"userData/20241018183752-1/optimization_results.h5"
 
 
 print_h5_tree(file_path)
@@ -43,6 +43,8 @@ emission_tot = emission_w2e + emission_cement
 tot_co2_captured = co2_captured_cement +co2_captured_w2e
 # Create a range of days
 days = np.array(range(0, len(cement_output_df) ))
+value_average_inj_rate = np.array([average_inj_rate[i*180+1] for i in range(0,int(len(average_inj_rate)/180))])
+print("average_inj_rate:",value_average_inj_rate)
 
 # Printing the values
 print("Pump Size:", size_pump)
@@ -122,9 +124,13 @@ plt.tight_layout()
 plt.show(block=False)
 plt.savefig(path_plot/"fit_pump.jpg", format='jpeg', dpi=500)
 
+pump_ratio = power_pump/fixed_pump_power
+averaged_pump_ratio = [np.mean(pump_ratio[i:i+180]) for i in range(0, len(pump_ratio), 180)]
+expanded_pump_ratio = np.repeat(averaged_pump_ratio, 180)
+
 
 plt.figure(figsize=(10, 6))
-plt.plot(days/365, power_pump/fixed_pump_power, color='#66B2A5', linewidth=2, label='With model')
+plt.plot(days/365, expanded_pump_ratio, color='#66B2A5', linewidth=2, label='With model')
 plt.axhline(y=1.0, color="#082D48", linestyle='--', linewidth=1, label='Without model')
 plt.xlabel('Time [year]')
 plt.ylabel('Normalized specific pump consumption')

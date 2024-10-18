@@ -49,6 +49,10 @@ def fit_ccs_coeff(co2_concentration: float, ccs_data: dict, climate_data: pd.Dat
     ccs_data.input_parameters.size_max = (
         ccs_data.input_parameters.size_max * co2_concentration*timestep_length
     )
+    if "large" in ccs_data.component_options.technology_model:
+        ccs_data.input_parameters.size_max = (
+                ccs_data.input_parameters.size_max * co2_concentration * timestep_length *2
+        )
 
     # Calculate input ratios
     ccs_data.processed_coeff.time_independent["size_min"] = (

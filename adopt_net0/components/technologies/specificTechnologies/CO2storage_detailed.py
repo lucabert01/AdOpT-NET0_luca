@@ -67,7 +67,7 @@ class CO2storageDetailed(Technology):
         self.component_options.main_input_carrier = tec_data["Performance"][
             "main_input_carrier"
         ]
-
+        self.component_options.extra_equipment = tec_data["Extra_equipment"]
 
     def fit_technology_performance(self, climate_data, location):
         """
@@ -118,7 +118,7 @@ class CO2storageDetailed(Technology):
         # Perform pump interpolation
         # TODO: calculate value for p_loss in the offshore pipeline based on an assumed flowrate
         offshore_transport = {}
-        offshore_transport["p_pump_in"] = 100 # Inlet pressure in bar (constant)
+        offshore_transport["p_pump_in"] = 90 # Inlet pressure in bar (constant)
         offshore_transport["p_loss_offshorepipeline"] = 10 # Inlet pressure in bar (constant)
         p_pump_in = offshore_transport["p_pump_in"]
         p_loss_offshorepipeline = offshore_transport["p_loss_offshorepipeline"]
@@ -201,6 +201,14 @@ class CO2storageDetailed(Technology):
                         (
                             np.zeros(shape=(time_steps)),
                             np.ones(shape=(time_steps)) * energy_consumption["in"][car],
+                        )
+                    )
+                else:
+                    size_pump_max = self.component_options.extra_equipment["size_pump_max"]
+                    self.bounds["input"][car] = np.column_stack(
+                        (
+                            np.zeros(shape=(time_steps)),
+                            np.ones(shape=(time_steps)) * size_pump_max,
                         )
                     )
 
@@ -470,15 +478,6 @@ class CO2storageDetailed(Technology):
             return b_tec.var_bhp[t_red] <= b_tec.para_p_max
         b_tec.const_limit_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_p_max)
 
-
-
-
-
-
-
-
-
-
         b_tec.var_pwellhead = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals)
         # TODO: check if using rho_co2_surface is fine (and not an average value)
         hydrostatic_pressure = self.processed_coeff.time_independent["hydrostatic_pressure"]
@@ -493,8 +492,6 @@ class CO2storageDetailed(Technology):
 
 
         # Electricity consumption pump
-        b_tec.var_size_pump = pyo.Var(within=pyo.NonNegativeReals, bounds=(0,100))
-
         def init_const_size_pump(const, t):
             return self.input[t,'electricity'] <= b_tec.var_size_pump
         b_tec.const_size_pump = pyo.Constraint(set_t, rule=init_const_size_pump)
@@ -564,6 +561,14 @@ class CO2storageDetailed(Technology):
         # b_tec.disjunction_input_output = gdp.Disjunction(b_tec.set_t_reduced, rule=bind_disjunctions)
 
 
+        # Add offshore pipeline
+
+        def init_const_size_offshore_pipeline(const, t):
+            return self.input[t, 'CO2captured'] <= b_tec.var_size_offshore_pipeline
+
+        b_tec.const_size_offshore_pipeline = pyo.Constraint(set_t, rule=init_const_size_offshore_pipeline)
+
+
         return b_tec
 
     def _define_capex_parameters(self, b_tec, data: dict):
@@ -587,6 +592,12 @@ class CO2storageDetailed(Technology):
 
         config = data["config"]
         economics = self.economics
+        extra_equipment = self.component_options.extra_equipment
+        b_tec.para_size_pump_max = self.component_options.extra_equipment["size_pump_max"]
+        b_tec.para_size_offshore_pipeline_max = self.component_options.extra_equipment["size_offshore_pipeline_max"]
+
+        b_tec.var_size_offshore_pipeline = pyo.Var(within=pyo.NonNegativeReals, bounds=(0, b_tec.para_size_offshore_pipeline_max))
+        b_tec.var_size_pump = pyo.Var(within=pyo.NonNegativeReals, bounds=(0,b_tec.para_size_pump_max))
 
         # CAPEX PARAMETERS
         capex_model = set_capex_model(config, economics)
@@ -597,23 +608,23 @@ class CO2storageDetailed(Technology):
             annualization_factor = annualize(
                 discount_rate, economics.lifetime, fraction_of_year_modelled
             )
-            flexibility = self.flexibility_data
 
-            # additional parameters needed for a flexible storage system
+            # additional parameters
             b_tec.para_unit_capex_pump = pyo.Param(
                 domain=pyo.Reals,
-                initialize=economics["pump_CAPEX"],
+                initialize=extra_equipment["pump_CAPEX"],
                 mutable=True,
             )
+            # unit cost in EUR/t/day (capacity)
             b_tec.para_unit_capex_offshore_pipeline = pyo.Param(
                 domain=pyo.Reals,
-                initialize=economics["offshore_pipeline_CAPEX"],
+                initialize=extra_equipment["offshore_pipeline_CAPEX"]* extra_equipment['offshore_pipeline_length'],
                 mutable=True,
             )
 
 
             # annualized parameters
-            b_tec.para_unit_capex_capex_pump_annual = pyo.Param(
+            b_tec.para_unit_capex_pump_annual = pyo.Param(
                 domain=pyo.Reals,
                 initialize=(annualization_factor * b_tec.para_unit_capex_pump),
                 mutable=True,
@@ -651,18 +662,16 @@ class CO2storageDetailed(Technology):
         capex_model = set_capex_model(config, economics)
 
         if capex_model == 4:
-            coeff_ti = self.processed_coeff.time_independent
 
             # BOUNDS
             max_capex_pump = (
                 b_tec.para_unit_capex_pump_annual
-                * b_tec.para_pump_max
+                * b_tec.para_size_pump_max
             )
             max_capex_offshore_pipeline = (
                 b_tec.para_unit_capex_offshore_pipeline_annual
-                * b_tec.para_size_max
+                * b_tec.para_size_offshore_pipeline_max
             )
-            max_capex_energy_cap = b_tec.para_unit_capex_annual * b_tec.para_size_max
 
             # VARIABLES
             b_tec.var_capex_pump = pyo.Var(
@@ -671,24 +680,21 @@ class CO2storageDetailed(Technology):
             b_tec.var_capex_offshore_pipeline = pyo.Var(
                 domain=pyo.NonNegativeReals, bounds=(0, max_capex_offshore_pipeline)
             )
-            b_tec.var_capex_energy_cap = pyo.Var(
-                domain=pyo.NonNegativeReals, bounds=(0, max_capex_energy_cap)
-            )
+
 
         return b_tec
 
     def _define_capex_constraints(self, b_tec, data: dict):
         """
-        Defines constraints related to capex for a flexible storage technology of capex model 4, for which the capex
-        comprises the capex for the charging capacity, the discharging capacity and the energy storage capacity.
-        For a non-flexible storage technology, the capex constraints are taken from the parent class (Technology).
+        Defines constraints related to capex for CO2 storage capex model 4, for which the capex
+        comprises the capex for pump and the offshore pipeline.
 
         :param b_tec: pyomo block with technology model
         :param dict data: dict containing model information
         :return: pyomo block with technology model
         """
 
-        super(Stor, self)._define_capex_constraints(b_tec, data)
+        super(CO2storageDetailed, self)._define_capex_constraints(b_tec, data)
 
         config = data["config"]
         economics = self.economics
@@ -696,29 +702,20 @@ class CO2storageDetailed(Technology):
 
         if capex_model == 4:
 
-            # CAPEX constraints for flexible storage technologies
-            # CAPEX_chargeCapacity = chargeCapacity * unitCost_chargeCapacity
             b_tec.const_capex_pump = pyo.Constraint(
-                expr=b_tec.var_capacity_charge
+                expr=b_tec.var_size_pump
                 * b_tec.para_unit_capex_pump_annual
                 == b_tec.var_capex_pump
             )
-            # CAPEX_dischargeCapacity = dischargeCapacity * unitCost_dischargeCapacity
             b_tec.const_capex_offshore_pipeline = pyo.Constraint(
-                expr=b_tec.var_capacity_discharge
+                expr=b_tec.var_size_offshore_pipeline
                 * b_tec.para_unit_capex_offshore_pipeline_annual
                 == b_tec.var_capex_offshore_pipeline
             )
-            # CAPEX_storSize = storSize * unitCost_storSize
-            b_tec.const_capex_energy_cap = pyo.Constraint(
-                expr=b_tec.var_size * b_tec.para_unit_capex_annual
-                == b_tec.var_capex_energy_cap
-            )
-            # CAPEX = CAPEX_chargeCapacity + CAPEX_dischargeCapacity + CAPEX_storSize
+
             b_tec.const_capex_aux = pyo.Constraint(
-                expr=b_tec.var_capex_charging_cap
+                expr=b_tec.var_capex_pump
                 + b_tec.var_capex_offshore_pipeline
-                + b_tec.var_capex_energy_cap
                 == b_tec.var_capex_aux
             )
 
