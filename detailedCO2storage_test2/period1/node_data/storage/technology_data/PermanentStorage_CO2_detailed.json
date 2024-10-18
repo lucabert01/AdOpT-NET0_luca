@@ -6,13 +6,20 @@
   "decommission": 0,
   "Economics": {
     "comment": "CAPEX is 0, cost are given by OPEX_variable in EUR/tCO2 stored",
-    "CAPEX_model": 1,
+    "CAPEX_model": 4,
     "unit_CAPEX": 0,
-    "OPEX_variable": 20,
+    "OPEX_variable": 0,
     "OPEX_fixed": 0,
-    "discount_rate": 0.1,
-    "lifetime": 25,
+    "discount_rate": 0,
+    "lifetime": 40,
     "decommission_cost": 0
+  },
+  "Extra_equipment": {
+    "pump_CAPEX": 318070,
+    "size_pump_max": 100,
+    "size_offshore_pipeline_max": 10000,
+    "offshore_pipeline_CAPEX": 287.15,
+    "offshore_pipeline_length": 30
   },
   "Performance": {
     "comment": "contains fitting data on unit of input, technology types and input/output carriers. Timestep length in hours",
@@ -28,11 +35,6 @@
     "emission_factor": 0,
     "allow_only_one_direction": 1,
     "performance": {
-      "energy_consumption": {
-        "in": {
-          "electricity": 0.034
-        }
-      }
     }
   },
   "Units": {
