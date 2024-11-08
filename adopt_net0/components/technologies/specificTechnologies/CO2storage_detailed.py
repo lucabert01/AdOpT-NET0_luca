@@ -119,7 +119,7 @@ class CO2storageDetailed(Technology):
         # TODO: calculate value for p_loss in the offshore pipeline based on an assumed flowrate
         offshore_transport = {}
         offshore_transport["p_pump_in"] = 90 # Inlet pressure in bar (constant)
-        offshore_transport["p_loss_offshorepipeline"] = 10 # Inlet pressure in bar (constant)
+        offshore_transport["p_loss_offshorepipeline"] = 13.5 # Inlet pressure in bar (constant)
         p_pump_in = offshore_transport["p_pump_in"]
         p_loss_offshorepipeline = offshore_transport["p_loss_offshorepipeline"]
         nu = 1/self.processed_coeff.time_independent["rho_co2_surface"]
