@@ -116,10 +116,9 @@ class CO2storageDetailed(Technology):
         whp_t0 = bhp_t0 - hydrostatic_pressure
         self.processed_coeff.time_independent["hydrostatic_pressure"] = hydrostatic_pressure
         # Perform pump interpolation
-        # TODO: calculate value for p_loss in the offshore pipeline based on an assumed flowrate
         offshore_transport = {}
         offshore_transport["p_pump_in"] = 90 # Inlet pressure in bar (constant)
-        offshore_transport["p_loss_offshorepipeline"] = 13.5 # Inlet pressure in bar (constant)
+        offshore_transport["p_loss_offshorepipeline"] = 12.5 # Inlet pressure in bar (constant)
         p_pump_in = offshore_transport["p_pump_in"]
         p_loss_offshorepipeline = offshore_transport["p_loss_offshorepipeline"]
         nu = 1/self.processed_coeff.time_independent["rho_co2_surface"]

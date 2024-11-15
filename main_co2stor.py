@@ -100,7 +100,7 @@ os.remove(path / "period1" / "network_topology" / "new" / "connection.csv")
 
 # Distance
 distance = pd.read_csv(path / "period1" / "network_topology" / "new" / "distance.csv", sep=";", index_col=0)
-distance.loc["industrial_cluster", "storage"] = 100
+distance.loc["industrial_cluster", "storage"] = 40
 distance.to_csv(path / "period1" / "network_topology" / "new" / "CO2PipelineOnshore" / "distance.csv", sep=";")
 print("Distance:", distance)
 
@@ -147,7 +147,7 @@ adopt.fill_carrier_data(path, value_or_data=cement_emissions/3*2*0+1800, columns
 adopt.fill_carrier_data(path, value_or_data=waste_emissions/2*0+1300, columns=['Demand'], carriers=['waste'], nodes=['industrial_cluster'])
 
 carbon_price = carbon_price_timeseries['price'].values
-carbon_price = np.linspace(61, 170, 8760)
+carbon_price = np.linspace(70, 170, 8760)
 carbon_cost_path = path / "period1" / "node_data" / "industrial_cluster" /"CarbonCost.csv"
 carbon_cost_template = pd.read_csv(carbon_cost_path, sep=';', index_col=0, header=0)
 carbon_cost_template['price'] = carbon_price
