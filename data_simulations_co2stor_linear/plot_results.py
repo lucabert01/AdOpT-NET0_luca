@@ -70,7 +70,7 @@ plt.savefig(path_plot/"emissions.jpg", format='jpeg', dpi=500)
 
 
 # Plotting BHP
-rho_co2_surface = 505.71
+rho_co2_surface = 876.5
 convert_inj_rate = 1/(rho_co2_surface*3.6)
 pmax = 175
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C']

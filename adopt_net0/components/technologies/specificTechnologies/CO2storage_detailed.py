@@ -108,7 +108,7 @@ class CO2storageDetailed(Technology):
         u = self.processed_coeff.time_independent['matrices_data']['u']
         g = 9.81
         delta_h = 1000
-        self.processed_coeff.time_independent["rho_co2_surface"] = 505.71
+        self.processed_coeff.time_independent["rho_co2_surface"] = 876.5
         # TODO: check if using rho_co2_surface is fine (and not an average value)
         hydrostatic_pressure = g * delta_h * self.processed_coeff.time_independent["rho_co2_surface"] / convert2bar
         bhp_t0 = sum(phi[cell_topwell - 1, k] * epsilon[0, k]
