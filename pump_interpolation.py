@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 
 # Given constants
-rho_co2 = 505           # kg/m3
+rho_co2 = 876.5           # kg/m3
 nu = 1/rho_co2           # Specific volume
 p_pump_in = 100    # Inlet pressure in bar (constant)
 eta_pump = 0.75    # Pump efficiency (assumed constant)
