@@ -11,7 +11,7 @@ import numpy as np
 
 
 
-file_path = Path(__file__).parent.parent/"userData/20241020213014-1/optimization_results.h5"
+file_path = Path(__file__).parent.parent/"userData/20241119161729-1/optimization_results.h5"
 
 
 print_h5_tree(file_path)
@@ -50,7 +50,7 @@ print("average_inj_rate:",value_average_inj_rate)
 print("Pump Size:", size_pump)
 print("Cement CCS Size:", size_ccs_cement)
 print("Waste to Energy CCS Size:", size_ccs_w2e)
-path_plot = Path(__file__).parent.parent.parent/"PhD Luca/Papers/Geological CO2 storage/Paper/Figures"
+path_plot = Path(__file__).parent
 
 # Plotting CO2 emissions and capture
 plt.figure(figsize=(10, 6))
@@ -70,16 +70,20 @@ plt.savefig(path_plot/"emissions.jpg", format='jpeg', dpi=500)
 
 
 # Plotting BHP
+bhp_red_timestep = bhp[::180].reset_index(drop=True)
+time_reduced = np.linspace(0, 5, 10)
+average_inj_rate_reduced = average_inj_rate[::180].reset_index(drop=True)
+
 rho_co2_surface = 876.5
 convert_inj_rate = 1/(rho_co2_surface*3.6)
-pmax = 175
+pmax = 200
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C']
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-ax1.plot(days/365, average_inj_rate/convert_inj_rate, color=batlow_colors[1], linewidth=2, label='Injection Rate')
+ax1.plot(time_reduced, average_inj_rate_reduced/convert_inj_rate*365, color=batlow_colors[1], linewidth=2, label='Injection Rate')
 ax1.set_ylabel('Average injection rate [t/day]')  # Replace 'units' with the appropriate unit for injection rate
 ax1.legend()
 ax1.set_ylim(max(average_inj_rate/convert_inj_rate)*0.6, max(average_inj_rate/convert_inj_rate) * 1.1)
-ax2.plot(days/365, bhp, color=batlow_colors[2], linewidth=2, label='Bottomhole pressure')
+ax2.plot(time_reduced, bhp_red_timestep, color=batlow_colors[2], linewidth=2, label='Bottomhole pressure')
 ax2.axhline(y=pmax, color=batlow_colors[0], linestyle='--', linewidth=1, label='Caprock fracture pressure')
 ax2.set_xlabel('Time [year]')
 ax2.set_ylabel('Bottomhole pressure [bar]')
