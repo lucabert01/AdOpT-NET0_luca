@@ -104,7 +104,7 @@ class CO2storageDetailed(Technology):
         epsilon = self.processed_coeff.time_independent['matrices_data']['epsilon_mat']
         convert2bar = 10 ** 5
         cell_topwell = int(self.processed_coeff.time_independent['matrices_data']['cellTopWell'][0])
-        lp = int(self.processed_coeff.time_independent['matrices_data']['lp']) # a mode is the equivalent of a grid block, but in the reduced space. So there is a pressure for every mode etc
+        ltot = int(self.processed_coeff.time_independent['matrices_data']['ltot']) # a mode is the equivalent of a grid block, but in the reduced space. So there is a pressure for every mode etc
         u = self.processed_coeff.time_independent['matrices_data']['u']
         g = 9.81
         delta_h = 1000
@@ -112,7 +112,7 @@ class CO2storageDetailed(Technology):
         # TODO: check if using rho_co2_surface is fine (and not an average value)
         hydrostatic_pressure = g * delta_h * self.processed_coeff.time_independent["rho_co2_surface"] / convert2bar
         bhp_t0 = sum(phi[cell_topwell - 1, k] * epsilon[0, k]
-                                               for k in range(0, lp)) + u[0,1]/(WI*mobApprox)/convert2bar
+                                               for k in range(0, ltot)) + u[0,1]/(WI*mobApprox)/convert2bar
         whp_t0 = bhp_t0 - hydrostatic_pressure
         self.processed_coeff.time_independent["hydrostatic_pressure"] = hydrostatic_pressure
         # Perform pump interpolation
@@ -306,7 +306,6 @@ class CO2storageDetailed(Technology):
 
         # Setting up the ROM for the evolution of bottom-hole pressure
         ltot = int(coeff_ti['matrices_data']['ltot']) # this is actually the number of eigenvectors retrieved from the POD (ltot=lp+ls)
-        lp = int(coeff_ti['matrices_data']['lp']) # a mode is the equivalent of a grid block, but in the reduced space. So there is a pressure for every mode etc
         cell_topwell = int(coeff_ti['matrices_data']['cellTopWell'][0])
         scale_down = 1
         epsilon = coeff_ti['matrices_data']['epsilon_mat']
@@ -320,7 +319,7 @@ class CO2storageDetailed(Technology):
         mobApprox = coeff_ti['matrices_data']['mobApprox']
         convert2bar = 10**5
 
-        b_tec.set_modes = pyo.Set(initialize=range(1, lp +1)) # also refers to the eigenvectors retrieved and not to grid blocks
+        b_tec.set_modes = pyo.Set(initialize=range(1, ltot +1)) # also refers to the eigenvectors retrieved and not to grid blocks
         # TODO: fix bounds of all variables
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
                                    bounds=(epsilon.min()*3, epsilon.max()*3))
