@@ -472,7 +472,8 @@ class CO2storageDetailed(Technology):
         b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
 
         # limit bhp to prevent fracture
-        b_tec.para_p_max = 300
+
+        b_tec.para_p_max = 190
 
         def init_p_max(const, t_red):
             return b_tec.var_bhp[t_red] <= b_tec.para_p_max
