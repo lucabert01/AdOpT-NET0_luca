@@ -1404,7 +1404,7 @@ class Technology(ModelComponent):
         # Decommissioning is possible, size variable
         b_tec.var_size_ccs = pyo.Var(
             within=pyo.NonNegativeReals,
-            bounds=(0, b_tec.para_size_max_ccs),
+            bounds=(b_tec.para_size_min_ccs, b_tec.para_size_max_ccs),
         )
 
         # TODO: maybe make the full set of all carriers as a intersection between this set and the others?

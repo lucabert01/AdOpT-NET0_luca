@@ -11,7 +11,40 @@ import numpy as np
 
 
 
-file_path = Path(__file__).parent.parent/"userData/20241020213014-1/optimization_results.h5"
+def save_figure_for_paper(fig, filename, file_path_results):
+    """
+    Save a matplotlib figure with settings similar to the provided MATLAB function.
+
+    Parameters:
+        fig : matplotlib.figure.Figure
+            The figure handle to save.
+        filename : str
+            The base filename for saving the figure.
+        file_path_results : str or Path
+            The directory where the figure should be saved.
+    """
+    # Convert to Path object if needed
+    file_path_results = Path(file_path_results)
+    file_path_results.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
+
+    # Set figure size (width x height in inches)
+    width_in, height_in = 432 / 72, 288 / 72  # Convert from points (1 pt = 1/72 inch)
+    fig.set_size_inches(width_in, height_in)
+
+    # Ensure high-quality rendering
+    fig.set_dpi(300)  # Higher DPI for better quality
+    plt.rcParams.update({'pdf.fonttype': 42, 'ps.fonttype': 42})  # Embed fonts in vector formats
+
+    # Set font size and font family globally
+    plt.rcParams.update({'font.size': 9, 'font.family': 'Arial'})
+
+    # Save in PDF and JPG formats
+    fig.savefig(file_path_results / f"{filename}.pdf", format='pdf', bbox_inches='tight')
+    fig.savefig(file_path_results / f"{filename}.jpg", format='jpeg', dpi=300, bbox_inches='tight')
+
+    print(f"Figure saved as {filename}.pdf and {filename}.jpg in {file_path_results}")
+
+file_path = Path(__file__).parent.parent/"userData/20241205151446-1/optimization_results.h5"
 
 
 print_h5_tree(file_path)
@@ -32,7 +65,7 @@ co2_captured_cement = cement_output_df['CO2captured_var_output_ccs']
 co2_captured_w2e = w2e_output_df['CO2captured_var_output_ccs']
 bhp = co2stor_results_df['bhp']
 whp = co2stor_results_df['whp']
-average_inj_rate = co2stor_results_df['average_inj_rate']
+average_inj_rate = co2stor_results_df['average_inj_rate']*24
 storage_level = co2stor_results_df['storage_level']
 power_pump = co2stor_results_df['electricity_input']
 size_pump = df_design[('storage','PermanentStorage_CO2_detailed','size_pump')]
@@ -53,29 +86,33 @@ print("Waste to Energy CCS Size:", size_ccs_w2e)
 path_plot = Path(__file__).parent.parent.parent/"PhD Luca/Papers/Geological CO2 storage/Paper/Figures"
 
 # Plotting CO2 emissions and capture
-plt.figure(figsize=(10, 6))
+# Example usage:
+file_path_results = r"C:\Users\0954659\OneDrive - Universiteit Utrecht\Documents\PhD Luca\Papers\Geological CO2 storage\Paper\Figures"
+
+
+fig = plt.figure(figsize=(10, 6))
 # Fill the area under the captured CO2 curve (Light Pink from Crameri Batlow)
-plt.fill_between(days/365, 0, tot_co2_captured, color='#F6C6D6', alpha=0.7, label='Captured CO2')
+plt.fill_between(days/365, 0, tot_co2_captured, color='#F6C6D6', alpha=0.7, label='Captured CO_2')
 # Fill the area between captured and emitted CO2 (Dark Blue from Crameri Batlow)
-plt.fill_between(days/365, tot_co2_captured, emission_tot, color='#012E4D', alpha=0.7, label='Emitted CO2')
+plt.fill_between(days/365, tot_co2_captured, emission_tot, color='#012E4D', alpha=0.7, label='Emitted CO_2')
 plt.xlabel('Time [year]')
-plt.ylabel('CO2 emissions [t/day]')
+plt.ylabel('CO_2 emissions [t/day]')
 plt.ylim(0, max(emission_tot) * 1.1)
 plt.xlim(0, max(days/365))
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)
-plt.savefig(path_plot/"emissions.jpg", format='jpeg', dpi=500)
+save_figure_for_paper(fig, "emissions", file_path_results)
 
 
 
 # Plotting BHP
 rho_co2_surface = 876.5
 convert_inj_rate = 1/(rho_co2_surface*3.6)
-pmax = 175
+pmax = 190
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C']
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-ax1.plot(days/365, average_inj_rate/convert_inj_rate, color=batlow_colors[1], linewidth=2, label='Injection Rate')
+fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+ax1.plot(days/365, average_inj_rate/convert_inj_rate, color='#F6C6D6', linewidth=2, label='Injection Rate')
 ax1.set_ylabel('Average injection rate [t/day]')  # Replace 'units' with the appropriate unit for injection rate
 ax1.legend()
 ax1.set_ylim(max(average_inj_rate/convert_inj_rate)*0.6, max(average_inj_rate/convert_inj_rate) * 1.1)
@@ -86,7 +123,7 @@ ax2.set_ylabel('Bottomhole pressure [bar]')
 ax2.set_ylim(min(bhp)*0.98, pmax * 1.02)
 ax2.legend()
 plt.tight_layout()
-plt.savefig(path_plot/"bhp_case_study.jpg", format='jpeg', dpi=500)
+save_figure_for_paper(fig1, "bhp_case_study", file_path_results)
 
 
 
@@ -112,7 +149,7 @@ ratio_fit_pump = power_pump/pump_unfitted_power
 fixed_pump_power = pump_unfitted_power[0]
 
 
-plt.figure(figsize=(10, 6))
+fig2 = plt.figure(figsize=(10, 6))
 plt.plot(days/365, ratio_fit_pump, color='#294B6C', linewidth=2, label='Fitted pump power over real one')
 plt.axhline(y=1.0, color="#DCE391", linestyle='--', linewidth=1, label='Perfect fit')
 plt.xlabel('Time [year]')
@@ -122,14 +159,16 @@ plt.title('Quality of the pump fit')
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)
-plt.savefig(path_plot/"fit_pump.jpg", format='jpeg', dpi=500)
+save_figure_for_paper(fig2, "fit_pump", file_path_results)
+
+
 
 pump_ratio = power_pump/fixed_pump_power
 averaged_pump_ratio = [np.mean(pump_ratio[i:i+180]) for i in range(0, len(pump_ratio), 180)]
 expanded_pump_ratio = np.repeat(averaged_pump_ratio, 180)
 
 
-plt.figure(figsize=(10, 6))
+fig3 = plt.figure(figsize=(10, 6))
 plt.plot(days/365, expanded_pump_ratio, color='#66B2A5', linewidth=2, label='With model')
 plt.axhline(y=1.0, color="#082D48", linestyle='--', linewidth=1, label='Without model')
 plt.xlabel('Time [year]')
@@ -139,6 +178,9 @@ plt.title('Impact of bhp variations on the pump power consumption')
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)
-plt.savefig(path_plot/"power_pump.jpg", format='jpeg', dpi=500)
+save_figure_for_paper(fig3, "power_pump", file_path_results)
 
 plt.show()
+
+
+

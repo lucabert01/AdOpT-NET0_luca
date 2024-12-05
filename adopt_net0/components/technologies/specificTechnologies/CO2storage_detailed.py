@@ -100,7 +100,8 @@ class CO2storageDetailed(Technology):
         self.processed_coeff.time_independent["matrices_data"] = sci.loadmat(aquifer_performance_data_path)
         phi = self.processed_coeff.time_independent['matrices_data']['phi']
         WI = self.processed_coeff.time_independent['matrices_data']['WI']
-        mobApprox = self.processed_coeff.time_independent['matrices_data']['mobApprox']
+        mobTotal = self.processed_coeff.time_independent['matrices_data']['mobTotal']
+        c_alpha_co2 = self.processed_coeff.time_independent['matrices_data']['c_alpha_co2']
         epsilon = self.processed_coeff.time_independent['matrices_data']['epsilon_mat']
         convert2bar = 10 ** 5
         cell_topwell = int(self.processed_coeff.time_independent['matrices_data']['cellTopWell'][0])
@@ -112,19 +113,19 @@ class CO2storageDetailed(Technology):
         # TODO: check if using rho_co2_surface is fine (and not an average value)
         hydrostatic_pressure = g * delta_h * self.processed_coeff.time_independent["rho_co2_surface"] / convert2bar
         bhp_t0 = sum(phi[cell_topwell - 1, k] * epsilon[0, k]
-                                               for k in range(0, ltot)) + u[0,1]/(WI*mobApprox)/convert2bar
+                                               for k in range(0, ltot)) + u[0,1]/(WI*mobTotal)/convert2bar/c_alpha_co2
         whp_t0 = bhp_t0 - hydrostatic_pressure
         self.processed_coeff.time_independent["hydrostatic_pressure"] = hydrostatic_pressure
         # Perform pump interpolation
         offshore_transport = {}
-        offshore_transport["p_pump_in"] = 90 # Inlet pressure in bar (constant)
+        offshore_transport["p_pump_in"] = 70 # Inlet pressure in bar (constant)
         offshore_transport["p_loss_offshorepipeline"] = 12.5 # Inlet pressure in bar (constant)
         p_pump_in = offshore_transport["p_pump_in"]
         p_loss_offshorepipeline = offshore_transport["p_loss_offshorepipeline"]
         nu = 1/self.processed_coeff.time_independent["rho_co2_surface"]
         eta_pump = 0.75
         pout_min = whp_t0[0,0] + p_loss_offshorepipeline
-        range_delta_p = [pout_min, 125]  # in bar
+        range_delta_p = [pout_min, 90]  # in bar
         range_flowrate = [0, 3000]  # in t/day
 
         def compute_W_pump(m_dot, p_pump_out):
@@ -316,7 +317,8 @@ class CO2storageDetailed(Technology):
         Bred = coeff_ti['matrices_data']['Bred_mat']
         phi = coeff_ti['matrices_data']['phi']
         WI = coeff_ti['matrices_data']['WI']
-        mobApprox = coeff_ti['matrices_data']['mobApprox']
+        mobTotal = coeff_ti['matrices_data']['mobTotal']
+        c_alpha_co2 = coeff_ti['matrices_data']['c_alpha_co2']
         convert2bar = 10**5
 
         b_tec.set_modes = pyo.Set(initialize=range(1, ltot +1)) # also refers to the eigenvectors retrieved and not to grid blocks
@@ -465,12 +467,12 @@ class CO2storageDetailed(Technology):
         # rewrite the states in the new base (only done for the cell of interest - top well)
         def init_retrieve_bhp(const, t_red):
             return b_tec.var_bhp[t_red] == sum(phi[cell_topwell - 1, k - 1] * b_tec.var_states[t_red, k]
-                                               for k in b_tec.set_modes) + b_tec.var_average_inj_rate[t_red]/(WI*mobApprox)/convert2bar
+                                               for k in b_tec.set_modes) + b_tec.var_average_inj_rate[t_red]/(WI*mobTotal*c_alpha_co2)/convert2bar
 
         b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
 
         # limit bhp to prevent fracture
-        b_tec.para_p_max = 180
+        b_tec.para_p_max = 300
 
         def init_p_max(const, t_red):
             return b_tec.var_bhp[t_red] <= b_tec.para_p_max
