@@ -125,8 +125,8 @@ class CO2storageDetailed(Technology):
         nu = 1/self.processed_coeff.time_independent["rho_co2_surface"]
         eta_pump = 0.75
         pout_min = whp_t0[0,0] + p_loss_offshorepipeline
-        range_delta_p = [pout_min, 90]  # in bar
-        range_flowrate = [0, 3000]  # in t/day
+        range_delta_p = [pout_min, 115]  # in bar
+        range_flowrate = [0, 4000]  # in t/day
 
         def compute_W_pump(m_dot, p_pump_out):
             return m_dot * nu * (p_pump_out - p_pump_in) / eta_pump * 0.1 / 3.6  # power in MWh/day
@@ -323,9 +323,10 @@ class CO2storageDetailed(Technology):
 
         b_tec.set_modes = pyo.Set(initialize=range(1, ltot +1)) # also refers to the eigenvectors retrieved and not to grid blocks
         # TODO: fix bounds of all variables
+        b_tec.para_p_max = 200
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
                                    bounds=(epsilon.min()*3, epsilon.max()*3))
-        b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals, bounds=(100, 250))
+        b_tec.var_bhp = pyo.Var(b_tec.set_t_reduced, within=pyo.Reals, bounds=(100, b_tec.para_p_max))
 
 
 
@@ -466,18 +467,14 @@ class CO2storageDetailed(Technology):
 
         # rewrite the states in the new base (only done for the cell of interest - top well)
         def init_retrieve_bhp(const, t_red):
-            return b_tec.var_bhp[t_red] == sum(phi[cell_topwell - 1, k - 1] * b_tec.var_states[t_red, k]
-                                               for k in b_tec.set_modes) + b_tec.var_average_inj_rate[t_red]/(WI*mobTotal*c_alpha_co2)/convert2bar
+            return (b_tec.var_bhp[t_red] == sum(phi[cell_topwell - 1, k - 1] * b_tec.var_states[t_red, k]
+                                               for k in b_tec.set_modes) + b_tec.var_average_inj_rate[t_red]
+                                        /(WI*mobTotal*c_alpha_co2*convert2bar))
 
         b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
 
         # limit bhp to prevent fracture
 
-        b_tec.para_p_max = 190
-
-        def init_p_max(const, t_red):
-            return b_tec.var_bhp[t_red] <= b_tec.para_p_max
-        b_tec.const_limit_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_p_max)
 
         b_tec.var_pwellhead = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals)
         # TODO: check if using rho_co2_surface is fine (and not an average value)
