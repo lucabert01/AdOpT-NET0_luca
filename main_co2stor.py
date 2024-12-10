@@ -56,7 +56,7 @@ adopt.create_input_data_folder_template(path)
 # Add technologies
 with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "r") as json_file:
     technologies = json.load(json_file)
-technologies["new"] = ["PermanentStorage_CO2_detailed"]
+technologies["new"] = ["PermanentStorage_CO2_simple"]
 
 with open(path / "period1" / "node_data" / "storage" / "Technologies.json", "w") as json_file:
     json.dump(technologies, json_file, indent=4)
