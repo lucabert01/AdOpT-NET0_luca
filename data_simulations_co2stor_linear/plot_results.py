@@ -8,6 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import json
 import numpy as np
+from matplotlib import rcParams
 
 
 
@@ -23,6 +24,8 @@ def save_figure_for_paper(fig, filename, file_path_results):
         file_path_results : str or Path
             The directory where the figure should be saved.
     """
+    from matplotlib import rcParams
+
     # Convert to Path object if needed
     file_path_results = Path(file_path_results)
     file_path_results.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
@@ -31,18 +34,18 @@ def save_figure_for_paper(fig, filename, file_path_results):
     width_in, height_in = 432 / 72, 288 / 72  # Convert from points (1 pt = 1/72 inch)
     fig.set_size_inches(width_in, height_in)
 
+    # Apply font settings directly to the figure (local only, doesn't affect global state)
+    rcParams.update({'font.size': 16, 'font.family': 'Arial'})
+
     # Ensure high-quality rendering
     fig.set_dpi(300)  # Higher DPI for better quality
     plt.rcParams.update({'pdf.fonttype': 42, 'ps.fonttype': 42})  # Embed fonts in vector formats
-
-    # Set font size and font family globally
-    plt.rcParams.update({'font.size': 9, 'font.family': 'Arial'})
 
     # Save in PDF and JPG formats
     fig.savefig(file_path_results / f"{filename}.pdf", format='pdf', bbox_inches='tight')
     fig.savefig(file_path_results / f"{filename}.jpg", format='jpeg', dpi=300, bbox_inches='tight')
 
-    print(f"Figure saved as {filename}.pdf and {filename}.jpg in {file_path_results}")
+
 
 file_path = Path(__file__).parent.parent/"userData/FullRun20241210/optimization_results.h5"
 
@@ -126,39 +129,56 @@ w2e_ratio = co2_captured_w2e / emission_w2e
 # plt.show()
 
 
-fig = plt.figure(figsize=(10, 6))
-# Fill the area under the captured CO2 curve (Light Pink from Crameri Batlow)
-plt.fill_between(days/365, 0, tot_co2_captured, color='#D491B8', alpha=0.7, label='Captured CO$_2$')
-# Fill the area between captured and emitted CO2 (Dark Blue from Crameri Batlow)
-plt.fill_between(days/365, tot_co2_captured, emission_tot, color='#012E4D', alpha=0.7, label='Emitted CO$_2$')
-plt.xlabel('Time [year]')
-plt.ylabel('CO$_2$ emissions [t/day]')
-plt.ylim(0, max(emission_tot) * 1.1)
-plt.xlim(0, max(days/365))
-plt.legend()
+# Set global font properties
+rcParams.update({'font.size': 16, 'font.family': 'Arial'})
+
+# Create the plot
+fig, ax = plt.subplots(figsize=(10, 6))  # Use plt.subplots to link axes directly to the figure
+ax.fill_between(days / 365, 0, tot_co2_captured, color='#D491B8', alpha=0.7, label='Captured CO$_2$')
+ax.fill_between(days / 365, tot_co2_captured, emission_tot, color='#012E4D', alpha=0.7, label='Emitted CO$_2$')
+
+# Set labels, limits, and legend
+ax.set_ylabel('CO$_2$ emissions [t/day]', fontsize=16)
+ax.set_xlabel('Time [years]', fontsize=16)
+ax.set_ylim(0, max(emission_tot) * 1.1)
+ax.set_xlim(0, max(days / 365))
+ax.legend(fontsize=14)
+
+# Adjust layout for clarity
 plt.tight_layout()
+
+# Show the plot without blocking
 plt.show(block=False)
 save_figure_for_paper(fig, "emissions", path_plot)
+
 
 
 
 # Plotting BHP
 
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C']
-fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-ax1.plot(days/365, average_inj_rate, color='#D491B8', linewidth=2, label='Average injection Rate')
+# First plot: Average injection rate
+fig1, ax1 = plt.subplots(figsize=(10, 4))
+ax1.plot(days / 365, average_inj_rate, color='#D491B8', linewidth=2, label='Average injection Rate')
+ax1.set_ylabel('Av. inj. rate [t/day]')
+ax1.set_ylim(max(average_inj_rate) * 0.6, max(average_inj_rate) * 1.1)
+#ax1.set_xlabel('Time [y]')
+plt.tight_layout()
+plt.xlim(0, 1800 / 365)
+save_figure_for_paper(fig1, "average_injection_rate", path_plot)
 
-ax1.set_ylabel('Average injection rate [t/day]')  # Replace 'units' with the appropriate unit for injection rate
-ax1.legend()
-ax1.set_ylim(max(average_inj_rate)*0.6, max(average_inj_rate) * 1.1)
-ax2.plot(days/365, bhp, color=batlow_colors[2], linewidth=2, label='Bottomhole pressure')
-ax2.axhline(y=pmax, color=batlow_colors[0], linestyle='--', linewidth=1, label='Caprock fracture pressure')
-ax2.set_xlabel('Time [year]')
-ax2.set_ylabel('Bottomhole pressure [bar]')
-ax2.set_ylim(min(bhp)*0.88, pmax * 1.02)
+# Second plot: BHP
+fig2, ax2 = plt.subplots(figsize=(10, 4))
+ax2.plot(days / 365, bhp, color=batlow_colors[2], linewidth=2, label='BHP')
+ax2.axhline(y=pmax, color=batlow_colors[0], linestyle='--', linewidth=1, label='p$_{max}$')
+ax2.set_xlabel('Time [y]')
+ax2.set_ylabel('Pressure [bar]')
+ax2.set_ylim(min(bhp) * 0.88, pmax * 1.04)
 ax2.legend(loc='lower right')
 plt.tight_layout()
-save_figure_for_paper(fig1, "bhp_case_study", path_plot)
+plt.xlim(0, 1800 / 365)
+save_figure_for_paper(fig2, "bhp_case_study", path_plot)
+
 
 
 
@@ -182,31 +202,33 @@ pump_unfitted_power = tot_co2_captured * nu * (p_pump_out - p_pump_in) / eta_pum
 ratio_fit_pump = power_pump/pump_unfitted_power
 fixed_pump_power = tot_co2_captured * nu * (93.563 - p_pump_in) / eta_pump * 0.1 / 3.6
 pump_ratio = power_pump/fixed_pump_power
-
+specific_power_pump = power_pump/tot_co2_captured*1000 # in kWh/tCO2
 
 
 fig3 = plt.figure(figsize=(10, 6))
-plt.plot(days/365, pump_ratio, color='#66B2A5', linewidth=2, label='Pressure-dependent')
-plt.axhline(y=1.0, color="#082D48", linestyle='--', linewidth=1, label='Static')
-plt.xlabel('Time [year]')
-plt.ylabel('Normalized specific pump consumption')
-plt.ylim(0.5, max(power_pump/fixed_pump_power)*1.1)
+plt.plot(days/365, specific_power_pump, color='#66B2A5', linewidth=2)
+#plt.xlabel('Time [y]')
+plt.ylabel('Pump consumption [kWh/tCO$_2$]')
+plt.ylim(0, max(specific_power_pump)*1.1)
 # plt.title('Impact of bhp variations on the pump power consumption')
-plt.legend(loc='lower right')
 plt.tight_layout()
 plt.show(block=False)
+plt.xlim(0, 1800/365)
 save_figure_for_paper(fig3, "power_pump", path_plot)
 
+
+# Quality of fit
 fig2 = plt.figure(figsize=(10, 6))
 plt.plot(days/365, ratio_fit_pump, color='#66B2A5', linewidth=2)
 plt.axhline(y=1.0, color="black", linestyle='--', linewidth=1, label='Perfect fit')
-plt.xlabel('Time [year]')
+plt.xlabel('Time [y]')
 plt.ylabel('Ratio')
 plt.ylim(0.6, max(ratio_fit_pump) * 1.1)
 # plt.title('Quality of the pump fit')
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)
+plt.xlim(0, 1800/365)
 save_figure_for_paper(fig2, "fit_pump", path_plot)
 
 # Parity plot: Predicted vs Actual
