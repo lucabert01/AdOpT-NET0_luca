@@ -34,12 +34,6 @@ def save_figure_for_paper(fig, filename, file_path_results):
     width_in, height_in = 432 / 72, 288 / 72  # Convert from points (1 pt = 1/72 inch)
     fig.set_size_inches(width_in, height_in)
 
-    # Apply font settings directly to the figure (local only, doesn't affect global state)
-    rcParams.update({'font.size': 16, 'font.family': 'Arial'})
-
-    # Ensure high-quality rendering
-    fig.set_dpi(300)  # Higher DPI for better quality
-    plt.rcParams.update({'pdf.fonttype': 42, 'ps.fonttype': 42})  # Embed fonts in vector formats
 
     # Save in PDF and JPG formats
     fig.savefig(file_path_results / f"{filename}.pdf", format='pdf', bbox_inches='tight')
@@ -98,86 +92,70 @@ file_path_results = r"C:\Users\0954659\OneDrive - Universiteit Utrecht\Documents
 cement_ratio = co2_captured_cement / emission_cement
 w2e_ratio = co2_captured_w2e / emission_w2e
 
-# # Plot the ratios
-# plt.figure(figsize=(12, 6))
-# plt.plot(cement_ratio, label='Cement: CO2 Captured/Emissions', marker='o', markersize=3, linewidth=0.7)
-# plt.plot(w2e_ratio, label='W2E: CO2 Captured/Emissions', marker='x', linestyle='--', markersize=3, linewidth=0.7)
-# plt.xlabel('Time')
-# plt.ylabel('CO2 Captured/Emissions Ratio')
-# plt.title('Comparison of CO2 Captured to Emissions Ratios')
-# plt.xlim(0, 1800)
-# plt.legend()
-#
-# plt.figure(figsize=(12, 6))
-# fig, ax1 = plt.subplots(figsize=(12, 6))
-# line1 = ax1.plot((co2_captured_cement + co2_captured_w2e) / (emission_cement + emission_w2e),
-#                  label='CO2 Captured/Total Emissions', color='blue', marker='o', markersize=3, linewidth=0.7)
-# ax1.set_xlabel('Time')
-# ax1.set_ylabel('CO2 Captured/Total Emissions', color='blue')
-# ax1.tick_params(axis='y', labelcolor='blue')
-# ax2 = ax1.twinx()
-# line2 = ax2.plot((co2_captured_cement + co2_captured_w2e),
-#                  label='Total CO2 Captured', color='green', marker='x', markersize=3, linewidth=0.7, linestyle='--')
-# ax2.set_ylabel('Total CO2 Captured', color='green')
-# ax2.tick_params(axis='y', labelcolor='green')
-# plt.title('Share of Total CO2 Captured')
-# ax1.grid(True)
-# lines = line1 + line2
-# labels = [line.get_label() for line in lines]
-# ax1.legend(lines, labels, loc='lower right')
-# ax1.set_xlim(0, 1800)
-# plt.show()
 
+# Set global styling for the plots
+rcParams.update({
+    'font.size': 16,
+    'font.family': 'Arial',
+    'axes.labelsize': 16,
+    'axes.titlesize': 16,
+    'xtick.labelsize': 14,
+    'ytick.labelsize': 14
+})
 
-# Set global font properties
-rcParams.update({'font.size': 16, 'font.family': 'Arial'})
+# Centralized figure size
+figsize = (10, 6)
 
-# Create the plot
-fig, ax = plt.subplots(figsize=(10, 6))  # Use plt.subplots to link axes directly to the figure
-ax.fill_between(days / 365, 0, tot_co2_captured, color='#D491B8', alpha=0.7, label='Captured CO$_2$')
-ax.fill_between(days / 365, tot_co2_captured, emission_tot, color='#012E4D', alpha=0.7, label='Emitted CO$_2$')
+# --- First Plot: CO2 Emissions ---
+fig, ax = plt.subplots(figsize=figsize)
+ax.fill_between(days / 365, emission_tot - tot_co2_captured, emission_tot, color='#D491B8', alpha=0.7, label='Captured CO$_2$')
+ax.fill_between(days / 365, 0, emission_tot - tot_co2_captured, color='#012E4D', alpha=0.7, label='Emitted CO$_2$')
 
 # Set labels, limits, and legend
-ax.set_ylabel('CO$_2$ emissions [t/day]', fontsize=16)
-ax.set_xlabel('Time [years]', fontsize=16)
+ax.set_ylabel('CO$_2$ emissions [t/day]')
+ax.set_xlabel('Time [y]')
 ax.set_ylim(0, max(emission_tot) * 1.1)
 ax.set_xlim(0, max(days / 365))
 ax.legend(fontsize=14)
 
-# Adjust layout for clarity
+# Adjust layout and save
 plt.tight_layout()
-
-# Show the plot without blocking
-plt.show(block=False)
 save_figure_for_paper(fig, "emissions", path_plot)
+plt.show(block=False)
 
-
-
-
-# Plotting BHP
-
+# --- Second Plot: Average Injection Rate and BHP ---
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C']
-# First plot: Average injection rate
-fig1, ax1 = plt.subplots(figsize=(10, 4))
-ax1.plot(days / 365, average_inj_rate, color='#D491B8', linewidth=2, label='Average injection Rate')
-ax1.set_ylabel('Av. inj. rate [t/day]')
-ax1.set_ylim(max(average_inj_rate) * 0.6, max(average_inj_rate) * 1.1)
-#ax1.set_xlabel('Time [y]')
-plt.tight_layout()
-plt.xlim(0, 1800 / 365)
-save_figure_for_paper(fig1, "average_injection_rate", path_plot)
+fig, ax1 = plt.subplots(figsize=figsize)  # Use the same figure size
 
-# Second plot: BHP
-fig2, ax2 = plt.subplots(figsize=(10, 4))
-ax2.plot(days / 365, bhp, color=batlow_colors[2], linewidth=2, label='BHP')
-ax2.axhline(y=pmax, color=batlow_colors[0], linestyle='--', linewidth=1, label='p$_{max}$')
-ax2.set_xlabel('Time [y]')
+# Plot Average Injection Rate on the left y-axis
+color1 = '#D491B8'  # Color for Average Injection Rate
+ax1.plot(days / 365, average_inj_rate, color=color1, linewidth=2, label='Av. inj. rate')
+ax1.set_ylabel('Av. inj. rate [t/day]')
+ax1.tick_params(axis='y', labelsize=14)
+ax1.set_ylim(max(average_inj_rate) * 0.6, max(average_inj_rate) * 1.1)
+
+# Secondary y-axis for BHP
+ax2 = ax1.twinx()
+color2 = batlow_colors[2]
+ax2.plot(days / 365, bhp, color=color2, linewidth=2, label='BHP')
+ax2.axhline(y=pmax, color=color2, linestyle='--', linewidth=1, label='p$_{max}$')
 ax2.set_ylabel('Pressure [bar]')
-ax2.set_ylim(min(bhp) * 0.88, pmax * 1.04)
-ax2.legend(loc='lower right')
+ax2.tick_params(axis='y', labelsize=14)
+ax2.set_ylim(min(bhp) * 0.80, pmax * 1.04)
+
+# Set common x-axis
+ax1.set_xlabel('Time [y]')
+ax1.set_xlim(0, 1800 / 365)
+
+# Combine legends
+fig.legend(loc='lower right', bbox_to_anchor=(0.90, 0.2), frameon=True)
+
+# Adjust layout and save
 plt.tight_layout()
-plt.xlim(0, 1800 / 365)
-save_figure_for_paper(fig2, "bhp_case_study", path_plot)
+save_figure_for_paper(fig, "average_injection_rate_bhp_combined", path_plot)
+plt.show()
+
+
 
 
 
@@ -205,16 +183,16 @@ pump_ratio = power_pump/fixed_pump_power
 specific_power_pump = power_pump/tot_co2_captured*1000 # in kWh/tCO2
 
 
-fig3 = plt.figure(figsize=(10, 6))
-plt.plot(days/365, specific_power_pump, color='#66B2A5', linewidth=2)
-#plt.xlabel('Time [y]')
-plt.ylabel('Pump consumption [kWh/tCO$_2$]')
-plt.ylim(0, max(specific_power_pump)*1.1)
-# plt.title('Impact of bhp variations on the pump power consumption')
-plt.tight_layout()
-plt.show(block=False)
-plt.xlim(0, 1800/365)
-save_figure_for_paper(fig3, "power_pump", path_plot)
+# fig3 = plt.figure(figsize=(10, 6))
+# plt.plot(days/365, specific_power_pump, color='#66B2A5', linewidth=2)
+# #plt.xlabel('Time [y]')
+# plt.ylabel('Pump consumption [kWh/tCO$_2$]')
+# plt.ylim(0, max(specific_power_pump)*1.1)
+# # plt.title('Impact of bhp variations on the pump power consumption')
+# plt.tight_layout()
+# plt.show(block=False)
+# plt.xlim(0, 1800/365)
+# save_figure_for_paper(fig3, "power_pump", path_plot)
 
 
 # Quality of fit
@@ -250,7 +228,7 @@ save_figure_for_paper(fig2, "fit_pump", path_plot)
 # save_figure_for_paper(fig4, "parity_pump_fit", path_plot)
 
 
-plt.show()
+# plt.show()
 
 
 
