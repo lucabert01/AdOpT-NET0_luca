@@ -180,7 +180,7 @@ size_pump = m.model["full"].periods["period1"].node_blocks["storage"].tech_block
 size_offshore_pipeline = m.model["full"].periods["period1"].node_blocks["storage"].tech_blocks_active[
     "PermanentStorage_CO2_detailed"].var_size_offshore_pipeline.value
 
-print("Some results:")
+print("Some results: ")
 print(f"CO2 Stored: {co2_stored:.2f}")
 print(f"Electricity for Storage: {el_storage:.2f}")
 print(f"Pump size: {size_pump:.2f}")
