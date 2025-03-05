@@ -102,6 +102,10 @@ class CO2storageDetailed(Technology):
         WI = self.processed_coeff.time_independent['matrices_data']['WI']
         mobTotal = self.processed_coeff.time_independent['matrices_data']['mobTotal']
         c_alpha_co2 = self.processed_coeff.time_independent['matrices_data']['c_alpha_co2']
+        rho_co2_reservoir = 887.8 # at 25C and 166 bar (average pressure in training run)
+        self.processed_coeff.time_independent["rho_co2_surface"] = 876.5
+        density_ratio_co2 = rho_co2_reservoir/self.processed_coeff.time_independent["rho_co2_surface"]
+        self.processed_coeff.time_independent["density_ratio_co2"] = density_ratio_co2
         epsilon = self.processed_coeff.time_independent['matrices_data']['epsilon_mat']
         convert2bar = 10 ** 5
         cell_topwell = int(self.processed_coeff.time_independent['matrices_data']['cellTopWell'][0])
@@ -109,11 +113,10 @@ class CO2storageDetailed(Technology):
         u = self.processed_coeff.time_independent['matrices_data']['u']
         g = 9.81
         delta_h = 1000
-        self.processed_coeff.time_independent["rho_co2_surface"] = 876.5
         # TODO: check if using rho_co2_surface is fine (and not an average value)
         hydrostatic_pressure = g * delta_h * self.processed_coeff.time_independent["rho_co2_surface"] / convert2bar
         bhp_t0 = sum(phi[cell_topwell - 1, k] * epsilon[0, k]
-                                               for k in range(0, ltot)) + u[0,1]/(WI*mobTotal)/convert2bar/c_alpha_co2
+                                               for k in range(0, ltot)) + u[0,1]/(WI*mobTotal*density_ratio_co2)/convert2bar/c_alpha_co2
         whp_t0 = bhp_t0 - hydrostatic_pressure
         self.processed_coeff.time_independent["hydrostatic_pressure"] = hydrostatic_pressure
         # Perform pump interpolation
@@ -282,6 +285,7 @@ class CO2storageDetailed(Technology):
         b_tec.set_t_reduced = pyo.Set(initialize=range(1, num_reduced_period + 1))
         # TODO: check value of rho_co2_surface
         rho_co2_surface = coeff_ti["rho_co2_surface"] # [kg/m3] density of CO2 at surface conditions
+        density_ratio_co2 = coeff_ti["density_ratio_co2"]
         convert_inj_rate = 1/(rho_co2_surface*3.6) # converts t/h to m3/s, which is the unit required in the TPWL-POD model
 
         def init_reduced_set_t(set, t_red):
@@ -320,8 +324,6 @@ class CO2storageDetailed(Technology):
         mobTotal = coeff_ti['matrices_data']['mobTotal']
         c_alpha_co2 = coeff_ti['matrices_data']['c_alpha_co2']
         convert2bar = 10**5
-        rho_co2_reservoir = 887.8 # at 25C and 166 bar (average pressure in training run)
-        density_ratio_co2 = rho_co2_reservoir/rho_co2_surface
 
         b_tec.set_modes = pyo.Set(initialize=range(1, ltot +1)) # also refers to the eigenvectors retrieved and not to grid blocks
         b_tec.para_p_max = 200
