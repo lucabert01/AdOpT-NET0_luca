@@ -320,9 +320,10 @@ class CO2storageDetailed(Technology):
         mobTotal = coeff_ti['matrices_data']['mobTotal']
         c_alpha_co2 = coeff_ti['matrices_data']['c_alpha_co2']
         convert2bar = 10**5
+        rho_co2_reservoir = 887.8 # at 25C and 166 bar (average pressure in training run)
+        density_ratio_co2 = rho_co2_reservoir/rho_co2_surface
 
         b_tec.set_modes = pyo.Set(initialize=range(1, ltot +1)) # also refers to the eigenvectors retrieved and not to grid blocks
-        # TODO: fix bounds of all variables
         b_tec.para_p_max = 200
         b_tec.var_states = pyo.Var(b_tec.set_t_reduced, b_tec.set_modes, within= pyo.Reals,
                                    bounds=(epsilon.min()*3, epsilon.max()*3))
@@ -339,7 +340,6 @@ class CO2storageDetailed(Technology):
         search_range = 1
         s_search_indices = range(-search_range, search_range + 1)
         s_abs_index = [0, 1]
-        # TODO: add proper bounds to the distance variables
         b_tec.var_distance = pyo.Var(b_tec.set_t_reduced, s_search_indices,
                                      within=pyo.Reals, bounds=(0, 1000))
         b_tec.var_d_min = pyo.Var(b_tec.set_t_reduced,
@@ -469,7 +469,7 @@ class CO2storageDetailed(Technology):
         def init_retrieve_bhp(const, t_red):
             return (b_tec.var_bhp[t_red] == sum(phi[cell_topwell - 1, k - 1] * b_tec.var_states[t_red, k]
                                                for k in b_tec.set_modes) + b_tec.var_average_inj_rate[t_red]
-                                        /(WI*mobTotal*c_alpha_co2*convert2bar))
+                                        /(WI*mobTotal*c_alpha_co2*convert2bar*density_ratio_co2))
 
         b_tec.const_retrieve_bhp = pyo.Constraint(b_tec.set_t_reduced, rule=init_retrieve_bhp)
 
@@ -477,7 +477,6 @@ class CO2storageDetailed(Technology):
 
 
         b_tec.var_pwellhead = pyo.Var(b_tec.set_t_reduced, within=pyo.NonNegativeReals)
-        # TODO: check if using rho_co2_surface is fine (and not an average value)
         hydrostatic_pressure = self.processed_coeff.time_independent["hydrostatic_pressure"]
         def init_pwellhad(const, t_red):
             return b_tec.var_pwellhead[t_red] == b_tec.var_bhp[t_red] - hydrostatic_pressure
