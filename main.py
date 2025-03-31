@@ -33,7 +33,7 @@ topology["investment_periods"] = ["period1"]
 with open(path / "Topology.json", "w") as json_file:
     json.dump(topology, json_file, indent=4)
 
-end_period = 10 * 180
+end_period = 2
 
 
 # Load json template
@@ -81,6 +81,13 @@ adopt.fill_carrier_data(
 )
 adopt.fill_carrier_data(
     path,
+    value_or_data=5000,
+    columns=["Export limit"],
+    carriers=["CO2captured"],
+    nodes=["industrial_cluster"],
+)
+adopt.fill_carrier_data(
+    path,
     value_or_data=20000,
     columns=["Import limit"],
     carriers=["heat"],
@@ -102,16 +109,9 @@ adopt.fill_carrier_data(
 )
 adopt.fill_carrier_data(
     path,
-    value_or_data=1 / 3 * 2 * 0,
+    value_or_data=20,
     columns=["Demand"],
-    carriers=["cement"],
-    nodes=["industrial_cluster"],
-)
-adopt.fill_carrier_data(
-    path,
-    value_or_data=1 / 3 * 2 * 0,
-    columns=["Demand"],
-    carriers=["electricity"],
+    carriers=["clinker"],
     nodes=["industrial_cluster"],
 )
 
