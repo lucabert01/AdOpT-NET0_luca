@@ -210,7 +210,10 @@ class CementHybridCCS(Technology):
         def init_mea_operation_constraint(const, t):
             return (
                 b_tec.var_co2_captured_mea[t]
-                <= self.output[t, "clinker"] * (1 - CCR_oxy) * CCR_mea
+                <= self.output[t, "clinker"]
+                * emissions_clinker
+                * (1 - CCR_oxy)
+                * CCR_mea
             )
 
         b_tec.const_mea_operation = pyo.Constraint(
@@ -219,9 +222,7 @@ class CementHybridCCS(Technology):
 
         # input-output correlations
         def init_input_output(const, t, car_input):
-            b = 1
             if car_input == "heat":
-                a = 1
                 return (
                     self.input[t, car_input]
                     == self.output[t, "clinker"]
@@ -322,7 +323,6 @@ class CementHybridCCS(Technology):
             self.set_t_global, within=pyo.NonNegativeReals
         )
 
-        # TODO var_emission_pos is not showing up in the results
         def init_tec_emissions_pos(const, t):
             """emissions_pos = output * emissionfactor"""
             a = 1
