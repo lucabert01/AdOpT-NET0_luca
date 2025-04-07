@@ -1,8 +1,9 @@
 {
   "tec_type": "CementHybridCCS",
   "size_min": 0,
-  "size_max": 1000,
+  "size_max": 150,
   "size_is_int": 0,
+  "size_clinker_is_fixed": 1,
   "decommission": 0,
   "Economics": {
     "comment": "CAPEX in EUR/tonne/hr or as a piecewise function, OPEX_variable in EUR/tonne total output, OPEX_fixed in % of CAPEX_annual",
@@ -10,9 +11,18 @@
     "unit_CAPEX": 265160,
     "fix_CAPEX": 6.92E+07,
     "piecewise_CAPEX": {
-      "bp_x": "not defined",
-      "bp_y": "not defined"
+      "bp_x": [
+        0,
+        75,
+        125
+      ],
+      "bp_y": [
+        0,
+        137540000,
+        151620000
+      ]
     },
+    "unit_CAPEX_MEA": 42886.5,
     "OPEX_variable": 0,
     "OPEX_fixed": 0,
     "OPEX_MEA": 0.06,
