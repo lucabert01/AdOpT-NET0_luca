@@ -357,9 +357,7 @@ class CementHybridCCS(Technology):
 
         def calculate_max_capex():
             max_capex = (
-                b_tec.para_size_max
-                * max(economics.capex_data["piecewise_capex"]["bp_y"])
-                + 1
+                max(economics.capex_data["piecewise_capex"]["bp_y"])
             ) * annualization_factor
             bounds = (0, max_capex)
             return bounds

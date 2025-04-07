@@ -1,7 +1,7 @@
 {
   "tec_type": "CementHybridCCS",
   "size_min": 0,
-  "size_max": 150,
+  "size_max": 125,
   "size_is_int": 0,
   "size_clinker_is_fixed": 1,
   "decommission": 0,
