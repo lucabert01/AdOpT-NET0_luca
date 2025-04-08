@@ -51,12 +51,7 @@ class CementHybridCCS(Technology):
         performance_data = pd.read_excel(
             performance_data_path, sheet_name="performance", index_col=0
         )
-        capex_data_oxy = pd.read_excel(
-            performance_data_path, sheet_name="cost_oxy", index_col=0
-        )
-        capex_data_mea = pd.read_excel(
-            performance_data_path, sheet_name="cost_mea", index_col=0
-        )
+
         # TODO: make a function that cleans data (cement output either 0 or at full capacity), converts CO2 to clinker and daily to hourly
 
         self.processed_coeff.time_independent["alpha_oxy"] = performance_data.loc[
@@ -68,12 +63,11 @@ class CementHybridCCS(Technology):
         self.processed_coeff.time_independent["beta_oxy"] = performance_data.loc[
             "beta_oxy", "value"
         ]
-        self.processed_coeff.time_independent["capex_data_oxy"] = capex_data_oxy
-        self.processed_coeff.time_independent["capex_data_mea"] = capex_data_mea
+
         self.processed_coeff.time_independent["size_max_mea"] = (
             self.processed_coeff.time_independent["size_max"]
             * self.input_parameters.performance_data["performance"]["tCO2_tclinker"]
-            * self.input_parameters.performance_data["performance"]["CCR_oxy"]
+            * (1 - self.input_parameters.performance_data["performance"]["CCR_oxy"])
             * self.input_parameters.performance_data["performance"]["CCR_mea"]
         )
 
@@ -337,7 +331,6 @@ class CementHybridCCS(Technology):
         return b_tec
 
     # TODO define capex
-    # TODO write the bp_xy in json
     def _define_capex_variables(self, b_tec, data: dict):
         """
         Defines variables related to technology capex.
@@ -355,16 +348,38 @@ class CementHybridCCS(Technology):
             discount_rate, economics.lifetime, fraction_of_year_modelled
         )
 
-        def calculate_max_capex():
+        def calculate_max_capex_oxy():
             max_capex = (
-                max(economics.capex_data["piecewise_capex"]["bp_y"])
-            ) * annualization_factor
+                (max(economics.capex_data["piecewise_capex"]["bp_y"]))
+                * annualization_factor
+                / annualization_factor
+            )
             bounds = (0, max_capex)
             return bounds
+
+        def calculate_max_capex_mea():
+            max_capex = (
+                (
+                    self.processed_coeff.time_independent["size_max_mea"]
+                    * economics.other_economics["unit_CAPEX_MEA"]
+                )
+                * annualization_factor
+                / annualization_factor
+            )
+            bounds = (0, max_capex)
+            return bounds
+
+        def calculate_max_capex():
+            bounds_mea = calculate_max_capex_mea()
+            bounds_oxy = calculate_max_capex_oxy()
+            total_bounds = tuple(map(sum, zip(bounds_mea, bounds_oxy)))
+            return total_bounds
 
         # CAPEX auxilliary (used to calculate theoretical CAPEX)
         # For new technologies, this is equal to actual CAPEX
         # For existing technologies it is used to calculate fixed OPEX
+        b_tec.var_capex_oxy = pyo.Var(bounds=calculate_max_capex_oxy())
+        b_tec.var_capex_mea = pyo.Var(bounds=calculate_max_capex_mea())
         b_tec.var_capex_aux = pyo.Var(bounds=calculate_max_capex())
 
         b_tec.var_capex = pyo.Var()
@@ -373,18 +388,7 @@ class CementHybridCCS(Technology):
 
     def _define_capex_parameters(self, b_tec, data):
         """
-        Defines the capex parameters
-
-        For capex model 1:
-        - para_unit_capex
-        - para_unit_capex_annual
-
-        For capex model 2: defined with constraints
-        For capex model 3:
-        - para_unit_capex
-        - para_fix_capex
-        - para_unit_capex_annual
-        - para_fix_capex_annual
+        Defines the capex parameters. In this case, it is only the decommissioning costs
 
         :param b_tec:
         :param data:
@@ -397,48 +401,9 @@ class CementHybridCCS(Technology):
         annualization_factor = annualize(
             discount_rate, economics.lifetime, fraction_of_year_modelled
         )
-
-        capex_model = 1  # set_capex_model(config, economics)
-
-        if capex_model == 1:
-            b_tec.para_unit_capex = pyo.Param(
-                domain=pyo.Reals,
-                initialize=economics.capex_data["unit_capex"],
-                mutable=True,
-            )
-            b_tec.para_unit_capex_annual = pyo.Param(
-                domain=pyo.Reals,
-                initialize=annualization_factor * economics.capex_data["unit_capex"],
-                mutable=True,
-            )
-
-        elif capex_model == 2:
-            # This is defined in the constraints
-            pass
-        elif capex_model == 3:
-            b_tec.para_unit_capex = pyo.Param(
-                domain=pyo.Reals,
-                initialize=economics.capex_data["unit_capex"],
-                mutable=True,
-            )
-            b_tec.para_fix_capex = pyo.Param(
-                domain=pyo.Reals,
-                initialize=economics.capex_data["fix_capex"],
-                mutable=True,
-            )
-            b_tec.para_unit_capex_annual = pyo.Param(
-                domain=pyo.Reals,
-                initialize=annualization_factor * economics.capex_data["unit_capex"],
-                mutable=True,
-            )
-            b_tec.para_fix_capex_annual = pyo.Param(
-                domain=pyo.Reals,
-                initialize=annualization_factor * economics.capex_data["fix_capex"],
-                mutable=True,
-            )
-        else:
-            # Defined in the technology subclass
-            pass
+        b_tec.para_unit_capex_mea_annual = (
+            economics.other_economics["unit_CAPEX_MEA"] * annualization_factor
+        )
 
         if self.existing and not self.component_options.decommission == "impossible":
             b_tec.para_decommissioning_cost_annual = pyo.Param(
@@ -461,68 +426,33 @@ class CementHybridCCS(Technology):
             discount_rate, economics.lifetime, fraction_of_year_modelled
         )
 
-        capex_model = 1  # set_capex_model(config, economics)
+        # Capex oxyfuel as a piecewise function
+        self.big_m_transformation_required = 1
+        bp_x = economics.capex_data["piecewise_capex"]["bp_x"]
+        bp_y_annual = [
+            y * annualization_factor
+            for y in economics.capex_data["piecewise_capex"]["bp_y"]
+        ]
+        b_tec.const_capex_oxy = pyo.Piecewise(
+            b_tec.var_capex_oxy,
+            b_tec.var_size,
+            pw_pts=bp_x,
+            pw_constr_type="EQ",
+            f_rule=bp_y_annual,
+            pw_repn="SOS2",
+        )
 
-        if capex_model == 1:
-            b_tec.const_capex_aux = pyo.Constraint(
-                expr=b_tec.var_size * b_tec.para_unit_capex_annual
-                == b_tec.var_capex_aux
-            )
-        elif capex_model == 2:
-            self.big_m_transformation_required = 1
-            bp_x = economics.capex_data["piecewise_capex"]["bp_x"]
-            bp_y_annual = [
-                y * annualization_factor
-                for y in economics.capex_data["piecewise_capex"]["bp_y"]
-            ]
-            b_tec.const_capex_aux = pyo.Piecewise(
-                b_tec.var_capex_aux,
-                b_tec.var_size,
-                pw_pts=bp_x,
-                pw_constr_type="EQ",
-                f_rule=bp_y_annual,
-                pw_repn="SOS2",
-            )
-        elif capex_model == 3:
-            self.big_m_transformation_required = 1
-            s_indicators = range(0, 2)
+        # Capex mea as linear
+        b_tec.const_capex_mea = pyo.Constraint(
+            expr=b_tec.var_size_mea * b_tec.para_unit_capex_mea_annual
+            == b_tec.var_capex_mea
+        )
+        # Capex tot
+        b_tec.const_capex_aux = pyo.Constraint(
+            expr=b_tec.var_capex_mea + b_tec.var_capex_oxy == b_tec.var_capex_aux
+        )
 
-            if self.existing:
-                b_tec.const_capex_aux = pyo.Constraint(
-                    expr=b_tec.var_size * b_tec.para_unit_capex_annual
-                    + b_tec.para_fix_capex_annual
-                    == b_tec.var_capex_aux
-                )
-            else:
-
-                def init_installation(dis, ind):
-                    if ind == 0:  # tech not installed
-                        dis.const_capex_aux = pyo.Constraint(
-                            expr=b_tec.var_capex_aux == 0
-                        )
-                        dis.const_not_installed = pyo.Constraint(
-                            expr=b_tec.var_size == 0
-                        )
-                    else:  # tech installed
-                        dis.const_capex_aux = pyo.Constraint(
-                            expr=b_tec.var_size * b_tec.para_unit_capex_annual
-                            + b_tec.para_fix_capex_annual
-                            == b_tec.var_capex_aux
-                        )
-
-                b_tec.dis_installation = gdp.Disjunct(
-                    s_indicators, rule=init_installation
-                )
-
-                def bind_disjunctions(dis):
-                    return [b_tec.dis_installation[i] for i in s_indicators]
-
-                b_tec.disjunction_installation = gdp.Disjunction(rule=bind_disjunctions)
-
-        else:
-            # Defined in the technology subclass
-            pass
-
+        # TODO check the decommissioning here
         # CAPEX
         if self.existing:
             if self.component_options.decommission == "impossible":

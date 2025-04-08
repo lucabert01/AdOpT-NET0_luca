@@ -72,6 +72,8 @@ class Economics:
         self.discount_rate = economics["discount_rate"]
         self.lifetime = economics["lifetime"]
         self.decommission_cost = economics["decommission_cost"]
+        if "other_economics" in economics:
+            self.other_economics = economics["other_economics"]
 
 
 class InputParameters:
