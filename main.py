@@ -109,7 +109,7 @@ adopt.fill_carrier_data(
 )
 adopt.fill_carrier_data(
     path,
-    value_or_data=20,
+    value_or_data=125,
     columns=["Demand"],
     carriers=["clinker"],
     nodes=["industrial_cluster"],

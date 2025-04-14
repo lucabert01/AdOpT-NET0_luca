@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 from ...utilities import annualize, set_discount_rate
 from ..technology import Technology
-
+from warnings import warn
 import logging
 
 log = logging.getLogger(__name__)
@@ -32,6 +32,22 @@ class CementHybridCCS(Technology):
         self.component_options.main_output_carrier = tec_data["Performance"][
             "main_output_carrier"
         ]
+
+    def _define_size(self, b_tec):
+        """
+        Defines variables and parameters related to technology size.
+
+        :param b_tec: pyomo block with technology model
+        :return: pyomo block with technology model
+        """
+        super(CementHybridCCS, self)._define_size(b_tec)
+
+        b_tec.var_size_mea = pyo.Var(
+            within=pyo.NonNegativeReals,
+            bounds=[0, self.processed_coeff.time_independent["size_max_mea"]],
+        )
+
+        return b_tec
 
     def fit_technology_performance(self, climate_data: pd.DataFrame, location: dict):
         """
@@ -153,7 +169,6 @@ class CementHybridCCS(Technology):
         alpha_oxy = self.processed_coeff.time_independent["alpha_oxy"]
         beta_oxy = self.processed_coeff.time_independent["beta_oxy"]
         alpha_mea = self.processed_coeff.time_independent["alpha_mea"]
-        emission_capacity_max = prod_capacity_clinker * emissions_clinker
         CCR_oxy = self.input_parameters.performance_data["performance"]["CCR_oxy"]
         CCR_mea = self.input_parameters.performance_data["performance"]["CCR_mea"]
 
@@ -163,15 +178,15 @@ class CementHybridCCS(Technology):
             bounds=[0, self.processed_coeff.time_independent["size_max_mea"]],
         )
 
-        b_tec.var_size_mea = pyo.Var(
-            within=pyo.NonNegativeReals,
-            bounds=[0, self.processed_coeff.time_independent["size_max_mea"]],
-        )
+        if self.input_parameters.performance_data["clinker_capacity_is_fixed"]:
 
-        def init_size_clinker(const):
-            return b_tec.var_size == prod_capacity_clinker
+            def init_size_clinker(const):
+                return b_tec.var_size == prod_capacity_clinker
 
-        b_tec.const_size_clinker = pyo.Constraint(rule=init_size_clinker)
+            b_tec.const_size_clinker = pyo.Constraint(rule=init_size_clinker)
+            warn(
+                f"The clinker capacity of {self.name} is currently fixed at {prod_capacity_clinker} t/h"
+            )
 
         def init_size_constraint_mea(const, t):
             return b_tec.var_co2_captured_mea[t] <= b_tec.var_size_mea * CCR_mea
@@ -198,6 +213,13 @@ class CementHybridCCS(Technology):
 
         b_tec.const_mea_operation = pyo.Constraint(
             self.set_t_performance, rule=init_mea_operation_constraint
+        )
+
+        def init_size_clinker_max_constraint(const, t):
+            return self.output[t, "clinker"] <= b_tec.var_size
+
+        b_tec.const_size_mea_max = pyo.Constraint(
+            self.set_t_performance, rule=init_size_clinker_max_constraint
         )
 
         # input-output correlations
@@ -236,7 +258,7 @@ class CementHybridCCS(Technology):
             self.set_t_performance, rule=init_output_output
         )
 
-        # define emissions
+        return b_tec
 
     def _define_input(self, b_tec, data: dict):
         """
@@ -350,22 +372,16 @@ class CementHybridCCS(Technology):
 
         def calculate_max_capex_oxy():
             max_capex = (
-                (max(economics.capex_data["piecewise_capex"]["bp_y"]))
-                * annualization_factor
-                / annualization_factor
-            )
+                max(economics.capex_data["piecewise_capex"]["bp_y"])
+            ) * annualization_factor
             bounds = (0, max_capex)
             return bounds
 
         def calculate_max_capex_mea():
             max_capex = (
-                (
-                    self.processed_coeff.time_independent["size_max_mea"]
-                    * economics.other_economics["unit_CAPEX_MEA"]
-                )
-                * annualization_factor
-                / annualization_factor
-            )
+                self.processed_coeff.time_independent["size_max_mea"]
+                * economics.other_economics["unit_CAPEX_MEA"]
+            ) * annualization_factor
             bounds = (0, max_capex)
             return bounds
 
@@ -401,8 +417,12 @@ class CementHybridCCS(Technology):
         annualization_factor = annualize(
             discount_rate, economics.lifetime, fraction_of_year_modelled
         )
-        b_tec.para_unit_capex_mea_annual = (
-            economics.other_economics["unit_CAPEX_MEA"] * annualization_factor
+
+        b_tec.para_unit_capex_mea_annual = pyo.Param(
+            domain=pyo.Reals,
+            initialize=economics.other_economics["unit_CAPEX_MEA"]
+            * annualization_factor,
+            mutable=True,
         )
 
         if self.existing and not self.component_options.decommission == "impossible":
@@ -452,7 +472,6 @@ class CementHybridCCS(Technology):
             expr=b_tec.var_capex_mea + b_tec.var_capex_oxy == b_tec.var_capex_aux
         )
 
-        # TODO check the decommissioning here
         # CAPEX
         if self.existing:
             if self.component_options.decommission == "impossible":
