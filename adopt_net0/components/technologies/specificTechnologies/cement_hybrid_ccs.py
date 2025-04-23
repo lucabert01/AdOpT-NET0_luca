@@ -16,7 +16,7 @@ class CementHybridCCS(Technology):
     Cement plant with hybrid CCS
 
     The plant has an oxyfuel combustion in the calciner and post-combustion capture with MEA afterward. The size
-    of the oxyfuel is fixed, while the size and capture rate of the MEA are variables of the optimization
+    of the oxyfuel is fixed, while the size of MEA and amount of CO2 processed (per h) by the MEA are variables of the optimization
     """
 
     def __init__(self, tec_data: dict):
@@ -61,11 +61,11 @@ class CementHybridCCS(Technology):
         performance_data_path = Path(__file__).parent.parent.parent.parent
         performance_data_path = (
             performance_data_path
-            / "database/templates/technology_data/Industrial/CementHybridCCS_data/performance_cost_cementHybridCCS.xlsx"
+            / "database/templates/technology_data/Industrial/CementHybridCCS_data/cement_sheet.xlsx"
         )
 
         performance_data = pd.read_excel(
-            performance_data_path, sheet_name="performance", index_col=0
+            performance_data_path, sheet_name="other_data", index_col=0
         )
 
         # TODO: make a function that cleans data (cement output either 0 or at full capacity), converts CO2 to clinker and daily to hourly
@@ -189,15 +189,16 @@ class CementHybridCCS(Technology):
             )
 
         def init_size_constraint_mea(const, t):
-            return b_tec.var_co2_captured_mea[t] <= b_tec.var_size_mea * CCR_mea
+            return b_tec.var_co2_captured_mea[t] <= b_tec.var_size_mea
 
         b_tec.const_size_mea = pyo.Constraint(
             self.set_t_performance, rule=init_size_constraint_mea
         )
 
         def init_size_mea_max_constraint(const):
-            return b_tec.var_size_mea <= b_tec.var_size * emissions_clinker * (
-                1 - CCR_oxy
+            return (
+                b_tec.var_size_mea
+                <= b_tec.var_size * emissions_clinker * (1 - CCR_oxy) * CCR_mea
             )
 
         b_tec.const_size_mea_max = pyo.Constraint(rule=init_size_mea_max_constraint)
@@ -218,7 +219,7 @@ class CementHybridCCS(Technology):
         def init_size_clinker_max_constraint(const, t):
             return self.output[t, "clinker"] <= b_tec.var_size
 
-        b_tec.const_size_mea_max = pyo.Constraint(
+        b_tec.const_size_clinker_max = pyo.Constraint(
             self.set_t_performance, rule=init_size_clinker_max_constraint
         )
 
@@ -247,7 +248,6 @@ class CementHybridCCS(Technology):
         )
 
         def init_output_output(const, t):
-            a = 1
             return (
                 self.output[t, "CO2captured"]
                 == self.output[t, "clinker"] * emissions_clinker * CCR_oxy
@@ -352,7 +352,6 @@ class CementHybridCCS(Technology):
 
         return b_tec
 
-    # TODO define capex
     def _define_capex_variables(self, b_tec, data: dict):
         """
         Defines variables related to technology capex.
@@ -378,11 +377,17 @@ class CementHybridCCS(Technology):
             return bounds
 
         def calculate_max_capex_mea():
-            max_capex = (
-                self.processed_coeff.time_independent["size_max_mea"]
-                * economics.other_economics["unit_CAPEX_MEA"]
-            ) * annualization_factor
-            bounds = (0, max_capex)
+            if economics.other_economics["CAPEX_MEA_is_piecewise"]:
+                max_capex = (
+                    max(economics.other_economics["piecewise_CAPEX_MEA"]["bp_y"])
+                ) * annualization_factor
+                bounds = (0, max_capex)
+            else:
+                max_capex = (
+                    self.processed_coeff.time_independent["size_max_mea"]
+                    * economics.other_economics["unit_CAPEX_MEA"]
+                ) * annualization_factor
+                bounds = (0, max_capex)
             return bounds
 
         def calculate_max_capex():
@@ -463,10 +468,26 @@ class CementHybridCCS(Technology):
         )
 
         # Capex mea as linear
-        b_tec.const_capex_mea = pyo.Constraint(
-            expr=b_tec.var_size_mea * b_tec.para_unit_capex_mea_annual
-            == b_tec.var_capex_mea
-        )
+        if economics.other_economics["CAPEX_MEA_is_piecewise"]:
+            bp_x = economics.other_economics["piecewise_CAPEX_MEA"]["bp_x"]
+            bp_y_annual = [
+                y * annualization_factor
+                for y in economics.other_economics["piecewise_CAPEX_MEA"]["bp_y"]
+            ]
+            b_tec.const_capex_mea = pyo.Piecewise(
+                b_tec.var_capex_mea,
+                b_tec.var_size_mea,
+                pw_pts=bp_x,
+                pw_constr_type="EQ",
+                f_rule=bp_y_annual,
+                pw_repn="SOS2",
+            )
+
+        else:
+            b_tec.const_capex_mea = pyo.Constraint(
+                expr=b_tec.var_size_mea * b_tec.para_unit_capex_mea_annual
+                == b_tec.var_capex_mea
+            )
         # Capex tot
         b_tec.const_capex_aux = pyo.Constraint(
             expr=b_tec.var_capex_mea + b_tec.var_capex_oxy == b_tec.var_capex_aux
@@ -490,6 +511,53 @@ class CementHybridCCS(Technology):
 
         return b_tec
 
+    # TODO define opex constraint
+    def _define_opex(self, b_tec, data):
+        """
+        Defines variable and fixed OPEX
+
+        :param b_tec: pyomo block with technology model
+        :param dict data: dict containing model information
+        :return: pyomo block with technology model
+        """
+        config = data["config"]
+        economics = self.economics
+        discount_rate = set_discount_rate(config, economics)
+        fraction_of_year_modelled = data["topology"]["fraction_of_year_modelled"]
+        annualization_factor = annualize(
+            discount_rate, economics.lifetime, fraction_of_year_modelled
+        )
+
+        # VARIABLE OPEX
+        b_tec.para_opex_variable = pyo.Param(
+            domain=pyo.Reals, initialize=economics.opex_variable, mutable=True
+        )
+        b_tec.var_opex_variable = pyo.Var(self.set_t_global)
+
+        def init_opex_variable(const, t):
+            """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
+
+            return (
+                b_tec.var_input[t, self.component_options.main_input_carrier]
+                * b_tec.para_opex_variable
+                == b_tec.var_opex_variable[t]
+            )
+
+        b_tec.const_opex_variable = pyo.Constraint(
+            self.set_t_global, rule=init_opex_variable
+        )
+
+        # FIXED OPEX
+        b_tec.para_opex_fixed = pyo.Param(
+            domain=pyo.Reals, initialize=economics.opex_fixed, mutable=True
+        )
+        b_tec.var_opex_fixed = pyo.Var()
+        b_tec.const_opex_fixed = pyo.Constraint(
+            expr=(b_tec.var_capex_aux / annualization_factor) * b_tec.para_opex_fixed
+            == b_tec.var_opex_fixed
+        )
+        return b_tec
+
     def write_results_tec_design(self, h5_group, model_block):
         """
         Function to report technology design
@@ -500,6 +568,8 @@ class CementHybridCCS(Technology):
         super(CementHybridCCS, self).write_results_tec_design(h5_group, model_block)
 
         h5_group.create_dataset("size_mea", data=[model_block.var_size_mea.value])
+        h5_group.create_dataset("capex_mea", data=[model_block.var_capex_mea.value])
+        h5_group.create_dataset("capex_oxy", data=[model_block.var_capex_oxy.value])
 
     def write_results_tec_operation(self, h5_group, model_block):
         """

@@ -24,6 +24,21 @@
     },
     "other_economics": {
       "unit_CAPEX_MEA": 1718000,
+      "CAPEX_MEA_is_piecewise": 1,
+      "piecewise_CAPEX_MEA": {
+      "bp_x": [
+        0,
+        3.75,
+        12.51,
+        20.85
+      ],
+      "bp_y": [
+        0,
+        28210000,
+        46360000,
+        62450000
+      ]
+      },
       "OPEX_MEA": 0.06,
       "OPEX_oxyfuel": 0.07
     },
@@ -51,8 +66,8 @@
     "min_part_load": 0,
     "performance": {
       "tCO2_tclinker": 0.833,
-      "CCR_oxy": 0.79,
-      "CCR_mea": 0.95
+      "CCR_oxy": 0.807,
+      "CCR_mea": 0.954
     }
   },
   "Units": {
