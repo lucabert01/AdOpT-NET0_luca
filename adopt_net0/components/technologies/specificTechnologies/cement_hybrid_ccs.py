@@ -64,21 +64,51 @@ class CementHybridCCS(Technology):
             / "database/templates/technology_data/Industrial/CementHybridCCS_data/cement_sheet.xlsx"
         )
 
-        performance_data = pd.read_excel(
-            performance_data_path, sheet_name="other_data", index_col=0
+        performance_data_oxy_mea = pd.read_excel(
+            performance_data_path, sheet_name="energy_oxy_mea", index_col=0
         )
 
         # TODO: make a function that cleans data (cement output either 0 or at full capacity), converts CO2 to clinker and daily to hourly
 
-        self.processed_coeff.time_independent["alpha_oxy"] = performance_data.loc[
-            "alpha_oxy", "value"
-        ]
-        self.processed_coeff.time_independent["alpha_mea"] = performance_data.loc[
-            "alpha_mea", "value"
-        ]
-        self.processed_coeff.time_independent["beta_oxy"] = performance_data.loc[
-            "beta_oxy", "value"
-        ]
+        self.processed_coeff.time_independent["alpha_oxy"] = (
+            performance_data_oxy_mea.loc["alpha_oxy", "value"]
+        )
+        self.processed_coeff.time_independent["alpha_mea"] = (
+            performance_data_oxy_mea.loc["alpha_mea", "value"]
+        )
+        self.processed_coeff.time_independent["beta_oxy"] = (
+            performance_data_oxy_mea.loc["beta_oxy", "value"]
+        )
+
+        performance_data_cpu_compressor = pd.read_excel(
+            performance_data_path, sheet_name="energy_cpu_compressor", index_col=0
+        )
+
+        self.processed_coeff.time_independent["el_cons_cpu"] = (
+            performance_data_cpu_compressor.loc["el_cons_cpu"]
+        )
+        self.processed_coeff.time_independent["el_cons_compressor"] = (
+            performance_data_cpu_compressor.loc["el_cons_compressor"]
+        )
+
+        valid_phases_compression = {"gas", "liquid", "supercritical"}
+
+        if self.input_parameters.performance_data["co2_out_is_compressed"]:
+            phase = self.input_parameters.performance_data["phase_of_co2_out"]
+            if phase not in valid_phases_compression:
+                raise ValueError(
+                    f"Invalid value for 'phase_of_co2_out': '{phase}'. Must be one of {valid_phases_compression}."
+                )
+
+            self.processed_coeff.time_independent["alpha_oxy"] = (
+                performance_data_oxy_mea.loc["alpha_oxy", "value"]
+                + self.processed_coeff.time_independent["el_cons_cpu"][phase]
+            )
+
+            self.processed_coeff.time_independent["alpha_mea"] = (
+                performance_data_oxy_mea.loc["alpha_mea", "value"]
+                + self.processed_coeff.time_independent["el_cons_compressor"][phase]
+            )
 
         self.processed_coeff.time_independent["size_max_mea"] = (
             self.processed_coeff.time_independent["size_max"]
@@ -352,6 +382,7 @@ class CementHybridCCS(Technology):
 
         return b_tec
 
+    # TODO add compressor cpu capex
     def _define_capex_variables(self, b_tec, data: dict):
         """
         Defines variables related to technology capex.
@@ -538,7 +569,7 @@ class CementHybridCCS(Technology):
             """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
 
             return (
-                b_tec.var_input[t, self.component_options.main_input_carrier]
+                b_tec.var_output[t, self.component_options.main_output_carrier]
                 * b_tec.para_opex_variable
                 == b_tec.var_opex_variable[t]
             )
@@ -548,12 +579,23 @@ class CementHybridCCS(Technology):
         )
 
         # FIXED OPEX
-        b_tec.para_opex_fixed = pyo.Param(
-            domain=pyo.Reals, initialize=economics.opex_fixed, mutable=True
+        b_tec.para_opex_fixed_oxy = pyo.Param(
+            domain=pyo.Reals,
+            initialize=economics.other_economics["OPEX_fixed_oxy"],
+            mutable=True,
         )
+
+        b_tec.para_opex_fixed_mea = pyo.Param(
+            domain=pyo.Reals,
+            initialize=economics.other_economics["OPEX_fixed_MEA"],
+            mutable=True,
+        )
+
         b_tec.var_opex_fixed = pyo.Var()
         b_tec.const_opex_fixed = pyo.Constraint(
-            expr=(b_tec.var_capex_aux / annualization_factor) * b_tec.para_opex_fixed
+            expr=(b_tec.var_capex_mea / annualization_factor)
+            * b_tec.para_opex_fixed_mea
+            + (b_tec.var_capex_oxy / annualization_factor) * b_tec.para_opex_fixed_oxy
             == b_tec.var_opex_fixed
         )
         return b_tec

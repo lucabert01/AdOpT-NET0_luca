@@ -39,8 +39,8 @@
         62450000
       ]
       },
-      "OPEX_MEA": 0.06,
-      "OPEX_oxyfuel": 0.07
+      "OPEX_fixed_MEA": 0.06,
+      "OPEX_fixed_oxy": 0.07
     },
     "OPEX_variable": 0,
     "OPEX_fixed": 0,
@@ -53,6 +53,8 @@
     "performance_function_type": 1,
     "clinker_capacity_is_fixed": 0,
     "prod_capacity_clinker": 80,
+    "co2_out_is_compressed": 0,
+    "phase_of_co2_out": "gas",
     "input_carrier": [
       "heat",
       "electricity"
