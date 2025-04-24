@@ -162,7 +162,7 @@ def construct_nodal_energybalance(model, config: dict):
                     violation = 0
 
                 if (  # change number 1
-                    config["performance"]["pressure"]["value"] == 1
+                    config["performance"]["pressure"]["pressure_on"]["value"] == 1
                 ):  # here it could per performace-pressure-value or optimiziation-pressure-value
                     compress_node = node_block.var_compression[t, car]
                 else:
@@ -622,7 +622,7 @@ def construct_system_cost(model, data):
 
         # Capex compressors
         def init_cost_capex_compression(const):
-            if config["performance"]["pressure"]["value"] == 1:
+            if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                 return b_period.var_cost_capex_compress == sum(
                     b_period.compress_block[compr].var_capex
                     for compr in b_period.set_compressors
@@ -636,7 +636,7 @@ def construct_system_cost(model, data):
 
         # Opex compressors
         def init_cost_opex_compression(const):
-            if config["performance"]["pressure"]["value"] == 1:
+            if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                 return b_period.var_cost_opex_compress == sum(
                     b_period.compress_block[compr].var_opex
                     for compr in b_period.set_compress

@@ -338,7 +338,7 @@ class ModelHub:
                 )
 
                 # Compressor Block
-                if config["performance"]["pressure"]["value"] == 1:
+                if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                     # b_node.set_compressors = pyo.Set(initialize=list(data_node["compression"].keys()))
                     connections = []
                     for carrier, conn_dict in data_node["compression"].items():

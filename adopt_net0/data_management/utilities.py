@@ -8,6 +8,9 @@ from ..components.compressors.compressor import Compressor
 from ..components.networks import *
 from ..components.technologies import *
 from ..components.compressors import *
+from ..components.networks.network import Network
+from ..components.technologies.technology import Technology
+
 
 import logging
 
@@ -209,26 +212,41 @@ def open_json(tec: str, load_path: Path) -> dict:
     return data
 
 
-def add_tech_to_list(tech_obj, carrier, direction):
-    pressure_data = tech_obj.input_parameters.pressure
-    tech_name = tech_obj.name
+def get_pressure_info(component, carrier: str, direction: str) -> dict:
+    pressure_data = component.input_parameters.pressure
+    component_name = component.name
     pressure = ()
     if direction == "Input":
         pressure = pressure_data[carrier]["inlet"]
     elif direction == "Output":
         pressure = pressure_data[carrier]["outlet"]
-    return tech_name, pressure
+    if isinstance(component, Technology):
+        type = "Technology"
+    elif isinstance(component, Network):
+        type = "Network"
+    return {
+        "name": component_name,
+        "pressure": pressure,
+        "type": type,
+        "existing": component.existing,
+    }
 
 
-def add_netw_to_list(netw_obj, carrier, direction):
-    pressure_data = netw_obj.input_parameters.pressure
-    netw_name = netw_obj.name
-    pressure = ()
-    if direction == "Input":
-        pressure = pressure_data[carrier]["inlet"]
-    elif direction == "Output":
-        pressure = pressure_data[carrier]["outlet"]
-    return netw_name, pressure
+def collect_possible_connections_at_node(pressure_data_at_node):
+    connection_data_at_node = []
+    for output_i in pressure_data_at_node["outputs"]:
+        for input_i in pressure_data_at_node["inputs"]:
+            connection_data_at_node.append(
+                {
+                    (output_i["name"], input_i["name"]): {
+                        "pressure": (output_i["pressure"], input_i["pressure"]),
+                        "type": (output_i["type"], input_i["type"]),
+                        "existing": (output_i["existing"], input_i["existing"]),
+                    }
+                }
+            )
+
+    return connection_data_at_node
 
 
 def direct_connection(output_component, input_component):

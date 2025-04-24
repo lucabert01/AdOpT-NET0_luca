@@ -102,7 +102,7 @@ class DataHandle:
         self._read_energybalance_options()
         self._read_technology_data()
         self._read_network_data()
-        if self.model_config["performance"]["pressure"]["value"] == 1:
+        if self.model_config["performance"]["pressure"]["pressure_on"]["value"] == 1:
             self.calculate_possible_compressions()
             self._read_compressor_data()
 
@@ -711,126 +711,73 @@ class DataHandle:
         The dictionary will have alla the possible connections and their pressures saved
 
         """
-        connection_data = {}
-        connection_pressures = {}
+        # connection_pressures = {}
+
+        target_carriers = self.model_config["performance"]["pressure"][
+            "pressure_carriers"
+        ]["value"]
 
         for investment_period in self.topology["investment_periods"]:
-            connection_data[investment_period] = {}
-            connection_pressures[investment_period] = {}
-            target_carriers = self.model_config["performance"]["pressure"][
-                "compressed_carrier"
-            ]
-
+            self.connection_pressures[investment_period] = {}
             for carrier_i in target_carriers:
-                connection_data[investment_period][carrier_i] = {}
-                connection_pressures[investment_period][carrier_i] = {}
-
+                self.connection_pressures[investment_period][carrier_i] = {}
                 for node_i in self.topology["nodes"]:
-                    connection_data[investment_period][carrier_i][node_i] = {}
-                    connection_pressures[investment_period][carrier_i][node_i] = {}
-                    connection_data[investment_period][carrier_i][node_i] = {
-                        "inputs": {"networks": [], "technologies": []},
-                        "outputs": {"networks": [], "technologies": []},
-                    }
+                    pressure_data_at_node = self._collect_pressure_info_at_node(
+                        carrier_i, investment_period, node_i
+                    )
+                    connection_data_at_node = collect_possible_connections_at_node(
+                        pressure_data_at_node
+                    )
 
-                    # here actually we should look at connection.loc [node_i, NODE 2] =1
-                    for _, network_i in self.network_data[investment_period].items():
-                        # here there is a matrix in network_topology
-                        if carrier_i in network_i.input_parameters.pressure.keys():
-                            if network_i.connection.loc[:, node_i].sum() >= 1:
-                                # means that there is a network starting in this node
-                                netw, pressure = add_netw_to_list(
-                                    network_i, carrier_i, "Input"
-                                )
-                                # network_list_input.append([netw, pressure, node_i])
-                                connection_data[investment_period][carrier_i][node_i][
-                                    "inputs"
-                                ]["networks"].append(
-                                    {"name": netw, "pressure": pressure}
-                                )
-
-                            if network_i.connection.loc[node_i, :].sum() >= 1:
-                                netw, pressure = add_netw_to_list(
-                                    network_i, carrier_i, "Output"
-                                )
-                                # network_list_output.append([netw, pressure, node_i])
-                                connection_data[investment_period][carrier_i][node_i][
-                                    "outputs"
-                                ]["networks"].append(
-                                    {"name": netw, "pressure": pressure}
-                                )
-                            # the function add_network_to_list should not only add the network
-                            # but also it should already read the pressure information and add to the list/dictionary
-
-                    technologies_by_node = self.technology_data[investment_period][
+                    self.connection_pressures[investment_period][carrier_i][
                         node_i
-                    ]
-                    for _, technologies_i in technologies_by_node.items():
-                        # first we look at the one that has hydrogen as input
-                        if carrier_i in technologies_i.input_parameters.pressure.keys():
-                            pressure_param = technologies_i.input_parameters.pressure
-                            if "inlet" in pressure_param[carrier_i]:
-                                # as done it before we have a function that write the technology and their INPUT pressure
-                                tech, pressure = add_tech_to_list(
-                                    technologies_i, carrier_i, "Input"
-                                )
-                                connection_data[investment_period][carrier_i][node_i][
-                                    "inputs"
-                                ]["technologies"].append(
-                                    {"name": tech, "pressure": pressure}
-                                )
-
-                            if "outlet" in pressure_param[carrier_i]:
-                                # same as before, but with OUTPUT carrier and pressure
-                                tech, pressure = add_tech_to_list(
-                                    technologies_i, carrier_i, "Output"
-                                )
-                                # technology_output.append([tech, pressure, node_i])
-                                connection_data[investment_period][carrier_i][node_i][
-                                    "outputs"
-                                ]["technologies"].append(
-                                    {"name": tech, "pressure": pressure}
-                                )
-
-                    for output_component in connection_data[investment_period][
-                        carrier_i
-                    ][node_i]["outputs"].get("technologies", []) + connection_data[
-                        investment_period
-                    ][
-                        carrier_i
-                    ][
-                        node_i
-                    ][
-                        "outputs"
-                    ].get(
-                        "networks", []
-                    ):
-                        for input_component in (
-                            connection_data[investment_period][carrier_i][node_i][
-                                "inputs"
-                            ]["technologies"]
-                            + connection_data[investment_period][carrier_i][node_i][
-                                "inputs"
-                            ]["networks"]
-                        ):
-
-                            connection_key = (
-                                output_component["name"],
-                                input_component["name"],
-                            )
-
-                            connection_pressures[investment_period][carrier_i][node_i][
-                                connection_key
-                            ] = (
-                                output_component["pressure"],
-                                input_component["pressure"],
-                            )
-
-            self.connection_pressures = connection_pressures
+                    ] = connection_data_at_node
 
         # Log success
         log_msg = "Pressure data read successfully"
         log.info(log_msg)
+
+    def _collect_pressure_info_at_node(self, carrier_i, investment_period, node_i):
+        pressure_data_at_node = {
+            "inputs": [],
+            "outputs": [],
+        }
+
+        # here actually we should look at connection.loc [node_i, NODE 2] =1
+        for _, network_i in self.network_data[investment_period].items():
+            # here there is a matrix in network_topology
+            if carrier_i in network_i.input_parameters.pressure.keys():
+                if network_i.connection.loc[:, node_i].sum() >= 1:
+                    # means that there is a network starting in this node
+                    pressure_data_at_node["inputs"].append(
+                        get_pressure_info(network_i, carrier_i, "Input")
+                    )
+
+                if network_i.connection.loc[node_i, :].sum() >= 1:
+                    pressure_data_at_node["outputs"].append(
+                        get_pressure_info(network_i, carrier_i, "Output")
+                    )
+
+                # the function add_network_to_list should not only add the network
+                # but also it should already read the pressure information and add to the list/dictionary
+        technologies_by_node = self.technology_data[investment_period][node_i]
+        for _, technologies_i in technologies_by_node.items():
+            # first we look at the one that has hydrogen as input
+            if carrier_i in technologies_i.input_parameters.pressure.keys():
+                pressure_param = technologies_i.input_parameters.pressure
+                if "inlet" in pressure_param[carrier_i]:
+                    # as done it before we have a function that write the technology and their INPUT pressure
+                    pressure_data_at_node["inputs"].append(
+                        get_pressure_info(technologies_i, carrier_i, "Input")
+                    )
+
+                if "outlet" in pressure_param[carrier_i]:
+                    # same as before, but with OUTPUT carrier and pressure
+                    pressure_data_at_node["outputs"].append(
+                        get_pressure_info(technologies_i, carrier_i, "Output")
+                    )
+
+        return pressure_data_at_node
 
     def _read_compressor_data(self):
         """
@@ -849,8 +796,8 @@ class DataHandle:
         for investment_period in self.topology["investment_periods"]:
             compressor_data[investment_period] = {}
             target_carriers = self.model_config["performance"]["pressure"][
-                "compressed_carrier"
-            ]
+                "pressure_carriers"
+            ]["value"]
             connection_at_node[investment_period] = {}
 
             for carrier_i in target_carriers:
