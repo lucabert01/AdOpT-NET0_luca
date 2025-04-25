@@ -16,7 +16,10 @@ class CementHybridCCS(Technology):
     Cement plant with hybrid CCS
 
     The plant has an oxyfuel combustion in the calciner and post-combustion capture with MEA afterward. The size
-    of the oxyfuel is fixed, while the size of MEA and amount of CO2 processed (per h) by the MEA are variables of the optimization
+    of the oxyfuel correspond to the size of the cement plant, as it is built-in in the calciner. This size is
+    generally a variable, but it can be fixed. The size of MEA and amount of CO2 captured (per h) by the MEA are
+    variables of the optimization. The CO2 output of the oxyfuel is processed by a CPU, while the one of the MEA
+    is processed by a compressor. The output phase (gas, liquid, supercritical) should be specified in the json file.
     """
 
     def __init__(self, tec_data: dict):
@@ -399,26 +402,41 @@ class CementHybridCCS(Technology):
         annualization_factor = annualize(
             discount_rate, economics.lifetime, fraction_of_year_modelled
         )
+        capex_data_path = Path(__file__).parent.parent.parent.parent
+        capex_data_path = (
+            capex_data_path
+            / "database/templates/technology_data/Industrial/CementHybridCCS_data/cement_sheet.xlsx"
+        )
+
+        capex_cpu_oxy_data = pd.read_excel(
+            capex_data_path, sheet_name="capex_cpu_oxyfuel", index_col=0
+        )
+        capex_compressor_mea_data = pd.read_excel(
+            capex_data_path, sheet_name="capex_compressor_mea", index_col=0
+        )
+
+        phase = self.input_parameters.performance_data["phase_of_co2_out"]
+        self.economics.other_economics["bp_y_capex_cpu_oxy"] = capex_cpu_oxy_data[
+            phase
+        ].tolist()
+        self.economics.other_economics["bp_y_capex_compressor_mea"] = (
+            capex_compressor_mea_data[phase].tolist()
+        )
 
         def calculate_max_capex_oxy():
             max_capex = (
                 max(economics.capex_data["piecewise_capex"]["bp_y"])
+                + max(self.economics.other_economics["bp_y_capex_cpu_oxy"])
             ) * annualization_factor
             bounds = (0, max_capex)
             return bounds
 
         def calculate_max_capex_mea():
-            if economics.other_economics["CAPEX_MEA_is_piecewise"]:
-                max_capex = (
-                    max(economics.other_economics["piecewise_CAPEX_MEA"]["bp_y"])
-                ) * annualization_factor
-                bounds = (0, max_capex)
-            else:
-                max_capex = (
-                    self.processed_coeff.time_independent["size_max_mea"]
-                    * economics.other_economics["unit_CAPEX_MEA"]
-                ) * annualization_factor
-                bounds = (0, max_capex)
+            max_capex = (
+                max(economics.other_economics["piecewise_CAPEX_MEA"]["bp_y"])
+                + max(self.economics.other_economics["bp_y_capex_compressor_mea"])
+            ) * annualization_factor
+            bounds = (0, max_capex)
             return bounds
 
         def calculate_max_capex():
@@ -482,6 +500,18 @@ class CementHybridCCS(Technology):
             discount_rate, economics.lifetime, fraction_of_year_modelled
         )
 
+        # Add capex of CPU and compressor if required
+        if self.input_parameters.performance_data["co2_out_is_compressed"]:
+            economics.capex_data["piecewise_capex"]["bp_y"] = np.add(
+                economics.capex_data["piecewise_capex"]["bp_y"],
+                economics.other_economics["bp_y_capex_cpu_oxy"],
+            )
+
+            economics.other_economics["piecewise_CAPEX_MEA"]["bp_y"] = np.add(
+                economics.other_economics["piecewise_CAPEX_MEA"]["bp_y"],
+                economics.other_economics["bp_y_capex_compressor_mea"],
+            )
+
         # Capex oxyfuel as a piecewise function
         self.big_m_transformation_required = 1
         bp_x = economics.capex_data["piecewise_capex"]["bp_x"]
@@ -498,27 +528,21 @@ class CementHybridCCS(Technology):
             pw_repn="SOS2",
         )
 
-        # Capex mea as linear
-        if economics.other_economics["CAPEX_MEA_is_piecewise"]:
-            bp_x = economics.other_economics["piecewise_CAPEX_MEA"]["bp_x"]
-            bp_y_annual = [
-                y * annualization_factor
-                for y in economics.other_economics["piecewise_CAPEX_MEA"]["bp_y"]
-            ]
-            b_tec.const_capex_mea = pyo.Piecewise(
-                b_tec.var_capex_mea,
-                b_tec.var_size_mea,
-                pw_pts=bp_x,
-                pw_constr_type="EQ",
-                f_rule=bp_y_annual,
-                pw_repn="SOS2",
-            )
+        # Capex mea as piecewise or linear
+        bp_x = economics.other_economics["piecewise_CAPEX_MEA"]["bp_x"]
+        bp_y_annual = [
+            y * annualization_factor
+            for y in economics.other_economics["piecewise_CAPEX_MEA"]["bp_y"]
+        ]
+        b_tec.const_capex_mea = pyo.Piecewise(
+            b_tec.var_capex_mea,
+            b_tec.var_size_mea,
+            pw_pts=bp_x,
+            pw_constr_type="EQ",
+            f_rule=bp_y_annual,
+            pw_repn="SOS2",
+        )
 
-        else:
-            b_tec.const_capex_mea = pyo.Constraint(
-                expr=b_tec.var_size_mea * b_tec.para_unit_capex_mea_annual
-                == b_tec.var_capex_mea
-            )
         # Capex tot
         b_tec.const_capex_aux = pyo.Constraint(
             expr=b_tec.var_capex_mea + b_tec.var_capex_oxy == b_tec.var_capex_aux
@@ -542,7 +566,6 @@ class CementHybridCCS(Technology):
 
         return b_tec
 
-    # TODO define opex constraint
     def _define_opex(self, b_tec, data):
         """
         Defines variable and fixed OPEX

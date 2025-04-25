@@ -28,9 +28,9 @@
       "piecewise_CAPEX_MEA": {
       "bp_x": [
         0,
-        3.75,
-        12.51,
-        20.85
+        3.708,
+        12.361,
+        20.603
       ],
       "bp_y": [
         0,
@@ -39,8 +39,8 @@
         62450000
       ]
       },
-      "OPEX_fixed_MEA": 0.06,
-      "OPEX_fixed_oxy": 0.07
+      "OPEX_fixed_MEA": 0.09,
+      "OPEX_fixed_oxy": 0.048
     },
     "OPEX_variable": 0,
     "OPEX_fixed": 0,
@@ -53,7 +53,7 @@
     "performance_function_type": 1,
     "clinker_capacity_is_fixed": 0,
     "prod_capacity_clinker": 80,
-    "co2_out_is_compressed": 0,
+    "co2_out_is_compressed": 1,
     "phase_of_co2_out": "gas",
     "input_carrier": [
       "heat",
