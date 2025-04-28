@@ -54,8 +54,8 @@ class HeatPump(Technology):
         """
         super().__init__(tec_data)
 
-        self.component_options.emissions_based_on = "input"
-        self.component_options.main_input_carrier = tec_data["Performance"][
+        self.emissions_based_on = "input"
+        self.main_input_carrier = tec_data["Performance"][
             "main_input_carrier"
         ]
 
@@ -76,12 +76,12 @@ class HeatPump(Technology):
         T = copy.deepcopy(climate_data["temp_air"])
 
         # Determine T_out
-        if self.input_parameters.performance_data["application"] == "radiator_heating":
+        if self.performance_data["application"] == "radiator_heating":
             t_out = 40 - T
-        elif self.input_parameters.performance_data["application"] == "floor_heating":
+        elif self.performance_data["application"] == "floor_heating":
             t_out = 30 - 0.5 * T
         else:
-            t_out = self.input_parameters.performance_data["T_out"]
+            t_out = self.performance_data["T_out"]
 
         # Determine delta T
         delta_T = t_out - T
@@ -97,11 +97,11 @@ class HeatPump(Technology):
         log.info("Deriving performance data for Heat Pump...")
 
         if (
-            self.component_options.performance_function_type == 1
-            or self.component_options.performance_function_type == 2
+            self.performance_function_type == 1
+            or self.performance_function_type == 2
         ):  # Linear performance function
             size_alpha = 1
-        elif self.component_options.performance_function_type == 3:
+        elif self.performance_function_type == 3:
             size_alpha = 2
         else:
             raise Exception(
@@ -118,17 +118,17 @@ class HeatPump(Technology):
             if idx % 100 == 1:
                 print("\rComplete: ", round(idx / time_steps, 2) * 100, "%", end="")
 
-            if self.component_options.performance_function_type == 1:
+            if self.performance_function_type == 1:
                 x = np.linspace(
-                    self.input_parameters.performance_data["min_part_load"], 1, 9
+                    self.performance_data["min_part_load"], 1, 9
                 )
                 y = (x / (1 - 0.9 * (1 - x))) * cop_t * x
                 coeff = fit_linear_function(x, y)
                 alpha1[idx, :] = coeff[0]
 
-            elif self.component_options.performance_function_type == 2:
+            elif self.performance_function_type == 2:
                 x = np.linspace(
-                    self.input_parameters.performance_data["min_part_load"], 1, 9
+                    self.performance_data["min_part_load"], 1, 9
                 )
                 y = (x / (1 - 0.9 * (1 - x))) * cop_t * x
                 x = sm.add_constant(x)
@@ -137,11 +137,11 @@ class HeatPump(Technology):
                 alpha2[idx, :] = coeff[0]
 
             elif (
-                self.component_options.performance_function_type == 3
+                self.performance_function_type == 3
             ):  # piecewise performance function
                 y = {}
                 x = np.linspace(
-                    self.input_parameters.performance_data["min_part_load"], 1, 9
+                    self.performance_data["min_part_load"], 1, 9
                 )
                 y["out"] = (x / (1 - 0.9 * (1 - x))) * cop_t * x
                 time_step_fit = fit_piecewise_function(x, y, 2)
@@ -152,17 +152,17 @@ class HeatPump(Technology):
 
         # Coefficients
         fit["coeff"] = {}
-        if self.component_options.performance_function_type == 1:
+        if self.performance_function_type == 1:
             fit["coeff"]["alpha1"] = alpha1.round(5)
 
         elif (
-            self.component_options.performance_function_type == 2
+            self.performance_function_type == 2
         ):  # Linear performance function
             fit["coeff"]["alpha1"] = alpha1.round(5)
             fit["coeff"]["alpha2"] = alpha2.round(5)
 
         elif (
-            self.component_options.performance_function_type == 3
+            self.performance_function_type == 3
         ):  # Piecewise performance function
             fit["coeff"]["alpha1"] = alpha1.round(5)
             fit["coeff"]["alpha2"] = alpha2.round(5)
@@ -179,8 +179,8 @@ class HeatPump(Technology):
 
         time_steps = len(self.set_t_performance)
 
-        if self.component_options.performance_function_type == 1:
-            for c in self.component_options.output_carrier:
+        if self.performance_function_type == 1:
+            for c in self.output_carrier:
                 self.bounds["output"][c] = np.column_stack(
                     (
                         np.zeros(shape=(time_steps)),
@@ -190,9 +190,9 @@ class HeatPump(Technology):
                 )
 
         elif (
-            self.component_options.performance_function_type == 2
+            self.performance_function_type == 2
         ):  # Linear performance function
-            for c in self.component_options.output_carrier:
+            for c in self.output_carrier:
                 self.bounds["output"][c] = np.column_stack(
                     (
                         np.zeros(shape=(time_steps)),
@@ -202,9 +202,9 @@ class HeatPump(Technology):
                 )
 
         elif (
-            self.component_options.performance_function_type == 3
+            self.performance_function_type == 3
         ):  # Piecewise performance function
-            for c in self.component_options.output_carrier:
+            for c in self.output_carrier:
                 self.bounds["output"][c] = np.column_stack(
                     (
                         np.zeros(shape=(time_steps)),
@@ -214,7 +214,7 @@ class HeatPump(Technology):
                 )
 
         # Input Bounds
-        for car in self.component_options.input_carrier:
+        for car in self.input_carrier:
             self.bounds["input"][car] = np.column_stack(
                 (np.zeros(shape=(time_steps)), np.ones(shape=(time_steps)))
             )
@@ -236,15 +236,16 @@ class HeatPump(Technology):
         )
 
         # DATA OF TECHNOLOGY
+        coeff_ti = self.processed_coeff.time_independent
         dynamics = self.processed_coeff.dynamics
-        rated_power = self.input_parameters.rated_power
+        rated_power = coeff_ti["rated_power"]
 
-        if self.component_options.performance_function_type == 1:
+        if self.performance_function_type == 1:
             b_tec = self._performance_function_type_1(b_tec)
-        elif self.component_options.performance_function_type == 2:
+        elif self.performance_function_type == 2:
             b_tec = self._performance_function_type_2(b_tec)
             self.big_m_transformation_required = 1
-        elif self.component_options.performance_function_type == 3:
+        elif self.performance_function_type == 3:
             b_tec = self._performance_function_type_3(b_tec)
             self.big_m_transformation_required = 1
 
@@ -296,7 +297,7 @@ class HeatPump(Technology):
         alpha1 = coeff_td["alpha1"]
         alpha2 = coeff_td["alpha2"]
         min_part_load = coeff_ti["min_part_load"]
-        rated_power = self.input_parameters.rated_power
+        rated_power = coeff_ti["rated_power"]
 
         # define disjuncts for on/off
         s_indicators = range(0, 2)
@@ -360,7 +361,7 @@ class HeatPump(Technology):
         alpha2 = coeff_td["alpha2"]
         bp_x = coeff_td["bp_x"]
         min_part_load = coeff_ti["min_part_load"]
-        rated_power = self.input_parameters.rated_power
+        rated_power = coeff_ti["rated_power"]
 
         s_indicators = range(0, 2)
 
@@ -522,17 +523,17 @@ class HeatPump(Technology):
                 # init bounds at full res
                 bounds_rr_full = {
                     "input": self.fitting_class.calculate_input_bounds(
-                        self.component_options.size_based_on, len(self.set_t_full)
+                        self.emissions_based_on, len(self.set_t_full)
                     )
                 }
 
-                for car in self.component_options.input_carrier:
-                    if not car == self.component_options.main_input_carrier:
+                for car in self.input_carrier:
+                    if not car == self.main_input_carrier:
                         bounds_rr_full["input"][car] = (
                             bounds_rr_full["input"][
-                                self.component_options.main_input_carrier
+                                self.main_input_carrier
                             ]
-                            * self.input_parameters.performance_data["input_ratios"][
+                            * self.performance_data["input_ratios"][
                                 car
                             ]
                         )

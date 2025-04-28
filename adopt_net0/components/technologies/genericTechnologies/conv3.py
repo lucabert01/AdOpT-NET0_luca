@@ -10,7 +10,7 @@ from ..genericTechnologies.fitting_classes import (
     FitGenericTecTypeType34,
 )
 from ..technology import Technology
-from ...utilities import link_full_resolution_to_clustered
+from ...utilities import link_full_resolution_to_clustered, get_attribute_from_dict
 
 
 class Conv3(Technology):
@@ -95,22 +95,27 @@ class Conv3(Technology):
         """
         super().__init__(tec_data)
 
-        self.component_options.emissions_based_on = "input"
-        self.component_options.size_based_on = "input"
-        self.component_options.main_input_carrier = tec_data["Performance"][
+        self.emissions_based_on = "input"
+        self.size_based_on = "input"
+        
+        self.standby_power_carrier = get_attribute_from_dict(
+            tec_data["Performance"], "standby_power_carrier", -1
+        )
+        
+        self.main_input_carrier = tec_data["Performance"][
             "main_input_carrier"
         ]
 
         # Initialize fitting class
-        if self.component_options.performance_function_type == 1:
-            self.fitting_class = FitGenericTecTypeType1(self.component_options)
-        elif self.component_options.performance_function_type == 2:
-            self.fitting_class = FitGenericTecTypeType2(self.component_options)
+        if self.performance_function_type == 1:
+            self.fitting_class = FitGenericTecTypeType1(self.input_carrier, self.output_carrier)
+        elif self.performance_function_type == 2:
+            self.fitting_class = FitGenericTecTypeType2(self.input_carrier, self.output_carrier)
         elif (
-            self.component_options.performance_function_type == 3
-            or self.component_options.performance_function_type == 4
+            self.performance_function_type == 3
+            or self.performance_function_type == 4
         ):
-            self.fitting_class = FitGenericTecTypeType34(self.component_options)
+            self.fitting_class = FitGenericTecTypeType34(self.input_carrier, self.output_carrier)
         else:
             raise Exception(
                 "performance_function_type must be an integer between 1 and 4"
@@ -125,19 +130,19 @@ class Conv3(Technology):
         """
         super(Conv3, self).fit_technology_performance(climate_data, location)
 
-        if self.component_options.size_based_on == "output":
+        if self.size_based_on == "output":
             raise Exception("size_based_on == output for CONV3 not possible.")
 
         # fit coefficients
         self.processed_coeff.time_independent["fit"] = (
             self.fitting_class.fit_performance_function(
-                self.input_parameters.performance_data["performance"]
+                self.performance_data["performance"]
             )
         )
 
         phi = {}
-        for car in self.input_parameters.performance_data["input_ratios"]:
-            phi[car] = self.input_parameters.performance_data["input_ratios"][car]
+        for car in self.performance_data["input_ratios"]:
+            phi[car] = self.performance_data["input_ratios"][car]
         self.processed_coeff.time_independent["phi"] = phi
 
     def _calculate_bounds(self):
@@ -149,18 +154,18 @@ class Conv3(Technology):
         time_steps = len(self.set_t_performance)
 
         self.bounds["input"] = self.fitting_class.calculate_input_bounds(
-            self.component_options.size_based_on, time_steps
+            self.size_based_on, time_steps
         )
         self.bounds["output"] = self.fitting_class.calculate_output_bounds(
-            self.component_options.size_based_on, time_steps
+            self.emissions_based_on, time_steps
         )
 
         # Input bounds recalculation
-        for car in self.component_options.input_carrier:
-            if not car == self.component_options.main_input_carrier:
+        for car in self.input_carrier:
+            if not car == self.main_input_carrier:
                 self.bounds["input"][car] = (
-                    self.bounds["input"][self.component_options.main_input_carrier]
-                    * self.input_parameters.performance_data["input_ratios"][car]
+                    self.bounds["input"][self.main_input_carrier]
+                    * self.performance_data["input_ratios"][car]
                 )
 
     def construct_tech_model(self, b_tec, data: dict, set_t_full, set_t_clustered):
@@ -180,15 +185,15 @@ class Conv3(Technology):
         # DATA OF TECHNOLOGY
         coeff_ti = self.processed_coeff.time_independent
         dynamics = self.processed_coeff.dynamics
-        rated_power = self.input_parameters.rated_power
+        rated_power = coeff_ti["rated_power"]
 
-        if self.component_options.performance_function_type == 1:
+        if self.performance_function_type == 1:
             b_tec = self._performance_function_type_1(b_tec)
-        elif self.component_options.performance_function_type == 2:
+        elif self.performance_function_type == 2:
             b_tec = self._performance_function_type_2(b_tec)
-        elif self.component_options.performance_function_type == 3:
+        elif self.performance_function_type == 3:
             b_tec = self._performance_function_type_3(b_tec)
-        elif self.component_options.performance_function_type == 4:
+        elif self.performance_function_type == 4:
             b_tec = self._performance_function_type_4(b_tec)
 
         # Size constraints
@@ -196,16 +201,16 @@ class Conv3(Technology):
         standby_power = coeff_ti["standby_power"]
         phi = coeff_ti["phi"]
 
-        if self.component_options.performance_function_type == 1 or standby_power == -1:
+        if self.performance_function_type == 1 or standby_power == -1:
 
             def init_input_input(const, t, car_input):
-                if car_input == self.component_options.main_input_carrier:
+                if car_input == self.main_input_carrier:
                     return pyo.Constraint.Skip
                 else:
                     return (
                         self.input[t, car_input]
                         == phi[car_input]
-                        * self.input[t, self.component_options.main_input_carrier]
+                        * self.input[t, self.main_input_carrier]
                     )
 
             b_tec.const_input_input = pyo.Constraint(
@@ -215,10 +220,10 @@ class Conv3(Technology):
 
             self.big_m_transformation_required = 1
 
-            if self.component_options.standby_power_carrier == -1:
-                car_standby_power = self.component_options.main_input_carrier
+            if self.standby_power_carrier == -1:
+                car_standby_power = self.main_input_carrier
             else:
-                car_standby_power = self.component_options.standby_power_carrier
+                car_standby_power = self.standby_power_carrier
 
             s_indicators = range(0, 2)
 
@@ -240,14 +245,14 @@ class Conv3(Technology):
                     dis.const_x_on = pyo.Constraint(expr=b_tec.var_x[t] == 1)
 
                     def init_input_on(const, car_input):
-                        if car_input == self.component_options.main_input_carrier:
+                        if car_input == self.main_input_carrier:
                             return pyo.Constraint.Skip
                         else:
                             return (
                                 self.input[t, car_input]
                                 == phi[car_input]
                                 * self.input[
-                                    t, self.component_options.main_input_carrier
+                                    t, self.main_input_carrier
                                 ]
                             )
 
@@ -270,7 +275,7 @@ class Conv3(Technology):
         # size constraint based on main carrier input
         def init_size_constraint(const, t):
             return (
-                self.input[t, self.component_options.main_input_carrier]
+                self.input[t, self.main_input_carrier]
                 <= b_tec.var_size * rated_power
             )
 
@@ -294,8 +299,9 @@ class Conv3(Technology):
         """
 
         # Performance parameters:
-        rated_power = self.input_parameters.rated_power
         coeff_ti = self.processed_coeff.time_independent
+        rated_power = coeff_ti["rated_power"]
+
         alpha1 = {}
         for car in coeff_ti["fit"]:
             alpha1[car] = coeff_ti["fit"][car]["alpha1"]
@@ -306,7 +312,7 @@ class Conv3(Technology):
             return (
                 self.output[t, car_output]
                 == alpha1[car_output]
-                * self.input[t, self.component_options.main_input_carrier]
+                * self.input[t, self.main_input_carrier]
             )
 
         b_tec.const_input_output = pyo.Constraint(
@@ -319,7 +325,7 @@ class Conv3(Technology):
             def init_min_part_load(const, t):
                 return (
                     min_part_load * b_tec.var_size * rated_power
-                    <= self.input[t, self.component_options.main_input_carrier]
+                    <= self.input[t, self.main_input_carrier]
                 )
 
             b_tec.const_min_part_load = pyo.Constraint(
@@ -340,8 +346,9 @@ class Conv3(Technology):
         self.big_m_transformation_required = 1
 
         # Performance Parameters
-        rated_power = self.input_parameters.rated_power
         coeff_ti = self.processed_coeff.time_independent
+        rated_power = coeff_ti["rated_power"]
+
         alpha1 = {}
         alpha2 = {}
         for car in coeff_ti["fit"]:
@@ -353,10 +360,10 @@ class Conv3(Technology):
         # Performance Parameters
 
         if standby_power != -1:
-            if self.component_options.standby_power_carrier == -1:
-                car_standby_power = self.component_options.main_input_carrier
+            if self.standby_power_carrier == -1:
+                car_standby_power = self.main_input_carrier
             else:
-                car_standby_power = self.component_options.standby_power_carrier
+                car_standby_power = self.standby_power_carrier
 
         if not b_tec.find_component("var_x"):
             b_tec.var_x = pyo.Var(
@@ -389,7 +396,7 @@ class Conv3(Technology):
                 else:
 
                     def init_standby_power(const, car_input):
-                        if car_input == self.component_options.main_input_carrier:
+                        if car_input == self.main_input_carrier:
                             return (
                                 self.input[t, car_standby_power]
                                 == standby_power * b_tec.var_size * rated_power
@@ -417,7 +424,7 @@ class Conv3(Technology):
                     return (
                         self.output[t, car_output]
                         == alpha1[car_output]
-                        * self.input[t, self.component_options.main_input_carrier]
+                        * self.input[t, self.main_input_carrier]
                         + alpha2[car_output] * b_tec.var_size * rated_power
                     )
 
@@ -428,7 +435,7 @@ class Conv3(Technology):
                 # min part load constraint
                 def init_min_partload(const):
                     return (
-                        self.input[t, self.component_options.main_input_carrier]
+                        self.input[t, self.main_input_carrier]
                         >= min_part_load * b_tec.var_size * rated_power
                     )
 
@@ -462,8 +469,9 @@ class Conv3(Technology):
         self.big_m_transformation_required = 1
 
         # Performance Parameters
-        rated_power = self.input_parameters.rated_power
         coeff_ti = self.processed_coeff.time_independent
+        rated_power = coeff_ti["rated_power"]
+
         alpha1 = {}
         alpha2 = {}
         for car in coeff_ti["fit"]:
@@ -474,10 +482,10 @@ class Conv3(Technology):
         standby_power = coeff_ti["standby_power"]
 
         if standby_power != -1:
-            if self.component_options.standby_power_carrier == -1:
-                car_standby_power = self.component_options.main_input_carrier
+            if self.standby_power_carrier == -1:
+                car_standby_power = self.main_input_carrier
             else:
-                car_standby_power = self.component_options.standby_power_carrier
+                car_standby_power = self.standby_power_carrier
 
         if not b_tec.find_component("var_x"):
             b_tec.var_x = pyo.Var(
@@ -503,7 +511,7 @@ class Conv3(Technology):
                 else:
 
                     def init_standby_power(const, car_input):
-                        if car_input == self.component_options.main_input_carrier:
+                        if car_input == self.main_input_carrier:
                             return (
                                 self.input[t, car_standby_power]
                                 == standby_power * b_tec.var_size * rated_power
@@ -529,7 +537,7 @@ class Conv3(Technology):
 
                 def init_input_on1(const):
                     return (
-                        self.input[t, self.component_options.main_input_carrier]
+                        self.input[t, self.main_input_carrier]
                         >= bp_x[ind - 1] * b_tec.var_size * rated_power
                     )
 
@@ -537,7 +545,7 @@ class Conv3(Technology):
 
                 def init_input_on2(const):
                     return (
-                        self.input[t, self.component_options.main_input_carrier]
+                        self.input[t, self.main_input_carrier]
                         <= bp_x[ind] * b_tec.var_size * rated_power
                     )
 
@@ -547,7 +555,7 @@ class Conv3(Technology):
                     return (
                         self.output[t, car_output]
                         == alpha1[car_output][ind - 1]
-                        * self.input[t, self.component_options.main_input_carrier]
+                        * self.input[t, self.main_input_carrier]
                         + alpha2[car_output][ind - 1] * b_tec.var_size * rated_power
                     )
 
@@ -558,7 +566,7 @@ class Conv3(Technology):
                 # min part load constraint
                 def init_min_partload(const):
                     return (
-                        self.input[t, self.component_options.main_input_carrier]
+                        self.input[t, self.main_input_carrier]
                         >= min_part_load * b_tec.var_size * rated_power
                     )
 
@@ -599,8 +607,8 @@ class Conv3(Technology):
         self.big_m_transformation_required = 1
 
         # Performance Parameters
-        rated_power = self.input_parameters.rated_power
         coeff_ti = self.processed_coeff.time_independent
+        rated_power = coeff_ti["rated_power"]
         dynamics = self.processed_coeff.dynamics
         alpha1 = {}
         alpha2 = {}
@@ -706,7 +714,7 @@ class Conv3(Technology):
 
                 def init_input_SU(const):
                     return (
-                        self.input[t, self.component_options.main_input_carrier]
+                        self.input[t, self.main_input_carrier]
                         == b_tec.var_size * SU_trajectory[ind - 1]
                     )
 
@@ -716,7 +724,7 @@ class Conv3(Technology):
                     return (
                         self.output[t, car_output]
                         == alpha1[car_output][0]
-                        * self.input[t, self.component_options.main_input_carrier]
+                        * self.input[t, self.main_input_carrier]
                         + alpha2[car_output][0] * b_tec.var_size * rated_power
                     )
 
@@ -748,7 +756,7 @@ class Conv3(Technology):
 
                 def init_input_SD(const):
                     return (
-                        self.input[t, self.component_options.main_input_carrier]
+                        self.input[t, self.main_input_carrier]
                         == b_tec.var_size * SD_trajectory[ind_SD - 1]
                     )
 
@@ -758,7 +766,7 @@ class Conv3(Technology):
                     return (
                         self.output[t, car_output]
                         == alpha1[car_output][0]
-                        * self.input[t, self.component_options.main_input_carrier]
+                        * self.input[t, self.main_input_carrier]
                         + alpha2[car_output][0] * b_tec.var_size * rated_power
                     )
 
@@ -772,7 +780,7 @@ class Conv3(Technology):
 
                 def init_input_on1(const):
                     return (
-                        self.input[t, self.component_options.main_input_carrier]
+                        self.input[t, self.main_input_carrier]
                         >= bp_x[ind_bpx - 1] * b_tec.var_size * rated_power
                     )
 
@@ -780,7 +788,7 @@ class Conv3(Technology):
 
                 def init_input_on2(const):
                     return (
-                        self.input[t, self.component_options.main_input_carrier]
+                        self.input[t, self.main_input_carrier]
                         <= bp_x[ind_bpx] * b_tec.var_size * rated_power
                     )
 
@@ -790,7 +798,7 @@ class Conv3(Technology):
                     return (
                         self.output[t, car_output]
                         == alpha1[car_output][ind_bpx - 1]
-                        * self.input[t, self.component_options.main_input_carrier]
+                        * self.input[t, self.main_input_carrier]
                         + alpha2[car_output][ind_bpx - 1] * b_tec.var_size * rated_power
                     )
 
@@ -801,7 +809,7 @@ class Conv3(Technology):
                 # min part load relation
                 def init_min_partload(const):
                     return (
-                        self.input[t, self.component_options.main_input_carrier]
+                        self.input[t, self.main_input_carrier]
                         >= min_part_load * b_tec.var_size * rated_power
                     )
 
@@ -839,7 +847,7 @@ class Conv3(Technology):
 
         # Constraints ramping rates
         if (
-            not self.component_options.performance_function_type == 1
+            not self.performance_function_type == 1
             and "ramping_const_int" in dynamics
             and dynamics["ramping_const_int"] == 1
         ):
@@ -857,10 +865,10 @@ class Conv3(Technology):
                             return (
                                 -ramping_rate
                                 <= self.input[
-                                    t, self.component_options.main_input_carrier
+                                    t, self.main_input_carrier
                                 ]
                                 - self.input[
-                                    t - 1, self.component_options.main_input_carrier
+                                    t - 1, self.main_input_carrier
                                 ]
                             )
 
@@ -870,9 +878,9 @@ class Conv3(Technology):
 
                         def init_ramping_up_rate_operation(const):
                             return (
-                                self.input[t, self.component_options.main_input_carrier]
+                                self.input[t, self.main_input_carrier]
                                 - self.input[
-                                    t - 1, self.component_options.main_input_carrier
+                                    t - 1, self.main_input_carrier
                                 ]
                                 <= ramping_rate
                             )
@@ -922,17 +930,17 @@ class Conv3(Technology):
                 # init bounds at full res
                 bounds_rr_full = {
                     "input": self.fitting_class.calculate_input_bounds(
-                        self.component_options.size_based_on, len(self.set_t_full)
+                        self.emissions_based_on, len(self.set_t_full)
                     )
                 }
 
-                for car in self.component_options.input_carrier:
-                    if not car == self.component_options.main_input_carrier:
+                for car in self.input_carrier:
+                    if not car == self.main_input_carrier:
                         bounds_rr_full["input"][car] = (
                             bounds_rr_full["input"][
-                                self.component_options.main_input_carrier
+                                self.main_input_carrier
                             ]
-                            * self.input_parameters.performance_data["input_ratios"][
+                            * self.performance_data["input_ratios"][
                                 car
                             ]
                         )
@@ -968,8 +976,8 @@ class Conv3(Technology):
                 if t > 1:
                     return (
                         -ramping_rate
-                        <= input_aux_rr[t, self.component_options.main_input_carrier]
-                        - input_aux_rr[t - 1, self.component_options.main_input_carrier]
+                        <= input_aux_rr[t, self.main_input_carrier]
+                        - input_aux_rr[t - 1, self.main_input_carrier]
                     )
                 else:
                     return pyo.Constraint.Skip
@@ -981,8 +989,8 @@ class Conv3(Technology):
             def init_ramping_up_rate(const, t):
                 if t > 1:
                     return (
-                        input_aux_rr[t, self.component_options.main_input_carrier]
-                        - input_aux_rr[t - 1, self.component_options.main_input_carrier]
+                        input_aux_rr[t, self.main_input_carrier]
+                        - input_aux_rr[t - 1, self.main_input_carrier]
                         <= ramping_rate
                     )
                 else:

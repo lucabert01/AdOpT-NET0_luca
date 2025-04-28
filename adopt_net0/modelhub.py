@@ -177,7 +177,7 @@ class ModelHub:
                     for tec in self.data.technology_data[period][node]:
                         if self.data.technology_data[period][node][
                             tec
-                        ].component_options.technology_model in [
+                        ].technology_model in [
                             "CONV1",
                             "CONV2",
                             "CONV3",
@@ -1065,12 +1065,14 @@ class ModelHub:
                         for tec in (
                             model.periods[period].node_blocks[node].tech_blocks_active
                         ):
-                            self._monte_carlo_technologies(period, node, tec)
+                            if not self.data.technology_data[period][node][tec].existing:
+                                self._monte_carlo_technologies(period, node, tec)
 
             if "Networks" in monte_carlo_on:
                 for period in model.periods:
                     for netw in model.periods[period].network_block:
-                        self._monte_carlo_networks(period, netw)
+                        if not self.data.network_data[period][netw].existing:
+                            self._monte_carlo_networks(period, netw)
 
             if "Import" in monte_carlo_on:
                 self._monte_carlo_import_parameters()
@@ -1102,10 +1104,10 @@ class ModelHub:
                                 if tec in tech_blocks:
                                     capex_model = self.data.technology_data[period][
                                         node
-                                    ][tec].economics.capex_model
+                                    ][tec].economics["capex_model"]
 
                                     if capex_model == 1:
-                                        if row["parameter"] == "unit_CAPEX":
+                                        if row["parameter"] == "unit_capex":
                                             self._monte_carlo_technologies(
                                                 period, node, tec, row
                                             )
@@ -1114,7 +1116,7 @@ class ModelHub:
                                                 (MC_parameters["name"] == tec)
                                                 & (
                                                     MC_parameters["parameter"]
-                                                    == "unit_CAPEX"
+                                                    == "unit_capex"
                                                 )
                                             ]
                                             if not new_row.empty:
@@ -1188,7 +1190,7 @@ class ModelHub:
         tec_data = self.data.technology_data[period][node][tec]
         model = self.model[aggregation_model]
 
-        if tec_data.economics.capex_model in [1, 3]:
+        if tec_data.economics["capex_model"] in [1, 3]:
             # Preprocessing
             sd = config["optimization"]["monte_carlo"]["sd"]["value"]
             sd_random = np.random.normal(1, sd)
@@ -1200,11 +1202,11 @@ class ModelHub:
             b_tec = model.periods[period].node_blocks[node].tech_blocks_active[tec]
 
             annualization_factor = annualize(
-                discount_rate, economics.lifetime, fraction_of_year_modelled
+                discount_rate, economics["lifetime"], fraction_of_year_modelled
             )
 
             # Change parameters
-            if tec_data.economics.capex_model == 1:
+            if tec_data.economics["capex_model"] == 1:
                 # UNIT CAPEX
                 # Update parameter
                 if MC_ranges is not None:
@@ -1215,21 +1217,21 @@ class ModelHub:
                             MC_ranges["min"].iloc[0], MC_ranges["max"].iloc[0]
                         )
                 else:
-                    unit_capex = tec_data.economics.capex_data["unit_capex"] * sd_random
+                    unit_capex = tec_data.economics["unit_capex"] * sd_random
 
                 b_tec.para_unit_capex = unit_capex
                 b_tec.para_unit_capex_annual = unit_capex * annualization_factor
 
-            elif tec_data.economics.capex_model == 3:
+            elif tec_data.economics["capex_model"] == 3:
                 if MC_ranges is not None:
                     for _, row in MC_ranges.iterrows():
-                        if row["parameter"] == "unit_CAPEX":
+                        if row["parameter"] == "unit_capex":
                             unit_capex = random.uniform(row["min"], row["max"])
-                        elif row["parameter"] == "fix_CAPEX":
+                        elif row["parameter"] == "fix_capex":
                             fix_capex = random.uniform(row["min"], row["max"])
                 else:
-                    unit_capex = tec_data.economics.capex_data["unit_capex"] * sd_random
-                    fix_capex = tec_data.economics.capex_data["fix_capex"] * sd_random
+                    unit_capex = tec_data.economics["unit_capex"] * sd_random
+                    fix_capex = tec_data.economics["fix_capex"] * sd_random
 
                 b_tec.para_unit_capex = unit_capex
                 b_tec.para_unit_capex_annual = unit_capex * annualization_factor
@@ -1238,10 +1240,10 @@ class ModelHub:
 
             # Change variable bounds
             def calculate_max_capex():
-                if economics.capex_model == 1:
+                if economics["capex_model"] == 1:
                     max_capex = b_tec.para_size_max * b_tec.para_unit_capex_annual
                     bounds = (0, max_capex)
-                elif economics.capex_model == 3:
+                elif economics["capex_model"] == 3:
                     max_capex = (
                         b_tec.para_size_max * b_tec.para_unit_capex_annual
                         + b_tec.para_fix_capex_annual
@@ -1256,11 +1258,11 @@ class ModelHub:
             b_tec.var_capex_aux.setub(bounds[1])
 
             # Delete constraints/conjunctions/relaxations
-            if economics.capex_model == 1:
+            if economics["capex_model"] == 1:
                 big_m_transformation_required = 0
                 b_tec.del_component(b_tec.const_capex_aux)
                 b_tec.del_component(b_tec.const_capex)
-            elif economics.capex_model == 3:
+            elif economics["capex_model"] == 3:
                 big_m_transformation_required = 1
                 b_tec.del_component(b_tec.dis_installation)
                 b_tec.del_component(b_tec.disjunction_installation)
@@ -1300,7 +1302,7 @@ class ModelHub:
         fraction_of_year_modelled = self.data.topology["fraction_of_year_modelled"]
 
         annualization_factor = annualize(
-            discount_rate, economics.lifetime, fraction_of_year_modelled
+            discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
 
         b_netw = model.periods[period].network_block[netw]
@@ -1318,16 +1320,16 @@ class ModelHub:
         else:
             # Update cost parameters
             b_netw.para_capex_gamma1 = (
-                economics.capex_data["gamma1"] * annualization_factor * sd_random
+                economics["gamma1"] * annualization_factor * sd_random
             )
             b_netw.para_capex_gamma2 = (
-                economics.capex_data["gamma2"] * annualization_factor * sd_random
+                economics["gamma2"] * annualization_factor * sd_random
             )
             b_netw.para_capex_gamma3 = (
-                economics.capex_data["gamma3"] * annualization_factor * sd_random
+                economics["gamma3"] * annualization_factor * sd_random
             )
             b_netw.para_capex_gamma4 = (
-                economics.capex_data["gamma4"] * annualization_factor * sd_random
+                economics["gamma4"] * annualization_factor * sd_random
             )
 
         for arc in b_netw.set_arcs:
@@ -1527,7 +1529,7 @@ class ModelHub:
                     if (
                         self.data.technology_data[period][node][
                             tec
-                        ].component_options.technology_model
+                        ].technology_model
                         == "STOR"
                         and bounds_on == "no_storage"
                     ):

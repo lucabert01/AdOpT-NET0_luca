@@ -35,7 +35,7 @@ def set_discount_rate(config: dict, economics):
     if not config["economic"]["global_discountrate"]["value"] == -1:
         discount_rate = config["economic"]["global_discountrate"]["value"]
     else:
-        discount_rate = economics.discount_rate
+        discount_rate = economics["discount_rate"]
     return discount_rate
 
 
