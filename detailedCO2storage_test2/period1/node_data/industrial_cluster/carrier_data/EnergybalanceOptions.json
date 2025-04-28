@@ -1,0 +1,17 @@
+{
+    "electricity": {
+        "curtailment_possible": 0
+    },
+    "CO2captured": {
+        "curtailment_possible": 0
+    },
+    "cement": {
+        "curtailment_possible": 0
+    },
+    "heat": {
+        "curtailment_possible": 0
+    },
+    "waste": {
+        "curtailment_possible": 0
+    }
+}
