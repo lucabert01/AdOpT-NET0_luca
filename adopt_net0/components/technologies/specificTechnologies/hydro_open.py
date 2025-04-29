@@ -104,7 +104,7 @@ class HydroOpen(Technology):
         if self.name + "_inflow" in climate_data:
             self.processed_coeff.time_dependent_full["hydro_inflow"] = climate_data[
                 self.name + "_inflow"
-            ]
+            ].to_numpy()
         else:
             raise Exception(
                 "Using Technology Type Hydro_Open requires a hydro_natural_inflow in climate data"
@@ -255,7 +255,7 @@ class HydroOpen(Technology):
                     * sum(
                         (1 - eta_lambda) ** i for i in range(0, nr_timesteps_averaged)
                     )
-                    + hydro_natural_inflow.iloc[t - 1]
+                    + hydro_natural_inflow[t - 1]
                 )
             else:  # all other time intervals
                 return (
@@ -270,7 +270,7 @@ class HydroOpen(Technology):
                     * sum(
                         (1 - eta_lambda) ** i for i in range(0, nr_timesteps_averaged)
                     )
-                    + hydro_natural_inflow.iloc[t - 1]
+                    + hydro_natural_inflow[t - 1]
                 )
 
         b_tec.const_storage_level = pyo.Constraint(
@@ -513,6 +513,17 @@ class HydroOpen(Technology):
                 output_aux_rr = self.output
                 set_t_rr = self.set_t_performance
             else:
+                if (
+                    data["config"]["optimization"]["typicaldays"]["method"]["value"]
+                    == 1
+                ):
+                    sequence = data["k_means_specs"]["sequence"]
+                elif (
+                    data["config"]["optimization"]["typicaldays"]["method"]["value"]
+                    == 2
+                ):
+                    sequence = self.sequence
+
                 # init bounds at full res
                 bounds_rr_full = {
                     "input": self.fitting_class.calculate_input_bounds(
@@ -522,6 +533,17 @@ class HydroOpen(Technology):
                         self.component_options.size_based_on, len(self.set_t_full)
                     ),
                 }
+
+                for car in self.component_options.input_carrier:
+                    if not car == self.component_options.main_input_carrier:
+                        bounds_rr_full["input"][car] = (
+                            bounds_rr_full["input"][
+                                self.component_options.main_input_carrier
+                            ]
+                            * self.input_parameters.performance_data["input_ratios"][
+                                car
+                            ]
+                        )
 
                 # create input and output variable for full res
                 def init_input_bounds(bounds, t, car):
@@ -556,7 +578,7 @@ class HydroOpen(Technology):
                         self.input,
                         b_tec.var_input_rr_full,
                         self.set_t_full,
-                        self.sequence,
+                        sequence,
                         b_tec.set_input_carriers,
                     )
                 )
@@ -566,7 +588,7 @@ class HydroOpen(Technology):
                         self.output,
                         b_tec.var_output_rr_full,
                         self.set_t_full,
-                        sequence_storage,
+                        sequence,
                         b_tec.set_output_carriers,
                     )
                 )
