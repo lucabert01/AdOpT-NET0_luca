@@ -102,25 +102,26 @@ class Conv1(Technology):
 
         self.emissions_based_on = "input"
         self.size_based_on = tec_data["size_based_on"]
-        
+
         self.standby_power_carrier = get_attribute_from_dict(
             tec_data["Performance"], "standby_power_carrier", -1
         )
-        
-        self.main_input_carrier = tec_data["Performance"][
-            "main_input_carrier"
-        ]
+
+        self.main_input_carrier = tec_data["Performance"]["main_input_carrier"]
 
         # Initialize fitting class
         if self.performance_function_type == 1:
-            self.fitting_class = FitGenericTecTypeType1(self.input_carrier, self.output_carrier)
+            self.fitting_class = FitGenericTecTypeType1(
+                self.input_carrier, self.output_carrier
+            )
         elif self.performance_function_type == 2:
-            self.fitting_class = FitGenericTecTypeType2(self.input_carrier, self.output_carrier)
-        elif (
-            self.performance_function_type == 3
-            or self.performance_function_type == 4
-        ):
-            self.fitting_class = FitGenericTecTypeType34(self.input_carrier, self.output_carrier)
+            self.fitting_class = FitGenericTecTypeType2(
+                self.input_carrier, self.output_carrier
+            )
+        elif self.performance_function_type == 3 or self.performance_function_type == 4:
+            self.fitting_class = FitGenericTecTypeType34(
+                self.input_carrier, self.output_carrier
+            )
         else:
             raise Exception(
                 "performance_function_type must be an integer between 1 and 4"
@@ -136,9 +137,7 @@ class Conv1(Technology):
         super(Conv1, self).fit_technology_performance(climate_data, location)
 
         # reshape parameters for CONV1
-        temp = copy.deepcopy(
-            self.performance_data["performance"]["out"]
-        )
+        temp = copy.deepcopy(self.performance_data["performance"]["out"])
         self.performance_data["performance"]["out"] = {}
         self.performance_data["performance"]["out"]["out"] = temp
 
@@ -896,12 +895,8 @@ class Conv1(Technology):
                 for car in self.input_carrier:
                     if not car == self.main_input_carrier:
                         bounds_rr_full["input"][car] = (
-                            bounds_rr_full["input"][
-                                self.main_input_carrier
-                            ]
-                            * self.performance_data["input_ratios"][
-                                car
-                            ]
+                            bounds_rr_full["input"][self.main_input_carrier]
+                            * self.performance_data["input_ratios"][car]
                         )
 
                 # create input variable for full res

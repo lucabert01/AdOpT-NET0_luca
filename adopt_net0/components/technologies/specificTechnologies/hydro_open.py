@@ -81,13 +81,11 @@ class HydroOpen(Technology):
         super().__init__(tec_data)
 
         self.emissions_based_on = "input"
-        self.main_input_carrier = tec_data["Performance"][
-            "main_input_carrier"
-        ]
+        self.main_input_carrier = tec_data["Performance"]["main_input_carrier"]
 
         self.allow_only_one_direction = tec_data["Performance"][
-                "allow_only_one_direction"
-            ]
+            "allow_only_one_direction"
+        ]
         if self.allow_only_one_direction:
             self.allow_only_one_direction_precise = get_attribute_from_dict(
                 tec_data["Performance"], "allow_only_one_direction_precise", 1
@@ -104,9 +102,9 @@ class HydroOpen(Technology):
 
         # Coefficients
         for par in self.performance_data["performance"]:
-            self.processed_coeff.time_independent[par] = (
-                self.performance_data["performance"][par]
-            )
+            self.processed_coeff.time_independent[par] = self.performance_data[
+                "performance"
+            ][par]
 
         # Natural inflow
         if self.name + "_inflow" in climate_data:
@@ -159,9 +157,7 @@ class HydroOpen(Technology):
                 (
                     np.zeros(shape=(time_steps)),
                     np.ones(shape=(time_steps))
-                    * self.performance_data["performance"][
-                        "discharge_max"
-                    ],
+                    * self.performance_data["performance"]["discharge_max"],
                 )
             )
 
@@ -171,9 +167,7 @@ class HydroOpen(Technology):
                 (
                     np.zeros(shape=(time_steps)),
                     np.ones(shape=(time_steps))
-                    * self.performance_data["performance"][
-                        "charge_max"
-                    ],
+                    * self.performance_data["performance"]["charge_max"],
                 )
             )
 
@@ -531,12 +525,8 @@ class HydroOpen(Technology):
                 for car in self.input_carrier:
                     if not car == self.main_input_carrier:
                         bounds_rr_full["input"][car] = (
-                            bounds_rr_full["input"][
-                                self.main_input_carrier
-                            ]
-                            * self.performance_data["input_ratios"][
-                                car
-                            ]
+                            bounds_rr_full["input"][self.main_input_carrier]
+                            * self.performance_data["input_ratios"][car]
                         )
 
                 # create input and output variable for full res

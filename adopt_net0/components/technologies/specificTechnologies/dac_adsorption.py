@@ -164,9 +164,9 @@ class DacAdsorption(Technology):
         self.processed_coeff.time_dependent_full["th_in_max"] = th_in_max
         self.processed_coeff.time_dependent_full["total_in_max"] = total_in_max
 
-        self.processed_coeff.time_independent["eta_elth"] = (
-            self.performance_data["performance"]["eta_elth"]
-        )
+        self.processed_coeff.time_independent["eta_elth"] = self.performance_data[
+            "performance"
+        ]["eta_elth"]
 
     def _calculate_bounds(self):
         """
@@ -388,10 +388,7 @@ class DacAdsorption(Technology):
 
         # Connection thermal and electric energy demand (eq. 11)
         def init_thermal_energy(const, t):
-            return (
-                b_tec.var_input_th[t]
-                == b_tec.var_inputal[t] - b_tec.var_input_el[t]
-            )
+            return b_tec.var_input_th[t] == b_tec.var_inputal[t] - b_tec.var_input_el[t]
 
         b_tec.const_thermal_energy = pyo.Constraint(
             self.set_t_performance, rule=init_thermal_energy

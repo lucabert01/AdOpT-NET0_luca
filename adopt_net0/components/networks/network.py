@@ -5,7 +5,7 @@ from ..utilities import (
     perform_disjunct_relaxation,
     determine_variable_scaling,
     determine_constraint_scaling,
-    get_attribute_from_dict
+    get_attribute_from_dict,
 )
 
 import pandas as pd
@@ -213,12 +213,12 @@ class Network(ModelComponent):
             # Use initial size
             time_independent["size_max_arcs"] = time_independent["size_initial"]
 
-        time_independent["rated_capacity"] = get_attribute_from_dict(self.performance_data, "rated_capacity", 1)
+        time_independent["rated_capacity"] = get_attribute_from_dict(
+            self.performance_data, "rated_capacity", 1
+        )
 
         # Other
-        time_independent["min_transport"] = self.performance_data[
-            "min_transport"
-        ]
+        time_independent["min_transport"] = self.performance_data["min_transport"]
         time_independent["loss"] = self.performance_data["loss"]
 
         # Write to self
@@ -502,9 +502,7 @@ class Network(ModelComponent):
         :return: pyomo network block
         """
         # Define set of transported carrier
-        b_netw.set_netw_carrier = pyo.Set(
-            initialize=[self.transported_carrier]
-        )
+        b_netw.set_netw_carrier = pyo.Set(initialize=[self.transported_carrier])
 
         return b_netw
 

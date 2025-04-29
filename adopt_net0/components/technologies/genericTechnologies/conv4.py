@@ -56,9 +56,7 @@ class Conv4(Technology):
         super().__init__(tec_data)
 
         self.emissions_based_on = "output"
-        self.main_output_carrier = tec_data["Performance"][
-            "main_output_carrier"
-        ]
+        self.main_output_carrier = tec_data["Performance"]["main_output_carrier"]
 
     def fit_technology_performance(self, climate_data: pd.DataFrame, location: dict):
         """
@@ -84,12 +82,12 @@ class Conv4(Technology):
         time_steps = len(self.set_t_performance)
 
         # Output Bounds
-        self.bounds["output"][
-            self.performance_data["main_output_carrier"]
-        ] = np.column_stack(
-            (
-                np.zeros(shape=(time_steps)),
-                np.ones(shape=(time_steps)),
+        self.bounds["output"][self.performance_data["main_output_carrier"]] = (
+            np.column_stack(
+                (
+                    np.zeros(shape=(time_steps)),
+                    np.ones(shape=(time_steps)),
+                )
             )
         )
 
@@ -131,8 +129,7 @@ class Conv4(Technology):
             else:
                 return (
                     self.output[t, car_output]
-                    == phi[car_output]
-                    * self.output[t, self.main_output_carrier]
+                    == phi[car_output] * self.output[t, self.main_output_carrier]
                 )
 
         b_tec.const_output_output = pyo.Constraint(

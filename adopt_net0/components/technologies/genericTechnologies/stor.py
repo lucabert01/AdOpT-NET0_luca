@@ -137,13 +137,11 @@ class Stor(Technology):
         super().__init__(tec_data)
 
         self.emissions_based_on = "input"
-        self.main_input_carrier = tec_data["Performance"][
-            "main_input_carrier"
-        ]
+        self.main_input_carrier = tec_data["Performance"]["main_input_carrier"]
 
         self.allow_only_one_direction = tec_data["Performance"][
-                "allow_only_one_direction"
-            ]
+            "allow_only_one_direction"
+        ]
         if self.allow_only_one_direction:
             self.allow_only_one_direction_precise = get_attribute_from_dict(
                 tec_data["Performance"], "allow_only_one_direction_precise", 1
@@ -183,9 +181,9 @@ class Stor(Technology):
 
         for par in self.performance_data["performance"]:
             if not par == "theta":
-                self.processed_coeff.time_independent[par] = (
-                    self.performance_data["performance"][par]
-                )
+                self.processed_coeff.time_independent[par] = self.performance_data[
+                    "performance"
+                ][par]
 
         self.processed_coeff.time_independent["charge_rate"] = self.flexibility_data[
             "charge_rate"
@@ -193,14 +191,9 @@ class Stor(Technology):
         self.processed_coeff.time_independent["discharge_rate"] = self.flexibility_data[
             "discharge_rate"
         ]
-        if (
-            "energy_consumption"
-            in self.performance_data["performance"]
-        ):
+        if "energy_consumption" in self.performance_data["performance"]:
             self.processed_coeff.time_independent["energy_consumption"] = (
-                self.performance_data["performance"][
-                    "energy_consumption"
-                ]
+                self.performance_data["performance"]["energy_consumption"]
             )
 
     def _calculate_bounds(self):
@@ -231,13 +224,10 @@ class Stor(Technology):
                     )
                 )
             else:
-                if (
-                    "energy_consumption"
-                    in self.performance_data["performance"]
-                ):
-                    energy_consumption = self.performance_data[
-                        "performance"
-                    ]["energy_consumption"]
+                if "energy_consumption" in self.performance_data["performance"]:
+                    energy_consumption = self.performance_data["performance"][
+                        "energy_consumption"
+                    ]
                     self.bounds["input"][car] = np.column_stack(
                         (
                             np.zeros(shape=(time_steps)),
@@ -368,10 +358,8 @@ class Stor(Technology):
             def init_cut_bidirectional(const, t):
                 # output[t]/discharge_rate + input[t]/charge_rate <= storSize
                 return (
-                    self.output[t, self.main_input_carrier]
-                    / discharge_rate
-                    + self.input[t, self.main_input_carrier]
-                    / charge_rate
+                    self.output[t, self.main_input_carrier] / discharge_rate
+                    + self.input[t, self.main_input_carrier] / charge_rate
                     <= b_tec.var_size
                 )
 
@@ -441,14 +429,10 @@ class Stor(Technology):
         # Maximal charging and discharging rates
         def init_maximal_charge(const, t):
             if self.flexibility_data["power_energy_ratio"] == "fixedcapacity":
-                return (
-                    self.input[t, self.main_input_carrier]
-                    <= charge_rate
-                )
+                return self.input[t, self.main_input_carrier] <= charge_rate
             else:
                 return (
-                    self.input[t, self.main_input_carrier]
-                    <= b_tec.var_capacity_charge
+                    self.input[t, self.main_input_carrier] <= b_tec.var_capacity_charge
                 )
 
         b_tec.const_max_charge = pyo.Constraint(
@@ -457,10 +441,7 @@ class Stor(Technology):
 
         def init_maximal_discharge(const, t):
             if self.flexibility_data["power_energy_ratio"] == "fixedcapacity":
-                return (
-                    self.output[t, self.main_input_carrier]
-                    <= discharge_rate
-                )
+                return self.output[t, self.main_input_carrier] <= discharge_rate
             else:
                 return (
                     self.output[t, self.main_input_carrier]
@@ -819,12 +800,8 @@ class Stor(Technology):
                             # -rampingRate <= input[t] - input[t-1]
                             return (
                                 -ramping_rate
-                                <= self.input[
-                                    t, self.main_input_carrier
-                                ]
-                                - self.input[
-                                    t - 1, self.main_input_carrier
-                                ]
+                                <= self.input[t, self.main_input_carrier]
+                                - self.input[t - 1, self.main_input_carrier]
                             )
 
                         dis.const_ramping_down_rate_in = pyo.Constraint(
@@ -835,9 +812,7 @@ class Stor(Technology):
                             # input[t] - input[t-1] <= rampingRate
                             return (
                                 self.input[t, self.main_input_carrier]
-                                - self.input[
-                                    t - 1, self.main_input_carrier
-                                ]
+                                - self.input[t - 1, self.main_input_carrier]
                                 <= ramping_rate
                             )
 
@@ -925,13 +900,10 @@ class Stor(Technology):
                             )
                         )
                     else:
-                        if (
-                            "energy_consumption"
-                            in self.performance_data["performance"]
-                        ):
-                            energy_consumption = self.performance_data[
-                                "performance"
-                            ]["energy_consumption"]
+                        if "energy_consumption" in self.performance_data["performance"]:
+                            energy_consumption = self.performance_data["performance"][
+                                "energy_consumption"
+                            ]
                             bounds_rr_full["input"][carr] = np.column_stack(
                                 (
                                     np.zeros(shape=(len(self.set_t_full))),

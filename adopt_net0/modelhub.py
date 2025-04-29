@@ -1065,7 +1065,9 @@ class ModelHub:
                         for tec in (
                             model.periods[period].node_blocks[node].tech_blocks_active
                         ):
-                            if not self.data.technology_data[period][node][tec].existing:
+                            if not self.data.technology_data[period][node][
+                                tec
+                            ].existing:
                                 self._monte_carlo_technologies(period, node, tec)
 
             if "Networks" in monte_carlo_on:
@@ -1527,9 +1529,7 @@ class ModelHub:
             def size_constraint_block_tecs_init(block, period, node):
                 def size_constraints_tecs_init(const, tec):
                     if (
-                        self.data.technology_data[period][node][
-                            tec
-                        ].technology_model
+                        self.data.technology_data[period][node][tec].technology_model
                         == "STOR"
                         and bounds_on == "no_storage"
                     ):

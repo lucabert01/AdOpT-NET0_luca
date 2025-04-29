@@ -137,9 +137,7 @@ class CCPP(Technology):
 
         self.emissions_based_on = "input"
         self.size_based_on = "output"
-        self.main_input_carrier = tec_data["Performance"][
-            "main_input_carrier"
-        ]
+        self.main_input_carrier = tec_data["Performance"]["main_input_carrier"]
 
         # Treatment of Steam Production
 
@@ -193,9 +191,7 @@ class CCPP(Technology):
         # Determine correct reading paths
         data_path = {}
         if "performance_data_path" in self.performance_data:
-            performance_data_path = self.performance_data[
-                "performance_data_path"
-            ]
+            performance_data_path = self.performance_data["performance_data_path"]
         else:
             performance_data_path = Path(__file__).parent.parent.parent.parent
             performance_data_path = (
@@ -401,12 +397,10 @@ class CCPP(Technology):
             + self.processed_coeff.time_independent["mp_max_p"]
         )
         max_hp = (
-            np.ones(shape=(time_steps))
-            * self.performance_data["max_steam_extract_HP"]
+            np.ones(shape=(time_steps)) * self.performance_data["max_steam_extract_HP"]
         )
         max_mp = (
-            np.ones(shape=(time_steps))
-            * self.performance_data["max_steam_extract_MP"]
+            np.ones(shape=(time_steps)) * self.performance_data["max_steam_extract_MP"]
         )
         self.bounds["output"]["electricity"] = np.column_stack((min_out, max_el))
 
@@ -1189,12 +1183,8 @@ class CCPP(Technology):
                 for car in self.input_carrier:
                     if not car == self.main_input_carrier:
                         bounds_rr_full["input"][car] = (
-                            bounds_rr_full["input"][
-                                self.main_input_carrier
-                            ]
-                            * self.performance_data["input_ratios"][
-                                car
-                            ]
+                            bounds_rr_full["input"][self.main_input_carrier]
+                            * self.performance_data["input_ratios"][car]
                         )
 
                 # create input variable for full res

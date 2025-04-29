@@ -2,10 +2,12 @@ import pandas as pd
 
 from ...component import ModelComponent
 
+
 class CcsComponent(ModelComponent):
     """
     Class for ccs attachement to technology
     """
+
     def __init__(self, ccs_data: dict):
         """
         Initializes ccs class from technology data
@@ -53,28 +55,19 @@ def fit_ccs_coeff(co2_concentration: float, ccs_data: dict, climate_data: pd.Dat
     ccs_data = CcsComponent(ccs_data)
 
     # Recalculate min/max size to have it in t/hCO2_out
-    ccs_data.size_min = (
-        ccs_data.size_min * co2_concentration * capture_rate
-    )
-    ccs_data.size_max = (
-        ccs_data.size_max * co2_concentration * capture_rate
-    )
+    ccs_data.size_min = ccs_data.size_min * co2_concentration * capture_rate
+    ccs_data.size_max = ccs_data.size_max * co2_concentration * capture_rate
 
     # Calculate input ratios
-    ccs_data.processed_coeff.time_independent["size_min"] = (
-        ccs_data.size_min
-    )
-    ccs_data.processed_coeff.time_independent["size_max"] = (
-        ccs_data.size_max
-    )
+    ccs_data.processed_coeff.time_independent["size_min"] = ccs_data.size_min
+    ccs_data.processed_coeff.time_independent["size_max"] = ccs_data.size_max
     ccs_data.processed_coeff.time_independent["capture_rate"] = capture_rate
     if "MEA" in ccs_data.technology_model:
         input_ratios = {}
         for car in ccs_data.input_carrier:
             input_ratios[car] = (
                 ccs_data.performance_data["eta"][car]
-                + ccs_data.performance_data["omega"][car]
-                * co2_concentration
+                + ccs_data.performance_data["omega"][car] * co2_concentration
             ) / (co2_concentration * molar_mass_CO2 * 3.6)
         ccs_data.processed_coeff.time_independent["input_ratios"] = input_ratios
     else:

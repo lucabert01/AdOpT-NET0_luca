@@ -80,9 +80,7 @@ class Fluid(Network):
         """
         super().__init__(netw_data)
 
-        self.bidirectional_network = netw_data["Performance"][
-            "bidirectional_network"
-        ]
+        self.bidirectional_network = netw_data["Performance"]["bidirectional_network"]
         self.bidirectional_network_precise = get_attribute_from_dict(
             netw_data["Performance"], "bidirectional_network_precise", 1
         )
@@ -95,12 +93,12 @@ class Fluid(Network):
         super(Fluid, self).fit_network_performance()
 
         # Emissions
-        self.processed_coeff.time_independent["loss2emissions"] = (
-            self.performance_data["loss2emissions"]
-        )
-        self.processed_coeff.time_independent["emissionfactor"] = (
-            self.performance_data["emissionfactor"]
-        )
+        self.processed_coeff.time_independent["loss2emissions"] = self.performance_data[
+            "loss2emissions"
+        ]
+        self.processed_coeff.time_independent["emissionfactor"] = self.performance_data[
+            "emissionfactor"
+        ]
 
     def _define_energyconsumption_parameters(self, b_netw):
         """

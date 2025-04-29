@@ -133,7 +133,9 @@ def add_values_to_summary(summary_path: Path, component_set: list = None):
                         "capex",
                     ]
 
-                    df_filtered = df.loc[:, df.columns.get_level_values(3).isin(parameters)].T
+                    df_filtered = df.loc[
+                        :, df.columns.get_level_values(3).isin(parameters)
+                    ].T
                     for _, row in df_filtered.iterrows():
                         output_dict[case]["/".join(row.name)] = row.values[0]
                     #

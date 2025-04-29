@@ -94,25 +94,26 @@ class Conv2(Technology):
 
         self.emissions_based_on = "input"
         self.size_based_on = "input"
-        
+
         self.standby_power_carrier = get_attribute_from_dict(
             tec_data["Performance"], "standby_power_carrier", -1
         )
-        
-        self.main_input_carrier = tec_data["Performance"][
-            "main_input_carrier"
-        ]
+
+        self.main_input_carrier = tec_data["Performance"]["main_input_carrier"]
 
         # Initialize fitting class
         if self.performance_function_type == 1:
-            self.fitting_class = FitGenericTecTypeType1(self.input_carrier, self.output_carrier)
+            self.fitting_class = FitGenericTecTypeType1(
+                self.input_carrier, self.output_carrier
+            )
         elif self.performance_function_type == 2:
-            self.fitting_class = FitGenericTecTypeType2(self.input_carrier, self.output_carrier)
-        elif (
-            self.performance_function_type == 3
-            or self.performance_function_type == 4
-        ):
-            self.fitting_class = FitGenericTecTypeType34(self.input_carrier, self.output_carrier)
+            self.fitting_class = FitGenericTecTypeType2(
+                self.input_carrier, self.output_carrier
+            )
+        elif self.performance_function_type == 3 or self.performance_function_type == 4:
+            self.fitting_class = FitGenericTecTypeType34(
+                self.input_carrier, self.output_carrier
+            )
         else:
             raise Exception(
                 "performance_function_type must be an integer between 1 and 4"
@@ -742,7 +743,9 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        + alpha2[car_output][ind_bpx - 1] * b_tec.var_size * rated_capacity
+                        + alpha2[car_output][ind_bpx - 1]
+                        * b_tec.var_size
+                        * rated_capacity
                     )
 
                 dis.const_input_output_on = pyo.Constraint(
@@ -879,12 +882,8 @@ class Conv2(Technology):
                 for car in self.input_carrier:
                     if not car == self.main_input_carrier:
                         bounds_rr_full["input"][car] = (
-                            bounds_rr_full["input"][
-                                self.main_input_carrier
-                            ]
-                            * self.performance_data["input_ratios"][
-                                car
-                            ]
+                            bounds_rr_full["input"][self.main_input_carrier]
+                            * self.performance_data["input_ratios"][car]
                         )
 
                 # create input variable for full res

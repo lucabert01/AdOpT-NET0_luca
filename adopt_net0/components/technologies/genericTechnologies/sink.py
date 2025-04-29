@@ -75,9 +75,7 @@ class Sink(Technology):
         super().__init__(tec_data)
 
         self.emissions_based_on = "input"
-        self.main_input_carrier = tec_data["Performance"][
-            "main_input_carrier"
-        ]
+        self.main_input_carrier = tec_data["Performance"]["main_input_carrier"]
         self.flexibility_data = tec_data["Flexibility"]
 
     def fit_technology_performance(self, climate_data: pd.DataFrame, location: dict):
@@ -97,14 +95,9 @@ class Sink(Technology):
         self.processed_coeff.time_independent["injection_rate_max"] = (
             self.flexibility_data["injection_rate_max"]
         )
-        if (
-            "energy_consumption"
-            in self.performance_data["performance"]
-        ):
+        if "energy_consumption" in self.performance_data["performance"]:
             self.processed_coeff.time_independent["energy_consumption"] = (
-                self.performance_data["performance"][
-                    "energy_consumption"
-                ]
+                self.performance_data["performance"]["energy_consumption"]
             )
 
     def _calculate_bounds(self):
@@ -126,13 +119,10 @@ class Sink(Technology):
                     )
                 )
             else:
-                if (
-                    "energy_consumption"
-                    in self.performance_data["performance"]
-                ):
-                    energy_consumption = self.performance_data[
-                        "performance"
-                    ]["energy_consumption"]
+                if "energy_consumption" in self.performance_data["performance"]:
+                    energy_consumption = self.performance_data["performance"][
+                        "energy_consumption"
+                    ]
                     self.bounds["input"][car] = np.column_stack(
                         (
                             np.zeros(shape=(time_steps)),
@@ -220,8 +210,7 @@ class Sink(Technology):
         def init_maximal_injection(const, t):
             # input[t] <= injectionCapacity
             return (
-                self.input[t, self.main_input_carrier]
-                <= b_tec.var_injection_capacity
+                self.input[t, self.main_input_carrier] <= b_tec.var_injection_capacity
             )
 
         b_tec.const_max_injection = pyo.Constraint(

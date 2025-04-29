@@ -96,9 +96,7 @@ class GasTurbine(Technology):
 
         self.emissions_based_on = "input"
         self.size_based_on = "output"
-        self.main_input_carrier = tec_data["Performance"][
-            "main_input_carrier"
-        ]
+        self.main_input_carrier = tec_data["Performance"]["main_input_carrier"]
 
     def fit_technology_performance(self, climate_data: pd.DataFrame, location: dict):
         """
@@ -137,15 +135,11 @@ class GasTurbine(Technology):
         fit["ti"] = {}
         fit["ti"]["alpha"] = round(self.performance_data["alpha"], 5)
         fit["ti"]["beta"] = round(self.performance_data["beta"], 5)
-        fit["ti"]["epsilon"] = round(
-            self.performance_data["epsilon"], 5
-        )
+        fit["ti"]["epsilon"] = round(self.performance_data["epsilon"], 5)
         fit["ti"]["in_min"] = round(self.performance_data["in_min"], 5)
         fit["ti"]["in_max"] = round(self.performance_data["in_max"], 5)
         if len(self.input_carrier) == 2:
-            fit["ti"]["max_H2_admixture"] = self.performance_data[
-                "max_H2_admixture"
-            ]
+            fit["ti"]["max_H2_admixture"] = self.performance_data["max_H2_admixture"]
         else:
             fit["ti"]["max_H2_admixture"] = 1
 
@@ -181,8 +175,7 @@ class GasTurbine(Technology):
                 bounds["input_bounds"][c] = np.column_stack(
                     (
                         np.zeros(shape=(time_steps)),
-                        np.ones(shape=(time_steps))
-                        * self.performance_data["in_max"],
+                        np.ones(shape=(time_steps)) * self.performance_data["in_max"],
                     )
                 )
 
@@ -494,12 +487,8 @@ class GasTurbine(Technology):
                 for car in self.input_carrier:
                     if not car == self.main_input_carrier:
                         bounds_rr_full["input"][car] = (
-                            bounds_rr_full["input"][
-                                self.main_input_carrier
-                            ]
-                            * self.performance_data["input_ratios"][
-                                car
-                            ]
+                            bounds_rr_full["input"][self.main_input_carrier]
+                            * self.performance_data["input_ratios"][car]
                         )
 
                 # create input variable for full res

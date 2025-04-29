@@ -40,6 +40,7 @@ class ModelComponent:
 
         self.big_m_transformation_required = 0
 
+
 class ProcessedCoefficients:
     """
     Defines a simple class for fitted/processed coefficients

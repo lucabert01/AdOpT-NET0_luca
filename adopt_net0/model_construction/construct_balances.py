@@ -252,9 +252,7 @@ def construct_global_energybalance(model, config):
 
             tec_input = sum(
                 sum(
-                    b_period.node_blocks[node]
-                    .tech_blocks_active[tec]
-                    .var_input[t, car]
+                    b_period.node_blocks[node].tech_blocks_active[tec].var_input[t, car]
                     for tec in b_period.node_blocks[node].set_technologies
                     if (car in b_period.node_blocks[node].set_carriers)
                     and (
@@ -551,11 +549,13 @@ def construct_system_cost(model, data):
                     b_period.node_blocks[node].tech_blocks_active[tec].var_capex
                     for tec in b_period.node_blocks[node].set_technologies
                 )
-                +
-                sum(
+                + sum(
                     b_period.node_blocks[node].tech_blocks_active[tec].var_capex_ccs
                     for tec in b_period.node_blocks[node].set_technologies
-                    if hasattr(b_period.node_blocks[node].tech_blocks_active[tec], "var_capex_ccs")
+                    if hasattr(
+                        b_period.node_blocks[node].tech_blocks_active[tec],
+                        "var_capex_ccs",
+                    )
                 )
                 for node in model.set_nodes
             )
@@ -586,15 +586,17 @@ def construct_system_cost(model, data):
                         * hour_factors[t - 1]
                         for tec in b_period.node_blocks[node].set_technologies
                     )
-                    +
-                    sum(
+                    + sum(
                         b_period.node_blocks[node]
                         .tech_blocks_active[tec]
                         .var_opex_variable_ccs[t]
                         * nr_timesteps_averaged
                         * hour_factors[t - 1]
                         for tec in b_period.node_blocks[node].set_technologies
-                        if hasattr(b_period.node_blocks[node].tech_blocks_active[tec], "var_opex_variable_ccs")
+                        if hasattr(
+                            b_period.node_blocks[node].tech_blocks_active[tec],
+                            "var_opex_variable_ccs",
+                        )
                     )
                     for t in set_t
                 )
@@ -603,18 +605,18 @@ def construct_system_cost(model, data):
 
             tec_opex_fixed = sum(
                 sum(
-                    b_period.node_blocks[node]
-                    .tech_blocks_active[tec]
-                    .var_opex_fixed
+                    b_period.node_blocks[node].tech_blocks_active[tec].var_opex_fixed
                     for tec in b_period.node_blocks[node].set_technologies
                 )
-                +
-                sum(
+                + sum(
                     b_period.node_blocks[node]
                     .tech_blocks_active[tec]
                     .var_opex_fixed_ccs
                     for tec in b_period.node_blocks[node].set_technologies
-                    if hasattr(b_period.node_blocks[node].tech_blocks_active[tec], "var_opex_fixed_ccs")
+                    if hasattr(
+                        b_period.node_blocks[node].tech_blocks_active[tec],
+                        "var_opex_fixed_ccs",
+                    )
                 )
                 for node in model.set_nodes
             )

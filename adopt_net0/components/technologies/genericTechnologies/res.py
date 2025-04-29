@@ -323,7 +323,9 @@ class Res(Technology):
             def init_input_output(const, t, c_output):
                 return (
                     self.output[t, c_output]
-                    == coeff_td["capfactor"][t - 1] * b_tec.var_size_on[t] * rated_capacity
+                    == coeff_td["capfactor"][t - 1]
+                    * b_tec.var_size_on[t]
+                    * rated_capacity
                 )
 
             b_tec.const_input_output = pyo.Constraint(
@@ -344,7 +346,10 @@ class Res(Technology):
 
         super(Res, self).write_results_tec_design(h5_group, model_block)
 
-        h5_group.create_dataset("rated_capacity", data=self.processed_coeff.time_independent["rated_capacity"])
+        h5_group.create_dataset(
+            "rated_capacity",
+            data=self.processed_coeff.time_independent["rated_capacity"],
+        )
 
     def write_results_tec_operation(self, h5_group, model_block):
         """

@@ -37,6 +37,7 @@ class Simple(Network):
         self.bidirectional_network_precise = get_attribute_from_dict(
             netw_data["Performance"], "bidirectional_network_precise", 1
         )
+
     def fit_network_performance(self):
         super(Simple, self).fit_network_performance()
 

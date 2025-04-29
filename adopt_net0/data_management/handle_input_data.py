@@ -357,9 +357,7 @@ class DataHandle:
                     tec_data.name = tec_data.name + "_existing"
 
                     tec_data.existing = 1
-                    tec_data.size_initial = technologies_at_node[
-                        "existing"
-                    ][technology]
+                    tec_data.size_initial = technologies_at_node["existing"][technology]
                     tec_data.fit_technology_performance(
                         self.time_series[aggregation_model][investment_period][node][
                             "ClimateData"
