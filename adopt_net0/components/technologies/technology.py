@@ -281,7 +281,7 @@ class Technology(ModelComponent):
         ]
 
         # Other
-        time_independent["rated_power"] = get_attribute_from_dict(self.performance_data, "rated_power", 1)
+        time_independent["rated_capacity"] = get_attribute_from_dict(self.performance_data, "rated_capacity", 1)
         time_independent["min_part_load"] = get_attribute_from_dict(self.performance_data, "min_part_load", 0)
         time_independent["standby_power"] =  get_attribute_from_dict(self.performance_data, "standby_power", -1)
 
@@ -830,7 +830,7 @@ class Technology(ModelComponent):
             return tuple(
                 self.bounds["input"][car][self.sequence[t - 1] - 1, :]
                 * c["size_max"]
-                * c["rated_power"]
+                * c["rated_capacity"]
             )
 
         b_tec.var_input = pyo.Var(
@@ -857,7 +857,7 @@ class Technology(ModelComponent):
             return tuple(
                 self.bounds["output"][car][self.sequence[t - 1] - 1, :]
                 * c["size_max"]
-                * c["rated_power"]
+                * c["rated_capacity"]
             )
 
         b_tec.var_output = pyo.Var(
@@ -1086,7 +1086,7 @@ class Technology(ModelComponent):
                 return tuple(
                     self.bounds["input"][car][t - 1, :]
                     * c["size_max"]
-                    * c["rated_power"]
+                    * c["rated_capacity"]
                 )
 
             b_tec.var_input_aux = pyo.Var(
@@ -1106,7 +1106,7 @@ class Technology(ModelComponent):
 
         def init_output_bounds(bounds, t, car):
             return tuple(
-                self.bounds["output"][car][t - 1, :] * c["size_max"] * c["rated_power"]
+                self.bounds["output"][car][t - 1, :] * c["size_max"] * c["rated_capacity"]
             )
 
         b_tec.var_output_aux = pyo.Var(
@@ -1737,7 +1737,7 @@ class Technology(ModelComponent):
         SD_load = dynamics["SD_load"]
         main_car = self.main_input_carrier
         coeff_ti = self.processed_coeff.time_independent
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
 
         # SU load limit
         s_indicators = range(0, 2)
@@ -1753,7 +1753,7 @@ class Technology(ModelComponent):
                     if self.technology_model == "CONV3":
                         return (
                             self.input[t, main_car]
-                            <= b_tec.var_size * SU_load * rated_power
+                            <= b_tec.var_size * SU_load * rated_capacity
                         )
                     else:
                         return (
@@ -1761,7 +1761,7 @@ class Technology(ModelComponent):
                                 self.input[t, car_input]
                                 for car_input in b_tec.set_input_carriers
                             )
-                            <= b_tec.var_size * SU_load * rated_power
+                            <= b_tec.var_size * SU_load * rated_capacity
                         )
 
                 dis.const_SU_load_limit = pyo.Constraint(rule=init_SU_load_limit)
@@ -1794,7 +1794,7 @@ class Technology(ModelComponent):
                         if self.technology_model == "CONV3":
                             return (
                                 self.input[t - 1, main_car]
-                                <= b_tec.var_size * SD_load * rated_power
+                                <= b_tec.var_size * SD_load * rated_capacity
                             )
                         else:
                             return (
@@ -1802,7 +1802,7 @@ class Technology(ModelComponent):
                                     self.input[t - 1, car_input]
                                     for car_input in b_tec.set_input_carriers
                                 )
-                                <= b_tec.var_size * SD_load * rated_power
+                                <= b_tec.var_size * SD_load * rated_capacity
                             )
 
                 dis.const_SD_load_limit = pyo.Constraint(rule=init_SD_load_limit)

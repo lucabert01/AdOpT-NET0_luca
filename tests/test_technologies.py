@@ -272,7 +272,7 @@ def test_res_pv(request):
         np.ones(time_steps)
         * tec.size_max
         * 1.1
-        * tec.processed_coeff.time_independent["rated_power"]
+        * tec.processed_coeff.time_independent["rated_capacity"]
     )
 
     model = generate_output_constraint(model, oversize)
@@ -308,7 +308,7 @@ def test_res_wt(request):
         np.ones(time_steps)
         * tec.size_max
         * 1.1
-        * tec.processed_coeff.time_independent["rated_power"]
+        * tec.processed_coeff.time_independent["rated_capacity"]
     )
     model = generate_output_constraint(model, oversize)
     termination = run_model(model, request.config.solver)
@@ -358,7 +358,7 @@ def test_conv_perf(request):
                     np.ones(time_steps)
                     * tec.size_max
                     * 1.1
-                    * tec.processed_coeff.time_independent["rated_power"]
+                    * tec.processed_coeff.time_independent["rated_capacity"]
                 )
                 model = generate_output_constraint(model, oversize)
                 termination = run_model(model, request.config.solver)
@@ -585,7 +585,7 @@ def test_tec_storage(request):
         np.ones(time_steps)
         * tec.size_max
         * 1.1
-        * tec.processed_coeff.time_independent["rated_power"]
+        * tec.processed_coeff.time_independent["rated_capacity"]
     )
     model = generate_output_constraint(model, oversize)
     termination = run_model(model, request.config.solver)

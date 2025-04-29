@@ -116,7 +116,7 @@ class Conv4(Technology):
 
         # DATA OF TECHNOLOGY
         coeff_ti = self.processed_coeff.time_independent
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
         phi = coeff_ti["phi"]
 
         # add additional constraints for performance type 2 (min. part load)
@@ -143,7 +143,7 @@ class Conv4(Technology):
         def init_size_constraint(const, t):
             return (
                 self.output[t, self.main_output_carrier]
-                <= b_tec.var_size * rated_power
+                <= b_tec.var_size * rated_capacity
             )
 
         b_tec.const_size = pyo.Constraint(
@@ -165,7 +165,7 @@ class Conv4(Technology):
 
         # Performance Parameters
         coeff_ti = self.processed_coeff.time_independent
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
         min_part_load = coeff_ti["min_part_load"]
 
         # define disjuncts
@@ -186,7 +186,7 @@ class Conv4(Technology):
                 def init_min_partload(const):
                     return (
                         self.output[t, self.main_output_carrier]
-                        >= min_part_load * b_tec.var_size * rated_power
+                        >= min_part_load * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_min_partload = pyo.Constraint(rule=init_min_partload)

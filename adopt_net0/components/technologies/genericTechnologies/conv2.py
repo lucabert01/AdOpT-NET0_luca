@@ -169,7 +169,7 @@ class Conv2(Technology):
         # DATA OF TECHNOLOGY
         coeff_ti = self.processed_coeff.time_independent
         dynamics = self.processed_coeff.dynamics
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
 
         if self.performance_function_type == 1:
             b_tec = self._performance_function_type_1(b_tec)
@@ -185,7 +185,7 @@ class Conv2(Technology):
         def init_size_constraint(const, t):
             return (
                 sum(self.input[t, car_input] for car_input in b_tec.set_input_carriers)
-                <= b_tec.var_size * rated_power
+                <= b_tec.var_size * rated_capacity
             )
 
         b_tec.const_size = pyo.Constraint(
@@ -226,7 +226,7 @@ class Conv2(Technology):
         # Performance parameter:
         coeff_ti = self.processed_coeff.time_independent
         min_part_load = coeff_ti["min_part_load"]
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
 
         alpha1 = {}
         for car in coeff_ti["fit"]:
@@ -246,7 +246,7 @@ class Conv2(Technology):
         if min_part_load > 0:
 
             def init_min_part_load(const, t):
-                return min_part_load * b_tec.var_size * rated_power <= sum(
+                return min_part_load * b_tec.var_size * rated_capacity <= sum(
                     self.input[t, car_input] for car_input in b_tec.set_input_carriers
                 )
 
@@ -268,7 +268,7 @@ class Conv2(Technology):
 
         # Performance parameter:
         coeff_ti = self.processed_coeff.time_independent
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
 
         alpha1 = {}
         alpha2 = {}
@@ -317,7 +317,7 @@ class Conv2(Technology):
                         if car_input == self.main_input_carrier:
                             return (
                                 self.input[t, car_standby_power]
-                                == standby_power * b_tec.var_size * rated_power
+                                == standby_power * b_tec.var_size * rated_capacity
                             )
                         else:
                             return self.input[t, car_input] == 0
@@ -346,7 +346,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        + alpha2[car_output] * b_tec.var_size * rated_power
+                        + alpha2[car_output] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_output_on = pyo.Constraint(
@@ -360,7 +360,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        >= min_part_load * b_tec.var_size * rated_power
+                        >= min_part_load * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_min_partload = pyo.Constraint(rule=init_min_partload)
@@ -391,7 +391,7 @@ class Conv2(Technology):
 
         # Performance parameter:
         coeff_ti = self.processed_coeff.time_independent
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
 
         alpha1 = {}
         alpha2 = {}
@@ -435,7 +435,7 @@ class Conv2(Technology):
                         if car_input == self.main_input_carrier:
                             return (
                                 self.input[t, car_standby_power]
-                                == standby_power * b_tec.var_size * rated_power
+                                == standby_power * b_tec.var_size * rated_capacity
                             )
                         else:
                             return self.input[t, car_input] == 0
@@ -461,7 +461,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        >= bp_x[ind - 1] * b_tec.var_size * rated_power
+                        >= bp_x[ind - 1] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_on1 = pyo.Constraint(rule=init_input_on1)
@@ -472,7 +472,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        <= bp_x[ind] * b_tec.var_size * rated_power
+                        <= bp_x[ind] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_on2 = pyo.Constraint(rule=init_input_on2)
@@ -485,7 +485,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        + alpha2[car_output][ind - 1] * b_tec.var_size * rated_power
+                        + alpha2[car_output][ind - 1] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_output_on = pyo.Constraint(
@@ -499,7 +499,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        >= min_part_load * b_tec.var_size * rated_power
+                        >= min_part_load * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_min_partload = pyo.Constraint(rule=init_min_partload)
@@ -530,7 +530,7 @@ class Conv2(Technology):
 
         # Performance parameter:
         coeff_ti = self.processed_coeff.time_independent
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
         dynamics = self.processed_coeff.dynamics
         alpha1 = {}
         alpha2 = {}
@@ -653,7 +653,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        + alpha2[car_output][0] * b_tec.var_size * rated_power
+                        + alpha2[car_output][0] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_output_SU = pyo.Constraint(
@@ -701,7 +701,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        + alpha2[car_output][0] * b_tec.var_size * rated_power
+                        + alpha2[car_output][0] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_output_SD = pyo.Constraint(
@@ -718,7 +718,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        >= bp_x[ind_bpx - 1] * b_tec.var_size * rated_power
+                        >= bp_x[ind_bpx - 1] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_on1 = pyo.Constraint(rule=init_input_on1)
@@ -729,7 +729,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        <= bp_x[ind_bpx] * b_tec.var_size * rated_power
+                        <= bp_x[ind_bpx] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_on2 = pyo.Constraint(rule=init_input_on2)
@@ -742,7 +742,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        + alpha2[car_output][ind_bpx - 1] * b_tec.var_size * rated_power
+                        + alpha2[car_output][ind_bpx - 1] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_output_on = pyo.Constraint(
@@ -756,7 +756,7 @@ class Conv2(Technology):
                             self.input[t, car_input]
                             for car_input in b_tec.set_input_carriers
                         )
-                        >= min_part_load * b_tec.var_size * rated_power
+                        >= min_part_load * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_min_partload = pyo.Constraint(rule=init_min_partload)
@@ -892,7 +892,7 @@ class Conv2(Technology):
                     return tuple(
                         bounds_rr_full["input"][car][t - 1, :]
                         * self.processed_coeff.time_independent["size_max"]
-                        * self.processed_coeff.time_independent["rated_power"]
+                        * self.processed_coeff.time_independent["rated_capacity"]
                     )
 
                 b_tec.var_input_rr_full = pyo.Var(

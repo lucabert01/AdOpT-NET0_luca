@@ -230,21 +230,21 @@ class Res(Technology):
             ws = ws * (hubheight / ws_height) ** alpha
 
         # Make power curve
-        rated_power = wt_data.iloc[0]["RatedPowerkW"]
+        rated_capacity = wt_data.iloc[0]["RatedPowerkW"]
         x = np.linspace(0, 35, 71)
         y = wt_data.iloc[:, 13:84]
         y = y.to_numpy()
 
         f = interp1d(x, y)
         ws[ws < 0] = 0
-        capacity_factor = f(ws) / rated_power
+        capacity_factor = f(ws) / rated_capacity
 
         # Coefficients
         self.processed_coeff.time_dependent_full["capfactor"] = capacity_factor[
             0
         ].round(3)
         # Rated Power
-        self.performance_data["rated_power"] = rated_power / 1000
+        self.performance_data["rated_capacity"] = rated_capacity / 1000
 
     def _calculate_bounds(self):
         """
@@ -275,7 +275,7 @@ class Res(Technology):
         # DATA OF TECHNOLOGY
         coeff_td = self.processed_coeff.time_dependent_used
         coeff_ti = self.processed_coeff.time_independent
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
 
         # CONSTRAINTS
         if self.curtailment == 0:  # no curtailment allowed (default)
@@ -283,7 +283,7 @@ class Res(Technology):
             def init_input_output(const, t, c_output):
                 return (
                     self.output[t, c_output]
-                    == coeff_td["capfactor"][t - 1] * b_tec.var_size * rated_power
+                    == coeff_td["capfactor"][t - 1] * b_tec.var_size * rated_capacity
                 )
 
             b_tec.const_input_output = pyo.Constraint(
@@ -297,7 +297,7 @@ class Res(Technology):
             def init_input_output(const, t, c_output):
                 return (
                     self.output[t, c_output]
-                    <= coeff_td["capfactor"][t - 1] * b_tec.var_size * rated_power
+                    <= coeff_td["capfactor"][t - 1] * b_tec.var_size * rated_capacity
                 )
 
             b_tec.const_input_output = pyo.Constraint(
@@ -323,7 +323,7 @@ class Res(Technology):
             def init_input_output(const, t, c_output):
                 return (
                     self.output[t, c_output]
-                    == coeff_td["capfactor"][t - 1] * b_tec.var_size_on[t] * rated_power
+                    == coeff_td["capfactor"][t - 1] * b_tec.var_size_on[t] * rated_capacity
                 )
 
             b_tec.const_input_output = pyo.Constraint(
@@ -344,7 +344,7 @@ class Res(Technology):
 
         super(Res, self).write_results_tec_design(h5_group, model_block)
 
-        h5_group.create_dataset("rated_power", data=self.processed_coeff.time_independent["rated_power"])
+        h5_group.create_dataset("rated_capacity", data=self.processed_coeff.time_independent["rated_capacity"])
 
     def write_results_tec_operation(self, h5_group, model_block):
         """
@@ -356,14 +356,14 @@ class Res(Technology):
         super(Res, self).write_results_tec_operation(h5_group, model_block)
 
         coeff_ti = self.processed_coeff.time_independent
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
 
         capfactor = self.processed_coeff.time_dependent_used["capfactor"]
 
         h5_group.create_dataset(
             "max_out",
             data=[
-                capfactor[t - 1] * model_block.var_size.value * rated_power
+                capfactor[t - 1] * model_block.var_size.value * rated_capacity
                 for t in self.set_t_performance
             ],
         )
@@ -380,7 +380,7 @@ class Res(Technology):
             h5_group.create_dataset(
                 "curtailment_" + car,
                 data=[
-                    capfactor[t - 1] * model_block.var_size.value * rated_power
+                    capfactor[t - 1] * model_block.var_size.value * rated_capacity
                     - model_block.var_output[t, car].value
                     for t in self.set_t_performance
                 ],

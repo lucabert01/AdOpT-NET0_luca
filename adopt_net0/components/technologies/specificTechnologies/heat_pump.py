@@ -238,7 +238,7 @@ class HeatPump(Technology):
         # DATA OF TECHNOLOGY
         coeff_ti = self.processed_coeff.time_independent
         dynamics = self.processed_coeff.dynamics
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
 
         if self.performance_function_type == 1:
             b_tec = self._performance_function_type_1(b_tec)
@@ -251,7 +251,7 @@ class HeatPump(Technology):
 
         # size constraint based on input
         def init_size_constraint(const, t):
-            return self.input[t, "electricity"] <= b_tec.var_size * rated_power
+            return self.input[t, "electricity"] <= b_tec.var_size * rated_capacity
 
         b_tec.const_size = pyo.Constraint(
             self.set_t_performance, rule=init_size_constraint
@@ -297,7 +297,7 @@ class HeatPump(Technology):
         alpha1 = coeff_td["alpha1"]
         alpha2 = coeff_td["alpha2"]
         min_part_load = coeff_ti["min_part_load"]
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
 
         # define disjuncts for on/off
         s_indicators = range(0, 2)
@@ -320,7 +320,7 @@ class HeatPump(Technology):
                     return (
                         self.output[t, "heat"]
                         == alpha1[t - 1] * self.input[t, "electricity"]
-                        + alpha2[t - 1] * b_tec.var_size * rated_power
+                        + alpha2[t - 1] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_output_on = pyo.Constraint(rule=init_input_output_on)
@@ -329,7 +329,7 @@ class HeatPump(Technology):
                 def init_min_partload(const):
                     return (
                         self.input[t, "electricity"]
-                        >= min_part_load * b_tec.var_size * rated_power
+                        >= min_part_load * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_min_partload = pyo.Constraint(rule=init_min_partload)
@@ -361,7 +361,7 @@ class HeatPump(Technology):
         alpha2 = coeff_td["alpha2"]
         bp_x = coeff_td["bp_x"]
         min_part_load = coeff_ti["min_part_load"]
-        rated_power = coeff_ti["rated_power"]
+        rated_capacity = coeff_ti["rated_capacity"]
 
         s_indicators = range(0, 2)
 
@@ -383,7 +383,7 @@ class HeatPump(Technology):
                 def init_input_on1(const):
                     return (
                         self.input[t, "electricity"]
-                        >= bp_x[t - 1, ind] * b_tec.var_size * rated_power
+                        >= bp_x[t - 1, ind] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_on1 = pyo.Constraint(rule=init_input_on1)
@@ -391,7 +391,7 @@ class HeatPump(Technology):
                 def init_input_on2(const):
                     return (
                         self.input[t, "electricity"]
-                        <= bp_x[t - 1, ind + 1] * b_tec.var_size * rated_power
+                        <= bp_x[t - 1, ind + 1] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_on2 = pyo.Constraint(rule=init_input_on2)
@@ -400,7 +400,7 @@ class HeatPump(Technology):
                     return (
                         self.output[t, "heat"]
                         == alpha1[t - 1, ind - 1] * self.input[t, "electricity"]
-                        + alpha2[t - 1, ind - 1] * b_tec.var_size * rated_power
+                        + alpha2[t - 1, ind - 1] * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_input_output_on = pyo.Constraint(rule=init_output_on)
@@ -409,7 +409,7 @@ class HeatPump(Technology):
                 def init_min_partload(const):
                     return (
                         self.input[t, "electricity"]
-                        >= min_part_load * b_tec.var_size * rated_power
+                        >= min_part_load * b_tec.var_size * rated_capacity
                     )
 
                 dis.const_min_partload = pyo.Constraint(rule=init_min_partload)
@@ -543,7 +543,7 @@ class HeatPump(Technology):
                     return tuple(
                         bounds_rr_full["input"][car][t - 1, :]
                         * self.processed_coeff.time_independent["size_max"]
-                        * self.processed_coeff.time_independent["rated_power"]
+                        * self.processed_coeff.time_independent["rated_capacity"]
                     )
 
                 b_tec.var_input_rr_full = pyo.Var(
