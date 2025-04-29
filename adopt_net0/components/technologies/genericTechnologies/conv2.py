@@ -194,13 +194,13 @@ class Conv2(Technology):
         )
 
         # Maximum input of carriers
-        if "max_input" in coeff_ti:
+        if "max_input" in self.performance_data:
             b_tec.set_max_input_carriers = pyo.Set(
-                initialize=list(coeff_ti["max_input"].keys())
+                initialize=list(self.performance_data["max_input"].keys())
             )
 
             def init_max_input(const, t, car):
-                return self.input[t, car] <= coeff_ti["max_input"][car] * sum(
+                return self.input[t, car] <= self.performance_data["max_input"][car] * sum(
                     self.input[t, car_input] for car_input in b_tec.set_input_carriers
                 )
 
