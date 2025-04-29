@@ -42,20 +42,15 @@ class Compressor(ModelComponent):
         self.set_t_global = None
         self.sequence = None
 
-        (output_component, input_component), components_info = list(
-            compr_data["connection_info"].items()
-        )[0]
-
-        self.output_component = output_component
-        self.input_component = input_component
-        self.output_pressure = components_info["pressure"][
-            0
-        ]  # to be define better (output is where carrier is coming from)
-        self.input_pressure = components_info["pressure"][1]
+        # TODO: definition of input/output
+        self.output_component = compr_data["connection_info"]["components"][0]
+        self.input_component = compr_data["connection_info"]["components"][1]
+        self.output_pressure = compr_data["connection_info"]["pressure"][0]
+        self.input_pressure = compr_data["connection_info"]["pressure"][1]
         # to be fixed
         self.input_carrier = compr_data["carrier"]
-        self.output_type = components_info["type"][0]
-        self.input_type = components_info["type"][1]
+        self.output_type = compr_data["connection_info"]["type"][0]
+        self.input_type = compr_data["connection_info"]["type"][1]
 
     def fit_compressor_performance(self):
         """

@@ -807,45 +807,38 @@ class DataHandle:
                         carrier_i
                     ][node]:
 
-                        (output_name, input_name), attributes = next(
-                            iter(compressor_i.items())
-                        )
-                        # Creating class for only connection that required compression
-                        if attributes["pressure"][0] < attributes["pressure"][1]:
-
-                            if (
-                                attributes["existing"][0] == 0
-                                and attributes["existing"][1] == 0
-                            ):
-                                comp_data = create_compressor_class(
-                                    compressor_i, carrier_i
-                                )
-                                name_comp = f"{comp_data.name}"
-                                compressor_data[investment_period][carrier_i][node][
-                                    name_comp
-                                ] = {}
-                                comp_data.fit_compressor_performance()
-                                compressor_data[investment_period][carrier_i][node][
-                                    name_comp
-                                ] = comp_data
-
-                            if (
-                                attributes["existing"][0] == 1
-                                and attributes["existing"][1] == 1
-                            ):
-                                comp_data = create_compressor_class(
-                                    compressor_i, carrier_i
-                                )
-                                comp_data.name = comp_data.name + "_existing"
-                                name_comp = f"{comp_data.name}"
-                                compressor_data[investment_period][carrier_i][node][
-                                    name_comp
-                                ] = {}
-                                comp_data.existing = 1
-                                comp_data.fit_compressor_performance()
-                                compressor_data[investment_period][carrier_i][node][
-                                    name_comp
-                                ] = comp_data
+                        comp_data = create_compressor_class(compressor_i, carrier_i)
+                        name_comp = f"{comp_data.name}"
+                        comp_data.fit_compressor_performance()
+                        compressor_data[investment_period][carrier_i][node][
+                            name_comp
+                        ] = comp_data
+                        #
+                        #     compressor_data[investment_period][carrier_i][node][
+                        #         name_comp
+                        #     ] = {}
+                        #     comp_data.fit_compressor_performance()
+                        #     compressor_data[investment_period][carrier_i][node][
+                        #         name_comp
+                        #     ] = comp_data
+                        #
+                        # if (
+                        #     attributes["existing"][0] == 1
+                        #     and attributes["existing"][1] == 1
+                        # ):
+                        #     comp_data = create_compressor_class(
+                        #         compressor_i, carrier_i
+                        #     )
+                        #     comp_data.name = comp_data.name + "_existing"
+                        #     name_comp = f"{comp_data.name}"
+                        #     compressor_data[investment_period][carrier_i][node][
+                        #         name_comp
+                        #     ] = {}
+                        #     comp_data.existing = 1
+                        #     comp_data.fit_compressor_performance()
+                        #     compressor_data[investment_period][carrier_i][node][
+                        #         name_comp
+                        #     ] = comp_data
 
         self.compressor_data = compressor_data
 

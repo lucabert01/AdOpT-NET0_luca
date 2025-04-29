@@ -142,22 +142,10 @@ def create_compressor_class(connection_info, carrier):
     :return: Compressor Class
     """
 
-    comp_type = carrier
+    json_filename = carrier + ".json"
 
-    def define_carrier(comp_carrier: str) -> str:
-        carrier_map = {
-            "hydrogen": "HydrogenCompressor",
-            # "CO2": "CO2Compressor",
-            # "natural_gas": "NaturalGasCompressor",
-        }
-
-        if comp_carrier not in carrier_map:
-            raise ValueError(f"Unsupported comp_carrier: {comp_carrier}")
-
-        return carrier_map[comp_carrier]
-
-    comp_type = define_carrier(comp_type)
-    json_filename = comp_type + ".json"
+    # TODO: implement this
+    # comp_data = open_json(carrier, load_path)
 
     # Get the absolute path to the folder
     base_path = os.path.dirname(__file__)
@@ -175,7 +163,7 @@ def create_compressor_class(connection_info, carrier):
     comp_data["connection_info"] = connection_info
     name_tuple = list(connection_info.keys())[0]
 
-    comp_data["name"] = f"{comp_type}_{name_tuple[0]}_{name_tuple[1]}"
+    comp_data["name"] = f"{carrier}_Compressor_{name_tuple[0]}_{name_tuple[1]}"
     comp_data = Compressor(comp_data)
 
     return comp_data
@@ -237,11 +225,10 @@ def collect_possible_connections_at_node(pressure_data_at_node):
         for input_i in pressure_data_at_node["inputs"]:
             connection_data_at_node.append(
                 {
-                    (output_i["name"], input_i["name"]): {
-                        "pressure": (output_i["pressure"], input_i["pressure"]),
-                        "type": (output_i["type"], input_i["type"]),
-                        "existing": (output_i["existing"], input_i["existing"]),
-                    }
+                    "components": (output_i["name"], input_i["name"]),
+                    "pressure": (output_i["pressure"], input_i["pressure"]),
+                    "type": (output_i["type"], input_i["type"]),
+                    "existing": (output_i["existing"], input_i["existing"]),
                 }
             )
 
