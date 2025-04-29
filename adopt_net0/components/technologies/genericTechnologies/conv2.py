@@ -200,7 +200,9 @@ class Conv2(Technology):
             )
 
             def init_max_input(const, t, car):
-                return self.input[t, car] <= self.performance_data["max_input"][car] * sum(
+                return self.input[t, car] <= self.performance_data["max_input"][
+                    car
+                ] * sum(
                     self.input[t, car_input] for car_input in b_tec.set_input_carriers
                 )
 
