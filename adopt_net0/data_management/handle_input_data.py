@@ -787,84 +787,65 @@ class DataHandle:
         """
         # compressor data always fitted based on full resolution
         aggregation_model = "full"
+        target_carriers = self.model_config["performance"]["pressure"][
+            "pressure_carriers"
+        ]["value"]
 
         # Initialize technology_data dict
         compressor_data = {}
-        connection_at_node = {}
 
-        # Loop through all investment_periods and carriers, nodes
+        # Loop through all investment_periods, carriers, nodes
         for investment_period in self.topology["investment_periods"]:
             compressor_data[investment_period] = {}
-            target_carriers = self.model_config["performance"]["pressure"][
-                "pressure_carriers"
-            ]["value"]
-            connection_at_node[investment_period] = {}
-
             for carrier_i in target_carriers:
-                connection_at_node[investment_period][carrier_i] = {}
                 compressor_data[investment_period][carrier_i] = {}
                 for node in self.topology["nodes"]:
                     compressor_data[investment_period][carrier_i][node] = {}
-                    connection_at_node[investment_period][carrier_i][node] = {
-                        "existing": [],
-                        "new": [],
-                    }
 
-                    for connection_i in self.connection_pressures[investment_period][
+                    # Compressor
+                    for compressor_i in self.connection_pressures[investment_period][
                         carrier_i
                     ][node]:
-                        # Get connections at node (only the one requiring increasing in pressure)
-                        output_pressure, input_pressure = self.connection_pressures[
-                            investment_period
-                        ][carrier_i][node][connection_i]
-                        if output_pressure < input_pressure:
-                            output_name, input_name = connection_i
-                            connection_info = {
-                                "output_component": output_name,
-                                "input_component": input_name,
-                                "output_pressure": output_pressure,
-                                "input_pressure": input_pressure,
-                            }
-                            if "_existing" in output_name and "_existing" in input_name:
-                                connection_at_node[investment_period][carrier_i][node][
-                                    "existing"
-                                ].append(connection_info)
-                            else:
-                                connection_at_node[investment_period][carrier_i][node][
-                                    "new"
-                                ].append(connection_info)
 
-                    # New compressor
-                    for compressor in connection_at_node[investment_period][carrier_i][
-                        node
-                    ]["new"]:
+                        (output_name, input_name), attributes = next(
+                            iter(compressor_i.items())
+                        )
+                        # Creating class for only connection that required compression
+                        if attributes["pressure"][0] < attributes["pressure"][1]:
 
-                        comp_data = create_compressor_class(compressor, carrier_i)
-                        name_comp = f"{comp_data.name}"
-                        compressor_data[investment_period][carrier_i][node][
-                            name_comp
-                        ] = {}
-                        comp_data.fit_compressor_performance()
-                        compressor_data[investment_period][carrier_i][node][
-                            name_comp
-                        ] = comp_data
+                            if (
+                                attributes["existing"][0] == 0
+                                and attributes["existing"][1] == 0
+                            ):
+                                comp_data = create_compressor_class(
+                                    compressor_i, carrier_i
+                                )
+                                name_comp = f"{comp_data.name}"
+                                compressor_data[investment_period][carrier_i][node][
+                                    name_comp
+                                ] = {}
+                                comp_data.fit_compressor_performance()
+                                compressor_data[investment_period][carrier_i][node][
+                                    name_comp
+                                ] = comp_data
 
-                    # Existing compressor
-                    for compressor in connection_at_node[investment_period][carrier_i][
-                        node
-                    ]["existing"]:
-                        comp_data = create_compressor_class(compressor, carrier_i)
-
-                        comp_data.name = comp_data.name + "_existing"
-                        name_comp = f"{comp_data.name}"
-                        compressor_data[investment_period][carrier_i][node][
-                            name_comp
-                        ] = {}
-                        comp_data.existing = 1
-                        comp_data.fit_compressor_performance()
-                        compressor_data[investment_period][carrier_i][node][
-                            name_comp
-                        ] = comp_data
+                            if (
+                                attributes["existing"][0] == 1
+                                and attributes["existing"][1] == 1
+                            ):
+                                comp_data = create_compressor_class(
+                                    compressor_i, carrier_i
+                                )
+                                comp_data.name = comp_data.name + "_existing"
+                                name_comp = f"{comp_data.name}"
+                                compressor_data[investment_period][carrier_i][node][
+                                    name_comp
+                                ] = {}
+                                comp_data.existing = 1
+                                comp_data.fit_compressor_performance()
+                                compressor_data[investment_period][carrier_i][node][
+                                    name_comp
+                                ] = comp_data
 
         self.compressor_data = compressor_data
 

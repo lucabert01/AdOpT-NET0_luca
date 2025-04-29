@@ -42,14 +42,20 @@ class Compressor(ModelComponent):
         self.set_t_global = None
         self.sequence = None
 
-        self.output_component = compr_data["output_component"]
-        self.input_component = compr_data["input_component"]
-        self.output_pressure = compr_data[
-            "output_pressure"
+        (output_component, input_component), components_info = list(
+            compr_data["connection_info"].items()
+        )[0]
+
+        self.output_component = output_component
+        self.input_component = input_component
+        self.output_pressure = components_info["pressure"][
+            0
         ]  # to be define better (output is where carrier is coming from)
-        self.input_pressure = compr_data["input_pressure"]
+        self.input_pressure = components_info["pressure"][1]
         # to be fixed
         self.input_carrier = compr_data["carrier"]
+        self.output_type = components_info["type"][0]
+        self.input_type = components_info["type"][1]
 
     def fit_compressor_performance(self):
         """
@@ -85,7 +91,7 @@ class Compressor(ModelComponent):
         # SET T
         self.set_t_full = set_t_full
 
-        """if config["optimization"]["typicaldays"]["N"]["value"] == 0:
+        if config["optimization"]["typicaldays"]["N"]["value"] == 0:
             # everything with full resolution
             self.component_options.modelled_with_full_res = True
             self.set_t_performance = set_t_full
@@ -117,9 +123,9 @@ class Compressor(ModelComponent):
         else:
             self.processed_coeff.time_dependent_used = (
                 self.processed_coeff.time_dependent_clustered
-            )"""
+            )
 
-        # CALCULATE BOUNDS
+        # # CALCULATE BOUNDS
         # self._calculate_bounds()
 
         # GENERAL TECHNOLOGY CONSTRAINTS
@@ -136,9 +142,9 @@ class Compressor(ModelComponent):
         b_compr = self._define_energy(b_compr, data)
         # b_compr = self._define_opex(b_compr, data)
 
-        """# EXISTING TECHNOLOGY CONSTRAINTS
-        if self.existing and self.component_options.decommission == "only_complete":
-            b_compr = self._define_decommissioning_at_once_constraints(b_compr)
+        # EXISTING TECHNOLOGY CONSTRAINTS
+        # if self.existing and self.component_options.decommission == "only_complete":
+        #     b_compr = self._define_decommissioning_at_once_constraints(b_compr)
 
         # CLUSTERED DATA
         if (config["optimization"]["typicaldays"]["N"]["value"] == 0) or (
@@ -158,9 +164,9 @@ class Compressor(ModelComponent):
                 self.output = b_compr.var_output_aux
 
         # AGGREGATE ALL VARIABLES
-        self._aggregate_input(b_compr)
-        self._aggregate_output(b_compr)
-        self._aggregate_cost(b_compr)"""
+        # self._aggregate_input(b_compr)
+        # self._aggregate_output(b_compr)
+        # self._aggregate_cost(b_compr)
 
         return b_compr
 
@@ -212,7 +218,7 @@ class Compressor(ModelComponent):
         :return: pyomo block with compressor model
         """
         # to be fixed correctly
-        b_compr.set_input_pressure = pyo.Param(initialize=self.input_carrier)
+        b_compr.set_input_carrier = pyo.Param(initialize=self.input_carrier)
         return b_compr
 
     def _define_flow(self, b_compr, data: dict):

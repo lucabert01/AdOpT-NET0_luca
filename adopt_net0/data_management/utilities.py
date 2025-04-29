@@ -131,7 +131,7 @@ def create_network_class(netw_name: str, load_path: Path):
     return netw_data
 
 
-def create_compressor_class(comp_name, carrier):
+def create_compressor_class(connection_info, carrier):
     """
     Loads the compressor data from load_path and preprocesses it.
 
@@ -172,11 +172,10 @@ def create_compressor_class(comp_name, carrier):
     with open(json_path, "r") as file:
         comp_data = json.load(file)
 
-    comp_data.update(comp_name)
+    comp_data["connection_info"] = connection_info
+    name_tuple = list(connection_info.keys())[0]
 
-    comp_data["name"] = (
-        f"{comp_type}_{comp_data['output_component']}_{comp_data['input_component']}"
-    )
+    comp_data["name"] = f"{comp_type}_{name_tuple[0]}_{name_tuple[1]}"
     comp_data = Compressor(comp_data)
 
     return comp_data

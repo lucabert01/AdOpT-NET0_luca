@@ -313,12 +313,6 @@ class ModelHub:
                 """Pyomo rule to initialize a block holding all nodes"""
                 # Get data for node
                 data_node = get_data_for_node(data_period, node)
-                compression_data = self.data.connection_pressures
-                data_node["compression"] = {
-                    carrier: compression_data[carrier][node]
-                    for carrier in compression_data
-                    if node in compression_data[carrier]
-                }
 
                 # Add sets, parameters, variables, constraints to block
                 b_node = construct_node_block(
@@ -339,21 +333,15 @@ class ModelHub:
 
                 # Compressor Block
                 if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
-                    # b_node.set_compressors = pyo.Set(initialize=list(data_node["compression"].keys()))
-                    connections = []
-                    for carrier, conn_dict in data_node["compression"].items():
-                        for (src, dst), (p_in, p_out) in conn_dict.items():
-                            if p_out > p_in:
-                                connections.append((carrier, src, dst, p_in, p_out))
 
-                    b_node.set_compressors = pyo.Set(
-                        initialize=[
-                            (carrier, src, dst)
-                            for carrier, src, dst, _, _ in connections
-                        ]
-                    )
+                    # b_node.set_compressors = pyo.Set(
+                    #     initialize=[
+                    #         (carrier, src, dst)
+                    #         for carrier, src, dst, _, _ in connections
+                    #     ]
+                    # )
 
-                    def init_compressor_block(b_compr, comp, comp1, comp2):
+                    def init_compressor_block(b_compr, comp):
                         b_compr = construct_compressor_block(
                             b_compr,
                             data_node,
@@ -364,7 +352,7 @@ class ModelHub:
                         return b_compr
 
                     b_node.compressor_blocks_active = pyo.Block(
-                        b_node.set_compressors, rule=init_compressor_block
+                        b_node.set_compressor, rule=init_compressor_block
                     )
                 else:
                     pass
