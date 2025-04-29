@@ -10,8 +10,9 @@ def _determine_carriers_from_time_series(time_series: pd.DataFrame) -> list:
     :param pd.Dataframe time_series: Time series
     """
     carriers = []
-    for car in time_series.columns.get_level_values("Carrier"):
-        if np.any(time_series[car]):
+    series = ['Demand', 'Import limit', 'Export limit', 'Generic production']
+    for car in time_series.columns.get_level_values("Carrier").unique():
+        if np.any(time_series[car][series]):
             carriers.append(car)
 
     return list(set(carriers))
