@@ -879,9 +879,9 @@ class Technology(ModelComponent):
         b_tec.var_opex_variable = pyo.Var(self.set_t_global)
 
         if (
-                (self.technology_model == "RES")
-                or (self.technology_model == "CONV4")
-                or (self.technology_model == "DAC_Adsorption")
+            (self.technology_model == "RES")
+            or (self.technology_model == "CONV4")
+            or (self.technology_model == "DAC_Adsorption")
         ):
             opex_variable_based_on = b_tec.var_output
             opex_car = b_tec.set_output_carriers.at(1)
