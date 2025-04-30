@@ -7,7 +7,8 @@ import numpy as np
 
 
 # Specify the path to your input data
-path = Path("./testCCS")
+path = Path("./CaseStudy_Cement")
+json_files_path = Path("dataCaseStudy_Cement/technologies_json")
 
 # Create template files (comment these lines if already defined)
 adopt.create_optimization_templates(path)
@@ -68,7 +69,7 @@ with open(
     json.dump(technologies, json_file, indent=4)
 
 # Copy over technology files
-adopt.copy_technology_data(path)
+adopt.copy_technology_data(path, json_files_path)
 
 
 # Set import limits/cost
