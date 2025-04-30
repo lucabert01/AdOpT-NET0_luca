@@ -875,20 +875,21 @@ class Technology(ModelComponent):
         )
         b_tec.var_opex_variable = pyo.Var(self.set_t_global)
 
-        def init_opex_variable(const, t):
-            """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
-            if (
+        if (
                 (self.technology_model == "RES")
                 or (self.technology_model == "CONV4")
                 or (self.technology_model == "DAC_Adsorption")
-            ):
-                opex_variable_based_on = b_tec.var_output[
-                    t, b_tec.set_output_carriers[1]
-                ]
-            else:
-                opex_variable_based_on = b_tec.var_input[t, self.main_input_carrier]
+        ):
+            opex_variable_based_on = b_tec.var_output
+            opex_car = b_tec.set_output_carriers.at(1)
+        else:
+            opex_variable_based_on = b_tec.var_input
+            opex_car = self.main_input_carrier
+
+        def init_opex_variable(const, t):
+            """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
             return (
-                opex_variable_based_on * b_tec.para_opex_variable
+                opex_variable_based_on[t, opex_car] * b_tec.para_opex_variable
                 == b_tec.var_opex_variable[t]
             )
 
