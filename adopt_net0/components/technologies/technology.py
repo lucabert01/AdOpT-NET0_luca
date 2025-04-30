@@ -367,6 +367,7 @@ class Technology(ModelComponent):
         """
         # LOG
         log_msg = f"\t - Adding Technology {self.name}"
+        print(log_msg)
         log.info(log_msg)
 
         # TECHNOLOGY DATA
@@ -472,6 +473,7 @@ class Technology(ModelComponent):
         # CCS and Emissions
         if self.ccs_possible:
             log_msg = f"\t - Adding CCS to Technology {self.name}"
+            print(log_msg)
             log.info(log_msg)
             self._calculate_ccs_bounds()
             if self.modelled_with_full_res:
@@ -486,6 +488,7 @@ class Technology(ModelComponent):
             b_tec = self._define_ccs_emissions(b_tec)
             b_tec = self._define_ccs_costs(b_tec, data)
             log_msg = f"\t - Adding CCS to Technology {self.name} completed"
+            print(log_msg)
             log.info(log_msg)
 
         else:
@@ -1574,6 +1577,7 @@ class Technology(ModelComponent):
         config = data["config"]
 
         log_msg = f"\t \t Adding dynamics to Technology {self.name}"
+        print(log_msg)
         log.info(log_msg)
         if config["optimization"]["typicaldays"]["N"]["value"] != 0:
             raise Exception("time aggregation with dynamics is not implemented")
@@ -1596,6 +1600,7 @@ class Technology(ModelComponent):
             b_tec = self._dynamics_fast_SUSD(b_tec)
 
         log_msg = f"\t \t Adding dynamics to Technology {self.name}"
+        print(log_msg)
         log.info(log_msg)
 
         return b_tec

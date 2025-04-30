@@ -284,4 +284,5 @@ def check_input_data_consistency(path: Path):
         )
 
     log_msg = "Input data folder has been checked successfully - no errors occurred."
+    print(log_msg)
     log.info(log_msg)

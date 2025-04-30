@@ -239,6 +239,7 @@ class Network(ModelComponent):
         """
         # LOG
         log_msg = f"\t - Constructing Network {self.name}"
+        print(log_msg)
         log.info(log_msg)
 
         # NETWORK DATA
@@ -299,6 +300,7 @@ class Network(ModelComponent):
 
             # LOG
             log_msg = f"\t\t - Constructing Arc {node_from} - {node_to} " f"completed"
+            print(log_msg)
             log.info(log_msg)
 
         b_netw.arc_block = pyo.Block(b_netw.set_arcs, rule=arc_block_init)
@@ -317,6 +319,7 @@ class Network(ModelComponent):
 
         # LOG
         log_msg = f"\t - Constructing Network {self.name} completed"
+        print(log_msg)
         log.info(log_msg)
 
         return b_netw

@@ -240,6 +240,7 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
 
     # LOG
     log_msg = f"Writing results to {folder_path}"
+    print(log_msg)
     log.info(log_msg)
 
     # create the results h5 file in the results folder

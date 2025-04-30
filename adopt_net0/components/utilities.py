@@ -88,6 +88,7 @@ def perform_disjunct_relaxation(model_block, method: str = "gdp.bigm"):
     :return: component
     """
     log_msg = "\t\t\t" + method + " Transformation..."
+    print(log_msg)
     log.info(log_msg)
     start = time.time()
     xfrm = pyo.TransformationFactory(method)
@@ -100,6 +101,7 @@ def perform_disjunct_relaxation(model_block, method: str = "gdp.bigm"):
         + " s"
     )
 
+    print(log_msg)
     log.info(log_msg)
     return model_block
 

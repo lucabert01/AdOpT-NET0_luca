@@ -165,6 +165,7 @@ class CCPP(Technology):
 
         else:
             raise Exception("steam_production setting in CCPP incorrectly specified")
+        print(log_msg)
         log.info(log_msg)
 
         self.performance_data["max_steam_extract_HP"] = 140
