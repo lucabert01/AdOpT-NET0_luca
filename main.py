@@ -17,6 +17,7 @@ dp.create_input_data_folder_template(path)
 # Copy technology and network data into folder (comment these lines if already defined)
 dp.copy_technology_data(path, "path to tec data")
 dp.copy_network_data(path, "path to network data")
+dp.copy_compressor_data(path, "path to compressor data")
 
 # Read climate data and fill carried data (comment these lines if already defined)
 dp.load_climate_data_from_api(path)

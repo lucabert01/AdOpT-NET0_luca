@@ -131,9 +131,19 @@ def construct_node_block(b_node, data: dict, set_t_full, set_t_clustered):
     # SETS
     b_node.set_technologies = pyo.Set(initialize=list(data["technology_data"].keys()))
     b_node.set_carriers = pyo.Set(initialize=list(set(carriers)))
-    b_node.set_compressor = pyo.Set(
-        b_node.set_compression_carriers, initialize=list(data["compressor_data"])
-    )
+
+    # TODO: fixing here the set_compressor
+    if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
+        target_carriers = config["performance"]["pressure"]["pressure_carriers"][
+            "value"
+        ]
+        target_carriers = list(set(target_carriers))
+
+        b_node.set_compression_carriers = pyo.Set(initialize=list(set(target_carriers)))
+        for carrier_i in target_carriers:
+            b_node.set_compressor = pyo.Set(
+                initialize=list(data["compressor_data"][carrier_i].keys())
+            )  # to be fixed
 
     # Time aggregation
     config = data["config"]

@@ -337,13 +337,6 @@ class ModelHub:
                 # Compressor Block
                 if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
 
-                    # b_node.set_compressors = pyo.Set(
-                    #     initialize=[
-                    #         (carrier, src, dst)
-                    #         for carrier, src, dst, _, _ in connections
-                    #     ]
-                    # )
-
                     def init_compressor_block(b_compr, comp):
                         b_compr = construct_compressor_block(
                             b_compr,

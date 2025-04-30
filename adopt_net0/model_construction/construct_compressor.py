@@ -13,7 +13,9 @@ def construct_compressor_block(b_compr, data: dict, set_t_full, set_t_clustered)
     """
 
     compr = b_compr.index()
-    compressor = data["compressor_data"][compr]
+    compressor = data["compressor_data"]["hydrogen"][
+        compr
+    ]  # TODO: to be fixed for general use
     b_compr = compressor.construct_compressor_model(
         b_compr, data, set_t_full, set_t_clustered
     )

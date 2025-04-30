@@ -241,6 +241,41 @@ def copy_network_data(folder_path: str | Path, ntw_data_path: str | Path = None)
             _copy_data(ntw_data_path, ntw_name, output_folder)
 
 
+# TODO: fix this function
+def copy_compressor_data(folder_path: str | Path, compr_data_path: str | Path = None):
+
+    # Convert to Path
+    if isinstance(folder_path, str):
+        folder_path = Path(folder_path)
+
+    if compr_data_path is None:
+        compr_data_path = Path(
+            os.path.join(
+                os.path.dirname(__file__) + "/../database/templates/compressor_data"
+            )
+        )
+    else:
+        if isinstance(compr_data_path, str):
+            compr_data_path = Path(compr_data_path)
+
+    # Reads the topology JSON file
+    json_file_path = folder_path / "Topology.json"
+    with open(json_file_path, "r") as json_file:
+        topology = json.load(json_file)
+
+    for period in topology["investment_periods"]:
+        # Read the JSON compressor file
+        json_compr_file_path = folder_path / period / "network_data" / "Networks.json"
+        with open(json_compr_file_path, "r") as json_compr_file:
+            json_compr = json.load(json_compr_file)
+        compr_at_node = json_compr["existing"] + json_compr["new"]
+
+        output_folder = folder_path / period / "network_data" / "compressor_data"
+        # Copy JSON files corresponding to compressor names to output folder
+        for compr_name in compr_at_node:
+            _copy_data(compr_data_path, compr_name, output_folder)
+
+
 def find_json_path(data_path: str | Path, name: str) -> Path | None:
     """
     Search for a JSON file with the given technology name in the specified path and its subfolders.

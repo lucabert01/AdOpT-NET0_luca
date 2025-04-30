@@ -131,44 +131,37 @@ def create_network_class(netw_name: str, load_path: Path):
     return netw_data
 
 
-def create_compressor_class(connection_info, carrier):
+def create_compressor_class(connection_info: dict, carrier: str, load_path: Path):
     """
     Loads the compressor data from load_path and preprocesses it.
 
-    :param comp_name: compressed carrier
+    :param dict connection_info: information about the connection
+    :param str carrier: compressed carrier
     :param Path load_path: load path
-    #:param dict location: Dictonary with node location
 
     :return: Compressor Class
     """
 
-    json_filename = carrier + ".json"
-
-    # TODO: implement this
-    # comp_data = open_json(carrier, load_path)
-
-    # Get the absolute path to the folder
-    base_path = os.path.dirname(__file__)
-    json_path = os.path.join(
-        base_path, "..", "database", "templates", "compressor_data", json_filename
-    )
-    json_path = os.path.abspath(json_path)
-
-    if not os.path.exists(json_path):
-        raise FileNotFoundError(f"No JSON data found at: {json_path}")
-
-    with open(json_path, "r") as file:
-        comp_data = json.load(file)
+    # TODO: implement this (DONE by cheating)
+    comp_data = open_json(carrier, load_path)
 
     comp_data["connection_info"] = connection_info
-    name_tuple = list(connection_info.keys())[0]
+    comp_data["name"] = (
+        f"{carrier}_Compressor_{comp_data['connection_info']['components'][0]}_{comp_data['connection_info']['components'][1]}"
+    )
 
-    comp_data["name"] = f"{carrier}_Compressor_{name_tuple[0]}_{name_tuple[1]}"
+    if (
+        comp_data["connection_info"]["existing"][0] == 1
+        and comp_data["connection_info"]["existing"][1] == 1
+    ):
+        comp_data["name"] = comp_data["name"] + "_existing"
+
     comp_data = Compressor(comp_data)
 
     return comp_data
 
 
+# TODO: why we only cal technology here?
 def open_json(tec: str, load_path: Path) -> dict:
     """
     Loops through load_path and subdirectories and returns json with name tec + ".json"
@@ -233,14 +226,6 @@ def collect_possible_connections_at_node(pressure_data_at_node):
             )
 
     return connection_data_at_node
-
-
-def direct_connection(output_component, input_component):
-    return
-
-
-def calculate_compression_energy(output_component, input_component):
-    return
 
 
 def check_input_data_consistency(path: Path):

@@ -8,6 +8,7 @@ from .template_creation import (
 from .data_loading import (
     copy_network_data,
     copy_technology_data,
+    copy_compressor_data,
     fill_carrier_data,
     load_climate_data_from_api,
 )
