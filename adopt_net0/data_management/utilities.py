@@ -161,13 +161,12 @@ def create_compressor_class(connection_info: dict, carrier: str, load_path: Path
     return comp_data
 
 
-# TODO: why we only cal technology here?
-def open_json(tec: str, load_path: Path) -> dict:
+def open_json(component: str, load_path: Path) -> dict:
     """
     Loops through load_path and subdirectories and returns json with name tec + ".json"
 
-    :param str tec: name of technology to read json for
-    :param Path load_path: directory path to loop through all subdirectories and search for tec + ".json"
+    :param str component: name of component to read json for
+    :param Path load_path: directory path to loop through all subdirectories and search for component + ".json"
     :return: Dictionary containing the json data
     :rtype: dict
     """
@@ -177,7 +176,7 @@ def open_json(tec: str, load_path: Path) -> dict:
             break
         else:
             for name in files:
-                if (tec + ".json") == name:
+                if (component + ".json") == name:
                     filepath = os.path.join(path, name)
                     with open(filepath) as json_file:
                         data = json.load(json_file)
@@ -185,9 +184,9 @@ def open_json(tec: str, load_path: Path) -> dict:
 
     # Assign name
     if "data" in locals():
-        data["Name"] = tec
+        data["Name"] = component
     else:
-        raise Exception("There is no json data file for technology " + tec)
+        raise Exception("There is no json data file for component " + component)
 
     return data
 

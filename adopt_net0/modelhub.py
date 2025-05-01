@@ -337,7 +337,7 @@ class ModelHub:
                 # Compressor Block
                 if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
 
-                    def init_compressor_block(b_compr, comp):
+                    def init_compressor_block(b_compr, car, comp):
                         b_compr = construct_compressor_block(
                             b_compr,
                             data_node,

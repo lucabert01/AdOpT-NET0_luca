@@ -164,7 +164,13 @@ def construct_nodal_energybalance(model, config: dict):
                 if (  # change number 1
                     config["performance"]["pressure"]["pressure_on"]["value"] == 1
                 ):  # here it could per performace-pressure-value or optimiziation-pressure-value
-                    compress_node = node_block.var_compression[t, car]
+                    node_block = b_period.node_blocks[node]
+                    compress_node = sum(
+                        node_block.compressor_blocks_active[compr].var_compress_energy[
+                            t
+                        ]
+                        for compr in node_block.set_compressor
+                    )
                 else:
                     compress_node = 0
 
@@ -624,11 +630,16 @@ def construct_system_cost(model, data):
         def init_cost_capex_compression(const):
             if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                 return b_period.var_cost_capex_compress == sum(
-                    b_period.compress_block[compr].var_capex
-                    for compr in b_period.set_compressors
+                    sum(
+                        b_period.node_blocks[node]
+                        .compressor_blocks_active[compr]
+                        .var_capex
+                        for compr in b_period.node_blocks[node].set_compressor
+                    )
+                    for node in model.set_nodes
                 )
             else:
-                b_period.var_cost_capex_compress = 0
+                return b_period.var_cost_capex_compress == 0
 
         b_period_cost.const_capex_compress = pyo.Constraint(
             rule=init_cost_capex_compression
@@ -637,14 +648,38 @@ def construct_system_cost(model, data):
         # Opex compressors
         def init_cost_opex_compression(const):
             if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
-                return b_period.var_cost_opex_compress == sum(
-                    b_period.compress_block[compr].var_opex
-                    for compr in b_period.set_compress
+                compress_opex_variable = sum(
+                    sum(
+                        sum(
+                            b_period.node_blocks[node]
+                            .compressor_blocks_active[compr]
+                            .var_opex_variable[t]
+                            * nr_timesteps_averaged
+                            * hour_factors[t - 1]
+                            for compr in b_period.node_blocks[node].set_compressor
+                        )
+                        for t in set_t
+                    )
+                    for node in model.set_nodes
+                )
+
+                compress_opex_fixed = sum(
+                    sum(
+                        b_period.node_blocks[node]
+                        .compressor_blocks_active[compr]
+                        .var_opex_fixed
+                        for compr in b_period.node_blocks[node].set_compressor
+                    )
+                    for node in model.set_nodes
+                )
+                return (
+                    b_period.var_cost_opex_compress
+                    == compress_opex_fixed + compress_opex_variable
                 )
             else:
-                b_period.var_cost_opex_compress = 0
+                return b_period.var_cost_opex_compress == 0
 
-        b_period_cost.const_capex_compress = pyo.Constraint(
+        b_period_cost.const_opex_compress = pyo.Constraint(
             rule=init_cost_opex_compression
         )
 

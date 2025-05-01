@@ -80,6 +80,10 @@ class Compressor(ModelComponent):
         self, b_compr, data: dict, set_t_full, set_t_clustered
     ):
 
+        # LOG
+        log_msg = f"\t - Adding Compressor {self.name}"
+        log.info(log_msg)
+
         # compressor data
         config = data["config"]
 
@@ -131,11 +135,11 @@ class Compressor(ModelComponent):
         b_compr = self._define_carrier(b_compr)
         b_compr = self._define_flow(b_compr, data)
         b_compr = self._define_size(b_compr)
-        # b_compr = self._define_capex_parameters(b_compr, data)
-        # b_compr = self._define_capex_variables(b_compr, data)
-        # b_compr = self._define_capex_constraints(b_compr, data)
         b_compr = self._define_energy(b_compr, data)
-        # b_compr = self._define_opex(b_compr, data)
+        b_compr = self._define_capex_parameters(b_compr, data)
+        b_compr = self._define_capex_variables(b_compr, data)
+        b_compr = self._define_capex_constraints(b_compr, data)
+        b_compr = self._define_opex(b_compr, data)
 
         # EXISTING TECHNOLOGY CONSTRAINTS
         # if self.existing and self.component_options.decommission == "only_complete":
@@ -172,7 +176,7 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.set_output_component = pyo.Param(initialize=self.output_component)
+        b_compr.set_output_component = pyo.Set(initialize=self.output_component)
         return b_compr
 
     def _define_output_pressure(self, b_compr):
@@ -192,7 +196,7 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.set_input_component = pyo.Param(initialize=self.input_component)
+        b_compr.set_input_component = pyo.Set(initialize=self.input_component)
         return b_compr
 
     def _define_input_pressure(self, b_compr):
@@ -213,7 +217,7 @@ class Compressor(ModelComponent):
         :return: pyomo block with compressor model
         """
         # to be fixed correctly
-        b_compr.set_input_carrier = pyo.Param(initialize=self.input_carrier)
+        b_compr.set_input_carrier = pyo.Set(initialize=[self.input_carrier])
         return b_compr
 
     def _define_flow(self, b_compr, data: dict):
@@ -225,19 +229,13 @@ class Compressor(ModelComponent):
         :return: pyomo block with compressor model
         """
 
-        """coeff_ti = self.processed_coeff.time_independent
-        c = self.processed_coeff.time_independent"""
+        b_compr.var_flow = pyo.Var(
+            self.set_t_global,
+            b_compr.set_input_carrier,
+            within=pyo.NonNegativeReals,
+            bounds=5,  # to be fixed here correctly if we want bounds, otherwise clear the line
+        )
 
-        """# to be fixed
-        def init_input_bounds(bounds, t, car):
-            return tuple(
-                self.bounds["input"][car][self.sequence[t - 1] - 1, :]
-                * c["size_max"]
-                * c["rated_power"]
-            )"""
-        b_compr.set_compressors = pyo.Set(initialize=self.input_carrier)
-
-        b_compr.flow = 5
         return b_compr
 
     def _define_size(self, b_compr):
@@ -248,8 +246,22 @@ class Compressor(ModelComponent):
         :return: pyomo block with compressor model
         """
 
-        b_compr.para_size_min = 5
-        b_compr.para_size_max = 20
+        if self.existing:
+            b_compr.para_size_initial = pyo.Param(
+                within=pyo.NonNegativeIntegers, initialize=b_compr.var_flow * 10
+            )
+
+        if self.existing and self.component_options.decommission == "impossible":
+            # Decommissioning is not possible, size fixed
+            b_compr.var_size = pyo.Param(
+                within=pyo.NonNegativeIntegers, initialize=b_compr.var_flow * 10
+            )
+        else:
+            # Size is variable
+            b_compr.var_size = pyo.Var(
+                within=pyo.NonNegativeIntegers,
+                bounds=(1, 100),
+            )
         return b_compr
 
     def _define_capex_parameters(self, b_compr, data):
@@ -305,11 +317,7 @@ class Compressor(ModelComponent):
         )
 
         def calculate_max_capex():
-            max_capex = (
-                b_compr.para_size_max
-                * economics.capex_data["unit_capex"]
-                * annualization_factor
-            )
+            max_capex = 1000
             bounds = (0, max_capex)
             return bounds
 
@@ -362,19 +370,22 @@ class Compressor(ModelComponent):
         :param b_netw: pyomo compressor block
         :return: pyomo network block
         """
-        """energy_cons = self.input_parameters.performance_data["compression_energy"]
-        b_compr.var_compress_energy = pyo.Var(
-            self.set_t_global, domain=pyo.NonNegativeReals
-        )"""
+        # energy_cons = self.input_parameters.performance_data["compression_energy"]
+        b_compr.var_compress_energy = pyo.Var(self.set_t_global)
 
-        """# to be fixed
-        def init_compr_energy(t):
-            return b_compr.var_compress_energy[t] == b_compr.flow * 2
+        # to be fixed
+        def init_compr_energy(b, t):
+            if self.input_pressure > self.output_pressure:
+                return (
+                    b_compr.var_compress_energy[t]
+                    == b_compr.var_flow[t, self.input_carrier] * 2
+                )
+            else:
+                return b_compr.var_compress_energy[t] == 0
 
         b_compr.const_compress_energy = pyo.Constraint(
             self.set_t_global, rule=init_compr_energy
-        )"""
-        b_compr.const_compress_energy = b_compr.flow * 2
+        )
 
         return b_compr
 
@@ -402,7 +413,7 @@ class Compressor(ModelComponent):
 
         def init_opex_variable(const, t):
             """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
-            opex_variable_based_on = b_compr.flow[t, self.input_carrier]
+            opex_variable_based_on = b_compr.var_flow[t, self.input_carrier]
             return (
                 opex_variable_based_on * b_compr.para_opex_variable
                 == b_compr.var_opex_variable[t]

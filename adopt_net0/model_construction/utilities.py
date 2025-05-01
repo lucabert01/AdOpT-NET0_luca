@@ -19,7 +19,8 @@ def get_data_for_investment_period(
     data_period["network_data"] = data.network_data[investment_period]
     data_period["energybalance_options"] = data.energybalance_options[investment_period]
     data_period["config"] = data.model_config
-    data_period["compressor_data"] = data.compressor_data[investment_period]
+    if data.model_config["performance"]["pressure"]["pressure_on"]["value"] == 1:
+        data_period["compressor_data"] = data.compressor_data[investment_period]
     if data.model_config["optimization"]["typicaldays"]["N"]["value"] != 0:
         data_period["k_means_specs"] = data.k_means_specs[investment_period]
         # data_period["averaged_specs"] = data.averaged_specs[investment_period]
@@ -43,7 +44,8 @@ def get_data_for_node(data: dict, node: str) -> dict:
     data_node["network_data"] = data["network_data"]
     data_node["energybalance_options"] = data["energybalance_options"][node]
     data_node["config"] = data["config"]
-    data_node["compressor_data"] = data["compressor_data"][node]
+    if data["config"]["performance"]["pressure"]["pressure_on"]["value"] == 1:
+        data_node["compressor_data"] = data["compressor_data"][node]
     if data["config"]["optimization"]["typicaldays"]["N"]["value"] != 0:
         data_node["k_means_specs"] = data["k_means_specs"]
         # data_node["averaged_specs"] = data["averaged_specs"]
