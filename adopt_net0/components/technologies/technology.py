@@ -1123,9 +1123,12 @@ class Technology(ModelComponent):
             "capex_tot",
             data=[
                 (
-                    model_block.var_capex.value + model_block.var_capex_ccs.value
-                    if hasattr(model_block, "var_capex_ccs")
-                    else 0
+                    model_block.var_capex.value
+                    + (
+                        model_block.var_capex_ccs.value
+                        if hasattr(model_block, "var_capex_ccs")
+                        else 0
+                    )
                 )
             ],
         )
@@ -1135,9 +1138,11 @@ class Technology(ModelComponent):
                 sum(
                     (
                         model_block.var_opex_variable[t].value
-                        + model_block.var_opex_variable_ccs.value
-                        if hasattr(model_block, "var_opex_variable_ccs")
-                        else 0
+                        + (
+                            model_block.var_opex_variable_ccs.value
+                            if hasattr(model_block, "var_opex_variable_ccs")
+                            else 0
+                        )
                     )
                     for t in self.set_t_global
                 )
@@ -1148,9 +1153,11 @@ class Technology(ModelComponent):
             data=[
                 (
                     model_block.var_opex_fixed.value
-                    + model_block.var_opex_fixed_ccs.value
-                    if hasattr(model_block, "var_opex_fixed_ccs")
-                    else 0
+                    + (
+                        model_block.var_opex_fixed_ccs.value
+                        if hasattr(model_block, "var_opex_fixed_ccs")
+                        else 0
+                    )
                 )
             ],
         )
