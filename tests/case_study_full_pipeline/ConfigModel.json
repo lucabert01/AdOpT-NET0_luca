@@ -66,7 +66,7 @@
             "technologies_with_full_res": {
                 "description": "If method 2 is chosen, list determines which technologies are modelled at full resolution. Should be at least all storage technologies.",
                 "options": [],
-                "value": ["RES", "STOR", "HydroOpen"]
+                "value": ["RES", "STOR", "Hydro_Open"]
             }
         },
         "multiyear": {
