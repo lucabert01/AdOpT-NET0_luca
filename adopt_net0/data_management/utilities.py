@@ -141,8 +141,6 @@ def create_compressor_class(connection_info: dict, carrier: str, load_path: Path
 
     :return: Compressor Class
     """
-
-    # TODO: implement this (DONE by cheating)
     comp_data = open_json(carrier, load_path)
 
     comp_data["connection_info"] = connection_info
@@ -192,7 +190,7 @@ def open_json(component: str, load_path: Path) -> dict:
 
 
 def get_pressure_info(component, carrier: str, direction: str) -> dict:
-    pressure_data = component.input_parameters.pressure
+    pressure_data = component.performance_data["pressure"]
     component_name = component.name
     pressure = ()
     if direction == "Input":

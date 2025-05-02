@@ -164,7 +164,10 @@ def construct_nodal_energybalance(model, config: dict):
 
                 netw_outflow = node_block.var_netw_outflow[t, car]
 
-                netw_consumption = node_block.var_netw_consumption[t, car]
+                if hasattr(node_block, "var_netw_consumption"):
+                    netw_consumption = node_block.var_netw_consumption[t, car]
+                else:
+                    netw_consumption = 0
 
                 import_flow = node_block.var_import_flow[t, car]
 

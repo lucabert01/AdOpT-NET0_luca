@@ -60,19 +60,13 @@ class Compressor(ModelComponent):
         # what do we need here?
         # from other classes: there are some parameter time independent that are saved here in self
 
-        input_parameters = self.input_parameters
         # to be fixed (gamma)
-        input_parameters.performance_data["compression_energy"] = 5
+        self.performance_data["compression_energy"] = 5
         # time_independent = {}
-
-        input_parameters.pressure["input_pressure"] = self.input_pressure
-        input_parameters.pressure["output_pressure"] = self.output_pressure
-
-        input_parameters.performance_data["input_carrier"] = self.input_carrier
 
         # energy
         self.processed_coeff.time_independent["compression_energy"] = (
-            input_parameters.performance_data["compression_energy"]
+            self.performance_data["compression_energy"]
         )
         return
 
@@ -82,6 +76,7 @@ class Compressor(ModelComponent):
 
         # LOG
         log_msg = f"\t - Adding Compressor {self.name}"
+        print(log_msg)
         log.info(log_msg)
 
         # compressor data
@@ -92,14 +87,14 @@ class Compressor(ModelComponent):
 
         if config["optimization"]["typicaldays"]["N"]["value"] == 0:
             # everything with full resolution
-            self.component_options.modelled_with_full_res = True
+            self.modelled_with_full_res = True
             self.set_t_performance = set_t_full
             self.set_t_global = set_t_full
             self.sequence = list(self.set_t_performance)
 
         elif config["optimization"]["typicaldays"]["method"]["value"] == 1:
             # everything with reduced resolution
-            self.component_options.modelled_with_full_res = False
+            self.modelled_with_full_res = False
             self.set_t_performance = set_t_clustered
             self.set_t_global = set_t_clustered
             self.sequence = list(self.set_t_performance)
@@ -110,7 +105,7 @@ class Compressor(ModelComponent):
             self.set_t_global = set_t_full
 
         # Coefficients
-        if self.component_options.modelled_with_full_res:
+        if self.modelled_with_full_res:
             if config["optimization"]["timestaging"]["value"] == 0:
                 self.processed_coeff.time_dependent_used = (
                     self.processed_coeff.time_dependent_full
@@ -176,7 +171,7 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.set_output_component = pyo.Set(initialize=self.output_component)
+        b_compr.set_output_component = pyo.Set(initialize=[self.output_component])
         return b_compr
 
     def _define_output_pressure(self, b_compr):
@@ -196,7 +191,7 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.set_input_component = pyo.Set(initialize=self.input_component)
+        b_compr.set_input_component = pyo.Set(initialize=[self.input_component])
         return b_compr
 
     def _define_input_pressure(self, b_compr):
@@ -231,7 +226,6 @@ class Compressor(ModelComponent):
 
         b_compr.var_flow = pyo.Var(
             self.set_t_global,
-            b_compr.set_input_carrier,
             within=pyo.NonNegativeReals,
             bounds=5,  # to be fixed here correctly if we want bounds, otherwise clear the line
         )
@@ -277,24 +271,24 @@ class Compressor(ModelComponent):
         discount_rate = set_discount_rate(config, economics)
         fraction_of_year_modelled = data["topology"]["fraction_of_year_modelled"]
         annualization_factor = annualize(
-            discount_rate, economics.lifetime, fraction_of_year_modelled
+            discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
 
         b_compr.para_unit_capex = pyo.Param(
             domain=pyo.Reals,
-            initialize=economics.capex_data["unit_capex"],
+            initialize=economics["unit_capex"],
             mutable=True,
         )
         b_compr.para_unit_capex_annual = pyo.Param(
             domain=pyo.Reals,
-            initialize=annualization_factor * economics.capex_data["unit_capex"],
+            initialize=annualization_factor * economics["unit_capex"],
             mutable=True,
         )
 
-        if self.existing and not self.component_options.decommission == "impossible":
+        if self.existing and not self.decommission == "impossible":
             b_compr.para_decommissioning_cost_annual = pyo.Param(
                 domain=pyo.Reals,
-                initialize=annualization_factor * economics.decommission_cost,
+                initialize=annualization_factor * economics["decommission_cost"],
                 mutable=True,
             )
         return b_compr
@@ -313,7 +307,7 @@ class Compressor(ModelComponent):
         discount_rate = set_discount_rate(config, economics)
         fraction_of_year_modelled = data["topology"]["fraction_of_year_modelled"]
         annualization_factor = annualize(
-            discount_rate, economics.lifetime, fraction_of_year_modelled
+            discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
 
         def calculate_max_capex():
@@ -338,7 +332,7 @@ class Compressor(ModelComponent):
         discount_rate = set_discount_rate(config, economics)
         fraction_of_year_modelled = data["topology"]["fraction_of_year_modelled"]
         annualization_factor = annualize(
-            discount_rate, economics.lifetime, fraction_of_year_modelled
+            discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
 
         b_compr.const_capex_aux = pyo.Constraint(
@@ -376,10 +370,7 @@ class Compressor(ModelComponent):
         # to be fixed
         def init_compr_energy(b, t):
             if self.input_pressure > self.output_pressure:
-                return (
-                    b_compr.var_compress_energy[t]
-                    == b_compr.var_flow[t, self.input_carrier] * 2
-                )
+                return b_compr.var_compress_energy[t] == b_compr.var_flow[t] * 2
             else:
                 return b_compr.var_compress_energy[t] == 0
 
@@ -402,18 +393,18 @@ class Compressor(ModelComponent):
         discount_rate = set_discount_rate(config, economics)
         fraction_of_year_modelled = data["topology"]["fraction_of_year_modelled"]
         annualization_factor = annualize(
-            discount_rate, economics.lifetime, fraction_of_year_modelled
+            discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
 
         # VARIABLE OPEX
         b_compr.para_opex_variable = pyo.Param(
-            domain=pyo.Reals, initialize=economics.opex_variable, mutable=True
+            domain=pyo.Reals, initialize=economics["opex_variable"], mutable=True
         )
         b_compr.var_opex_variable = pyo.Var(self.set_t_global)
 
         def init_opex_variable(const, t):
             """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
-            opex_variable_based_on = b_compr.var_flow[t, self.input_carrier]
+            opex_variable_based_on = b_compr.var_flow[t]
             return (
                 opex_variable_based_on * b_compr.para_opex_variable
                 == b_compr.var_opex_variable[t]
@@ -425,7 +416,7 @@ class Compressor(ModelComponent):
 
         # FIXED OPEX
         b_compr.para_opex_fixed = pyo.Param(
-            domain=pyo.Reals, initialize=economics.opex_fixed, mutable=True
+            domain=pyo.Reals, initialize=economics["opex_fixed"], mutable=True
         )
         b_compr.var_opex_fixed = pyo.Var()
         b_compr.const_opex_fixed = pyo.Constraint(

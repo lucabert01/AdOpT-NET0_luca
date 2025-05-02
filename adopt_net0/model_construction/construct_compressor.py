@@ -13,16 +13,8 @@ def construct_compressor_block(b_compr, data: dict, set_t_full, set_t_clustered)
     """
 
     compr = b_compr.index()
-    # compressor = data["compressor_data"]["hydrogen"][
-    #     compr
-    # ]
-    # flat_compressor_data = {
-    #     name: comp
-    #     for carrier in data["compressor_data"].values()
-    #     for name, comp in carrier.items()
-    # }
-    compressor = data["compressor_data"][compr[0]][compr[1]]
-    # TODO: can we make it cleaner?
+    compressor = data["compressor_data"][compr]
+
     b_compr = compressor.construct_compressor_model(
         b_compr, data, set_t_full, set_t_clustered
     )

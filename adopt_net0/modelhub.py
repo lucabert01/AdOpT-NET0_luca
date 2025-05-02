@@ -340,14 +340,13 @@ class ModelHub:
                 # Compressor Block
                 if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
 
-                    def init_compressor_block(b_compr, car, comp):
+                    def init_compressor_block(b_compr, car, comp1, comp2):
                         b_compr = construct_compressor_block(
                             b_compr,
                             data_node,
                             b_period.set_t_full,
                             b_period.set_t_clustered,
                         )
-
                         return b_compr
 
                     b_node.compressor_blocks_active = pyo.Block(

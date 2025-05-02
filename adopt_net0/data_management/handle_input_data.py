@@ -744,36 +744,38 @@ class DataHandle:
         # here actually we should look at connection.loc [node_i, NODE 2] =1
         for _, network_i in self.network_data[investment_period].items():
             # here there is a matrix in network_topology
-            if carrier_i in network_i.input_parameters.pressure.keys():
-                if network_i.connection.loc[:, node_i].sum() >= 1:
-                    # means that there is a network starting in this node
-                    pressure_data_at_node["inputs"].append(
-                        get_pressure_info(network_i, carrier_i, "Input")
-                    )
+            if "pressure" in network_i.performance_data:
+                if carrier_i in network_i.performance_data["pressure"].keys():
+                    if network_i.connection.loc[:, node_i].sum() >= 1:
+                        # means that there is a network starting in this node
+                        pressure_data_at_node["inputs"].append(
+                            get_pressure_info(network_i, carrier_i, "Input")
+                        )
 
-                if network_i.connection.loc[node_i, :].sum() >= 1:
-                    pressure_data_at_node["outputs"].append(
-                        get_pressure_info(network_i, carrier_i, "Output")
-                    )
+                    if network_i.connection.loc[node_i, :].sum() >= 1:
+                        pressure_data_at_node["outputs"].append(
+                            get_pressure_info(network_i, carrier_i, "Output")
+                        )
 
-                # the function add_network_to_list should not only add the network
-                # but also it should already read the pressure information and add to the list/dictionary
+                    # the function add_network_to_list should not only add the network
+                    # but also it should already read the pressure information and add to the list/dictionary
         technologies_by_node = self.technology_data[investment_period][node_i]
         for _, technologies_i in technologies_by_node.items():
             # first we look at the one that has hydrogen as input
-            if carrier_i in technologies_i.input_parameters.pressure.keys():
-                pressure_param = technologies_i.input_parameters.pressure
-                if "inlet" in pressure_param[carrier_i]:
-                    # as done it before we have a function that write the technology and their INPUT pressure
-                    pressure_data_at_node["inputs"].append(
-                        get_pressure_info(technologies_i, carrier_i, "Input")
-                    )
+            if "pressure" in technologies_i.performance_data:
+                if carrier_i in technologies_i.performance_data["pressure"].keys():
+                    pressure_param = technologies_i.performance_data["pressure"]
+                    if "inlet" in pressure_param[carrier_i]:
+                        # as done it before we have a function that write the technology and their INPUT pressure
+                        pressure_data_at_node["inputs"].append(
+                            get_pressure_info(technologies_i, carrier_i, "Input")
+                        )
 
-                if "outlet" in pressure_param[carrier_i]:
-                    # same as before, but with OUTPUT carrier and pressure
-                    pressure_data_at_node["outputs"].append(
-                        get_pressure_info(technologies_i, carrier_i, "Output")
-                    )
+                    if "outlet" in pressure_param[carrier_i]:
+                        # same as before, but with OUTPUT carrier and pressure
+                        pressure_data_at_node["outputs"].append(
+                            get_pressure_info(technologies_i, carrier_i, "Output")
+                        )
 
         return pressure_data_at_node
 
@@ -798,8 +800,6 @@ class DataHandle:
             for node_i in self.topology["nodes"]:
                 compressor_data[investment_period][node_i] = {}
                 for carrier_i in target_carriers:
-                    compressor_data[investment_period][node_i][carrier_i] = {}
-
                     # Compressor
                     for compressor_i in self.connection_pressures[investment_period][
                         node_i
@@ -808,15 +808,15 @@ class DataHandle:
                         comp_data = create_compressor_class(
                             compressor_i,
                             carrier_i,
-                            self.data_path
-                            / investment_period
-                            / "network_data"
-                            / "compressor_data",
-                        )  # to correct
-                        name_comp = f"{comp_data.name}"
+                            self.data_path / investment_period / "compressor_data",
+                        )
                         comp_data.fit_compressor_performance()
-                        compressor_data[investment_period][node_i][carrier_i][
-                            name_comp
+                        compressor_data[investment_period][node_i][
+                            (
+                                carrier_i,
+                                compressor_i["components"][0],
+                                compressor_i["components"][1],
+                            )
                         ] = comp_data
 
         self.compressor_data = compressor_data
