@@ -227,7 +227,10 @@ class Compressor(ModelComponent):
         b_compr.var_flow = pyo.Var(
             self.set_t_global,
             within=pyo.NonNegativeReals,
-            bounds=5,  # to be fixed here correctly if we want bounds, otherwise clear the line
+            bounds=(
+                5,
+                10,
+            ),  # to be fixed here correctly if we want bounds, otherwise clear the line
         )
 
         return b_compr

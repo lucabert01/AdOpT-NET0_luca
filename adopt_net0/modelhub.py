@@ -9,6 +9,7 @@ import pandas as pd
 import sys
 import datetime
 
+from .model_construction.construct_balances import construct_compressor_constrains
 from .model_construction.construct_compressor import construct_compressor_block
 from .utilities import get_set_t
 from .data_management import DataHandle, create_technology_class
@@ -388,6 +389,7 @@ class ModelHub:
         else:
             model = construct_global_energybalance(model, config)
 
+        model = construct_compressor_constrains(model, config)
         model = construct_emission_balance(model, data)
         model = construct_system_cost(model, data)
         model = construct_global_balance(model)

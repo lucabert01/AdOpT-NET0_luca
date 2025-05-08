@@ -139,7 +139,7 @@ def construct_node_block(b_node, data: dict, set_t_full, set_t_clustered):
             "value"
         ]
         target_carriers = list(set(target_carriers))
-
+        b_node.set_carriers_compression = pyo.Set(initialize=target_carriers)
         b_node.set_compressor = pyo.Set(initialize=list(data["compressor_data"].keys()))
 
     # Time aggregation

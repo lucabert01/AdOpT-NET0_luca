@@ -1,4 +1,5 @@
 import pyomo.environ as pyo
+from networkx.classes import nodes
 
 from ..utilities import get_set_t, get_hour_factors, get_nr_timesteps_averaged
 
@@ -98,6 +99,92 @@ def construct_network_constraints(model, config: dict):
 
     model.block_network_constraints = pyo.Block(
         model.set_periods, rule=init_network_constraints
+    )
+
+    return model
+
+
+def construct_compressor_constrains(model, config: dict):
+    if config["performance"]["pressure"]["pressure_on"]["value"] == 0:
+        return
+    else:
+
+        def init_compressor_constraints(b_compr_const, period):
+            """Pyomo rule to generate compressor constraint block"""
+            b_period = model.periods[period]
+
+            set_t = get_set_t(config, b_period)
+
+            def init_compr_inflow(const, node, car, t):
+                node_block = b_period.node_blocks[node]
+                if car in node_block.set_carriers_compression:
+                    for tec in node_block.set_technologies:
+                        if (
+                            car
+                            == node_block.tech_blocks_active[tec].set_output_carriers
+                        ):
+                            return node_block.tech_blocks_active[tec].var_output[
+                                t, car
+                            ] == sum(
+                                node_block.compressor_blocks_active[
+                                    compressor
+                                ].var_flow[t]
+                                for compressor in node_block.set_compressor
+                                if compressor[0] == car and compressor[1] == tec
+                            )
+
+                    for netw in b_period.set_networks:
+                        return b_period.network_block[netw].var_outflow[
+                            t, car, node
+                        ] == sum(
+                            node_block.compressor_blocks_active[compressor].var_flow[t]
+                            for compressor in node_block.set_compressor
+                            if compressor[0] == car and compressor[1] == netw
+                            if car in b_period.network_block[netw].set_netw_carrier
+                        )
+                else:
+                    return pyo.Constraint.Skip
+
+            b_compr_const.const_compr_inflow = pyo.Constraint(
+                model.set_nodes, model.set_carriers, set_t, rule=init_compr_inflow
+            )
+
+            def init_compr_outflow(const, node, car, t):
+                node_block = b_period.node_blocks[node]
+                if car in node_block.set_carriers_compression:
+                    for tec in node_block.set_technologies:
+                        if (
+                            car
+                            == node_block.tech_blocks_active[tec].set_output_carriers
+                        ):
+                            return node_block.tech_blocks_active[tec].var_input[
+                                t, car
+                            ] == sum(
+                                node_block.compressor_blocks_active[
+                                    compressor
+                                ].var_flow[t]
+                                for compressor in node_block.set_compressor
+                                if compressor[0] == car and compressor[2] == tec
+                            )
+
+                    for netw in b_period.set_networks:
+                        return b_period.network_block[netw].var_inflow[
+                            t, car, node
+                        ] == sum(
+                            node_block.compressor_blocks_active[compressor].var_flow[t]
+                            for compressor in node_block.set_compressor
+                            if compressor[0] == car and compressor[2] == netw
+                            if car in b_period.network_block[netw].set_netw_carrier
+                        )
+                else:
+                    return pyo.Constraint.Skip
+
+            b_compr_const.const_compr_outflow = pyo.Constraint(
+                model.set_nodes, model.set_carriers, set_t, rule=init_compr_outflow
+            )
+
+    model.block_network_constraints = pyo.Block(
+        model.set_periods, rule=init_compressor_constraints
     )
 
     return model
