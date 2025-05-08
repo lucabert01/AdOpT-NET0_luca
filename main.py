@@ -10,6 +10,11 @@ import numpy as np
 path = Path("./CaseStudy_Cement")
 json_files_path = Path("dataCaseStudy_Cement/technologies_json")
 
+# General input data
+possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
+plant_analyzed = "Vernasca"
+
+
 # Create template files (comment these lines if already defined)
 adopt.create_optimization_templates(path)
 
@@ -72,6 +77,13 @@ with open(
 adopt.copy_technology_data(path, json_files_path)
 
 
+# Import hourly profiles
+path_processed_data = Path("./dataCaseStudy_Cement/data_processed.xlsx")
+clinker_data = pd.read_excel(path_processed_data, sheet_name="clinker_production")
+electricity_price_data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
+clinker_demand = clinker_data[f"clinker_{plant_analyzed}"]
+electricity_price = electricity_price_data["ITNORD_2024"]
+
 # Set import limits/cost
 adopt.fill_carrier_data(
     path,
@@ -96,7 +108,7 @@ adopt.fill_carrier_data(
 )
 adopt.fill_carrier_data(
     path,
-    value_or_data=80,
+    value_or_data=electricity_price,
     columns=["Import price"],
     carriers=["electricity"],
     nodes=["industrial_cluster"],
@@ -110,7 +122,7 @@ adopt.fill_carrier_data(
 )
 adopt.fill_carrier_data(
     path,
-    value_or_data=125,
+    value_or_data=clinker_demand,
     columns=["Demand"],
     carriers=["clinker"],
     nodes=["industrial_cluster"],
