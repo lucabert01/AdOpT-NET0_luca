@@ -41,6 +41,7 @@ class Compressor(ModelComponent):
         self.set_t_performance = None
         self.set_t_global = None
         self.sequence = None
+        self.compression_active = None
 
         # TODO: definition of input/output
         self.output_component = compr_data["connection_info"]["components"][0]
@@ -68,7 +69,11 @@ class Compressor(ModelComponent):
         self.processed_coeff.time_independent["compression_energy"] = (
             self.performance_data["compression_energy"]
         )
-        return
+
+        if self.output_pressure >= self.input_pressure:
+            self.compression_active = 0
+        else:
+            self.compression_active = 1
 
     def construct_compressor_model(
         self, b_compr, data: dict, set_t_full, set_t_clustered
@@ -129,12 +134,13 @@ class Compressor(ModelComponent):
         b_compr = self._define_input_pressure(b_compr)
         b_compr = self._define_carrier(b_compr)
         b_compr = self._define_flow(b_compr, data)
-        b_compr = self._define_size(b_compr)
-        b_compr = self._define_energy(b_compr, data)
-        b_compr = self._define_capex_parameters(b_compr, data)
-        b_compr = self._define_capex_variables(b_compr, data)
-        b_compr = self._define_capex_constraints(b_compr, data)
-        b_compr = self._define_opex(b_compr, data)
+        # if self.compression_active == 1:
+        #     b_compr = self._define_size(b_compr)
+        #     b_compr = self._define_energy(b_compr, data)
+        #     b_compr = self._define_capex_parameters(b_compr, data)
+        #     b_compr = self._define_capex_variables(b_compr, data)
+        #     b_compr = self._define_capex_constraints(b_compr, data)
+        #     b_compr = self._define_opex(b_compr, data)
 
         # EXISTING TECHNOLOGY CONSTRAINTS
         # if self.existing and self.component_options.decommission == "only_complete":
@@ -226,11 +232,7 @@ class Compressor(ModelComponent):
 
         b_compr.var_flow = pyo.Var(
             self.set_t_global,
-            within=pyo.NonNegativeReals,
-            bounds=(
-                5,
-                10,
-            ),  # to be fixed here correctly if we want bounds, otherwise clear the line
+            # within=pyo.NonNegativeReals  # to be fixed here correctly if we want bounds, otherwise clear the line
         )
 
         return b_compr
@@ -338,10 +340,11 @@ class Compressor(ModelComponent):
             discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
 
-        b_compr.const_capex_aux = pyo.Constraint(
-            expr=b_compr.var_size * b_compr.para_unit_capex_annual
-            == b_compr.var_capex_aux
-        )
+        # b_compr.const_capex_aux = pyo.Constraint(
+        #     expr=b_compr.var_size * b_compr.para_unit_capex_annual
+        #     == b_compr.var_capex_aux
+        # )
+        b_compr.const_capex_aux = pyo.Constraint(expr=0 == b_compr.var_capex_aux)
 
         # CAPEX
         if self.existing:
@@ -349,15 +352,17 @@ class Compressor(ModelComponent):
                 # technology cannot be decommissioned
                 b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
             else:
-                b_compr.const_capex = pyo.Constraint(
-                    expr=b_compr.var_capex
-                    == (b_compr.para_size_initial - b_compr.var_size)
-                    * b_compr.para_decommissioning_cost_annual
-                )
+                # b_compr.const_capex = pyo.Constraint(
+                #     expr=b_compr.var_capex
+                #     == (b_compr.para_size_initial - b_compr.var_size)
+                #     * b_compr.para_decommissioning_cost_annual
+                # )
+                b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
         else:
-            b_compr.const_capex = pyo.Constraint(
-                expr=b_compr.var_capex == b_compr.var_capex_aux
-            )
+            # b_compr.const_capex = pyo.Constraint(
+            #     expr=b_compr.var_capex == b_compr.var_capex_aux
+            # )
+            b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
         return b_compr
 
     def _define_energy(self, b_compr, data):
@@ -372,10 +377,7 @@ class Compressor(ModelComponent):
 
         # to be fixed
         def init_compr_energy(b, t):
-            if self.input_pressure > self.output_pressure:
-                return b_compr.var_compress_energy[t] == b_compr.var_flow[t] * 2
-            else:
-                return b_compr.var_compress_energy[t] == 0
+            return b_compr.var_compress_energy[t] == b_compr.var_flow[t] * 0
 
         b_compr.const_compress_energy = pyo.Constraint(
             self.set_t_global, rule=init_compr_energy
@@ -408,10 +410,11 @@ class Compressor(ModelComponent):
         def init_opex_variable(const, t):
             """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
             opex_variable_based_on = b_compr.var_flow[t]
-            return (
-                opex_variable_based_on * b_compr.para_opex_variable
-                == b_compr.var_opex_variable[t]
-            )
+            # return (
+            #     opex_variable_based_on * b_compr.para_opex_variable
+            #     == b_compr.var_opex_variable[t]
+            # )
+            return 0 == b_compr.var_opex_variable[t]
 
         b_compr.const_opex_variable = pyo.Constraint(
             self.set_t_global, rule=init_opex_variable
@@ -422,9 +425,10 @@ class Compressor(ModelComponent):
             domain=pyo.Reals, initialize=economics["opex_fixed"], mutable=True
         )
         b_compr.var_opex_fixed = pyo.Var()
-        b_compr.const_opex_fixed = pyo.Constraint(
-            expr=(b_compr.var_capex_aux / annualization_factor)
-            * b_compr.para_opex_fixed
-            == b_compr.var_opex_fixed
-        )
+        # b_compr.const_opex_fixed = pyo.Constraint(
+        #     expr=(b_compr.var_capex_aux / annualization_factor)
+        #     * b_compr.para_opex_fixed
+        #     == b_compr.var_opex_fixed
+        # )
+        b_compr.const_opex_fixed = pyo.Constraint(expr=0 == b_compr.var_opex_fixed)
         return b_compr

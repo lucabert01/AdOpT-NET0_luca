@@ -389,7 +389,9 @@ class ModelHub:
         else:
             model = construct_global_energybalance(model, config)
 
-        model = construct_compressor_constrains(model, config)
+        if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
+            model = construct_compressor_constrains(model, config)
+
         model = construct_emission_balance(model, data)
         model = construct_system_cost(model, data)
         model = construct_global_balance(model)

@@ -746,13 +746,13 @@ class DataHandle:
             # here there is a matrix in network_topology
             if "pressure" in network_i.performance_data:
                 if carrier_i in network_i.performance_data["pressure"].keys():
-                    if network_i.connection.loc[:, node_i].sum() >= 1:
+                    if network_i.connection.loc[node_i, :].sum() >= 1:
                         # means that there is a network starting in this node
                         pressure_data_at_node["inputs"].append(
                             get_pressure_info(network_i, carrier_i, "Input")
                         )
 
-                    if network_i.connection.loc[node_i, :].sum() >= 1:
+                    if network_i.connection.loc[:, node_i].sum() >= 1:
                         pressure_data_at_node["outputs"].append(
                             get_pressure_info(network_i, carrier_i, "Output")
                         )
