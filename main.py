@@ -13,7 +13,7 @@ json_files_path = Path("dataCaseStudy_Cement/technologies_json")
 # General input data
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
-
+carbon_tax = 100
 
 # Create template files (comment these lines if already defined)
 adopt.create_optimization_templates(path)
@@ -129,7 +129,7 @@ adopt.fill_carrier_data(
 )
 
 
-carbon_price = np.linspace(70, 170, 8760)
+carbon_price = np.ones(8760) * carbon_tax
 carbon_cost_path = (
     path / "period1" / "node_data" / "industrial_cluster" / "CarbonCost.csv"
 )
