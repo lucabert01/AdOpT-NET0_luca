@@ -134,13 +134,13 @@ class Compressor(ModelComponent):
         b_compr = self._define_input_pressure(b_compr)
         b_compr = self._define_carrier(b_compr)
         b_compr = self._define_flow(b_compr, data)
-        # if self.compression_active == 1:
-        #     b_compr = self._define_size(b_compr)
-        #     b_compr = self._define_energy(b_compr, data)
-        #     b_compr = self._define_capex_parameters(b_compr, data)
-        #     b_compr = self._define_capex_variables(b_compr, data)
-        #     b_compr = self._define_capex_constraints(b_compr, data)
-        #     b_compr = self._define_opex(b_compr, data)
+        if self.compression_active == 1:
+            b_compr = self._define_size(b_compr)
+            b_compr = self._define_energy(b_compr, data)
+            b_compr = self._define_capex_parameters(b_compr, data)
+            b_compr = self._define_capex_variables(b_compr, data)
+            b_compr = self._define_capex_constraints(b_compr, data)
+            b_compr = self._define_opex(b_compr, data)
 
         # EXISTING TECHNOLOGY CONSTRAINTS
         # if self.existing and self.component_options.decommission == "only_complete":
@@ -223,7 +223,7 @@ class Compressor(ModelComponent):
 
     def _define_flow(self, b_compr, data: dict):
         """
-        Defines compressor flow.
+        Defines variable for compressor flow.
 
         :param b_compr: pyomo block with compressor model
         :param dict data: dict containing model information

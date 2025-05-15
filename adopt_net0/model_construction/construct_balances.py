@@ -114,6 +114,7 @@ def construct_compressor_constrains(model, config: dict):
         if car in b_node.set_carriers_compression:
 
             def init_compr_inflow_tec(const, tec, t):
+                """Define constrain for the flow input to compressor from technology"""
                 if car in b_node.tech_blocks_active[tec].set_output_carriers:
                     return b_node.tech_blocks_active[tec].var_output[t, car] == sum(
                         b_node.compressor_blocks_active[compressor].var_flow[t]
@@ -128,17 +129,16 @@ def construct_compressor_constrains(model, config: dict):
             )
 
             def init_compr_inflow_netw(const, netw, t):
+                """Define constrain for the flow input to compressor from network"""
                 if car in b_period.network_block[netw].set_netw_carrier:
                     relevant_compressors = [
                         compressor
                         for compressor in b_node.set_compressor
-                        if (compressor[0] == car) and (compressor[1] == netw)
+                        if (compressor[0] == car) and (compressor[1] >= netw)
                     ]
                     if not relevant_compressors:
                         return pyo.Constraint.Skip
-                    return b_period.network_block[netw].var_outflow[
-                        t, car, node
-                    ] == sum(
+                    return b_period.network_block[netw].var_inflow[t, car, node] == sum(
                         b_node.compressor_blocks_active[compressor].var_flow[t]
                         for compressor in relevant_compressors
                     )
@@ -150,6 +150,7 @@ def construct_compressor_constrains(model, config: dict):
             )
 
             def init_compr_outflow_tec(const, tec, t):
+                """Define constrain for the flow output from compressor to technology"""
                 if car in b_node.tech_blocks_active[tec].set_input_carriers:
                     return b_node.tech_blocks_active[tec].var_input[t, car] == sum(
                         b_node.compressor_blocks_active[compressor].var_flow[t]
@@ -164,6 +165,7 @@ def construct_compressor_constrains(model, config: dict):
             )
 
             def init_compr_outflow_netw(const, netw, t):
+                """Define constrain for the flow output from compressor to network"""
                 if car in b_period.network_block[netw].set_netw_carrier:
                     relevant_compressors = [
                         compressor
@@ -172,7 +174,9 @@ def construct_compressor_constrains(model, config: dict):
                     ]
                     if not relevant_compressors:
                         return pyo.Constraint.Skip
-                    return b_period.network_block[netw].var_inflow[t, car, node] == sum(
+                    return b_period.network_block[netw].var_outflow[
+                        t, car, node
+                    ] == sum(
                         b_node.compressor_blocks_active[compressor].var_flow[t]
                         for compressor in relevant_compressors
                     )
@@ -281,7 +285,8 @@ def construct_nodal_energybalance(model, config: dict):
                         ]
                         for compr in node_block.set_compressor
                         if hasattr(
-                            node_block.compressor_blocks_active[compr], "var_output_ccs"
+                            node_block.compressor_blocks_active[compr],
+                            "var_compress_energy",
                         )
                     )
                 else:
