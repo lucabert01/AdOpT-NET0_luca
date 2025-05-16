@@ -777,6 +777,33 @@ class DataHandle:
                             get_pressure_info(technologies_i, carrier_i, "Output")
                         )
 
+        pressure_data_at_node["inputs"].append(
+            {
+                "name": f"demand_{node_i}",
+                "pressure": 60,
+                "type": "Exchange",
+                "existing": 1,
+            }
+        )
+
+        pressure_data_at_node["inputs"].append(
+            {
+                "name": f"export_{node_i}",
+                "pressure": 40,
+                "type": "Exchange",
+                "existing": 1,
+            }
+        )
+
+        pressure_data_at_node["outputs"].append(
+            {
+                "name": f"import_{node_i}",
+                "pressure": 40,
+                "type": "Exchange",
+                "existing": 1,
+            }
+        )
+
         return pressure_data_at_node
 
     def _read_compressor_data(self):
