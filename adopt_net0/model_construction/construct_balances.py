@@ -134,7 +134,7 @@ def construct_compressor_constrains(model, config: dict):
                     relevant_compressors = [
                         compressor
                         for compressor in b_node.set_compressor
-                        if (compressor[0] == car) and (compressor[1] >= netw)
+                        if (compressor[0] == car) and (compressor[1] == netw)
                     ]
                     if not relevant_compressors:
                         return pyo.Constraint.Skip
@@ -316,14 +316,18 @@ def construct_nodal_energybalance(model, config: dict):
                 ):  # here it could per performace-pressure-value or optimiziation-pressure-value
                     node_block = b_period.node_blocks[node]
                     compress_node = sum(
-                        node_block.compressor_blocks_active[compr].var_compress_energy[
-                            t
-                        ]
+                        node_block.compressor_blocks_active[
+                            compr
+                        ].var_consumption_energy[t, car]
                         for compr in node_block.set_compressor
                         if hasattr(
                             node_block.compressor_blocks_active[compr],
-                            "var_compress_energy",
+                            "var_consumption_energy",
                         )
+                        if car
+                        in node_block.compressor_blocks_active[
+                            compr
+                        ].set_consumed_carriers  # Maybe this one goes before
                     )
                 else:
                     compress_node = 0
@@ -338,7 +342,7 @@ def construct_nodal_energybalance(model, config: dict):
                     - netw_consumption
                     + import_flow
                     - export_flow
-                    + compress_node  # here to decide if using negative or positive sign
+                    - compress_node  # here to decide if using negative or positive sign
                     + violation
                     == node_block.para_demand[t, car]
                     - node_block.var_generic_production[t, car]

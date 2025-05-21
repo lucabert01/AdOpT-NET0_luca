@@ -11,6 +11,7 @@ from ..utilities import (
 )
 
 import pandas as pd
+import math
 import copy
 import pyomo.environ as pyo
 import pyomo.gdp as gdp
@@ -43,6 +44,9 @@ class Compressor(ModelComponent):
         self.sequence = None
         self.compression_active = None
 
+        # General information
+        self.energy_consumption = {}
+
         # TODO: definition of input/output
         self.output_component = compr_data["connection_info"]["components"][0]
         self.input_component = compr_data["connection_info"]["components"][1]
@@ -52,6 +56,12 @@ class Compressor(ModelComponent):
         self.input_carrier = compr_data["carrier"]
         self.output_type = compr_data["connection_info"]["type"][0]
         self.input_type = compr_data["connection_info"]["type"][1]
+        self.output_existing = compr_data["connection_info"]["existing"][0]
+        self.input_existing = compr_data["connection_info"]["existing"][1]
+        self.name_compressor = f"{self.input_carrier}_Compressor_{self.output_component}_{self.input_component}"
+
+        if self.output_existing == 1 and self.input_existing == 1:
+            self.name_compressor = self.name_compressor + "_existing"
 
     def fit_compressor_performance(self):
         """
@@ -62,18 +72,25 @@ class Compressor(ModelComponent):
         # from other classes: there are some parameter time independent that are saved here in self
 
         # to be fixed (gamma)
-        self.performance_data["compression_energy"] = 5
+        # self.performance_data["compression_energy"] = 5
         # time_independent = {}
 
+        self.energy_consumption = self.performance_data["energyconsumption"]
+
         # energy
-        self.processed_coeff.time_independent["compression_energy"] = (
-            self.performance_data["compression_energy"]
-        )
+        # self.processed_coeff.time_independent["compression_energy"] = (
+        #     self.performance_data["compression_energy"]
+        # )
 
         if self.output_pressure >= self.input_pressure:
             self.compression_active = 0
         else:
             self.compression_active = 1
+
+        if self.output_existing == 1 and self.input_existing == 1:
+            self.existing = 1
+        else:
+            self.existing = 0
 
     def construct_compressor_model(
         self, b_compr, data: dict, set_t_full, set_t_clustered
@@ -128,15 +145,18 @@ class Compressor(ModelComponent):
         # self._calculate_bounds()
 
         # GENERAL TECHNOLOGY CONSTRAINTS
-        b_compr = self._define_output_component(b_compr)
-        b_compr = self._define_input_component(b_compr)
-        b_compr = self._define_output_pressure(b_compr)
-        b_compr = self._define_input_pressure(b_compr)
-        b_compr = self._define_carrier(b_compr)
+        b_compr = self._define_output_component(b_compr)  # can I delete it?
+        b_compr = self._define_input_component(b_compr)  # can I delete it?
+        b_compr = self._define_output_pressure(b_compr)  # can I delete it?
+        b_compr = self._define_input_pressure(b_compr)  # can I delete it?
+        b_compr = self._define_carrier(b_compr)  # can I delete it?
         b_compr = self._define_flow(b_compr, data)
+        b_compr = self._define_compressor_name(b_compr)
+        b_compr = self._define_compressor_active(b_compr)
         if self.compression_active == 1:
+            b_compr = self._define_energyconsumption_parameters(b_compr)
+            b_compr = self._define_energy_consumption(b_compr, data)
             b_compr = self._define_size(b_compr)
-            b_compr = self._define_energy(b_compr, data)
             b_compr = self._define_capex_parameters(b_compr, data)
             b_compr = self._define_capex_variables(b_compr, data)
             b_compr = self._define_capex_constraints(b_compr, data)
@@ -168,6 +188,26 @@ class Compressor(ModelComponent):
         # self._aggregate_output(b_compr)
         # self._aggregate_cost(b_compr)
 
+        return b_compr
+
+    def _define_compressor_name(self, b_compr):
+        """
+        Defines the name of the component
+
+        :param b_compr: pyomo block with compressor model
+        :return: pyomo block with compressor model
+        """
+        b_compr.set_name = pyo.Set(initialize=[self.name_compressor])
+        return b_compr
+
+    def _define_compressor_active(self, b_compr):
+        """
+        Defines tif compressor is active
+
+        :param b_compr: pyomo block with compressor model
+        :return: pyomo block with compressor model
+        """
+        b_compr.set_active = pyo.Set(initialize=[self.compression_active])
         return b_compr
 
     def _define_output_component(self, b_compr):
@@ -232,35 +272,9 @@ class Compressor(ModelComponent):
 
         b_compr.var_flow = pyo.Var(
             self.set_t_global,
-            # within=pyo.NonNegativeReals  # to be fixed here correctly if we want bounds, otherwise clear the line
+            within=pyo.NonNegativeReals,  # to be fixed here correctly if we want bounds, otherwise clear the line
         )
 
-        return b_compr
-
-    def _define_size(self, b_compr):
-        """
-        Defines variables and parameters related to compressor size.
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-
-        if self.existing:
-            b_compr.para_size_initial = pyo.Param(
-                within=pyo.NonNegativeIntegers, initialize=b_compr.var_flow * 10
-            )
-
-        if self.existing and self.component_options.decommission == "impossible":
-            # Decommissioning is not possible, size fixed
-            b_compr.var_size = pyo.Param(
-                within=pyo.NonNegativeIntegers, initialize=b_compr.var_flow * 10
-            )
-        else:
-            # Size is variable
-            b_compr.var_size = pyo.Var(
-                within=pyo.NonNegativeIntegers,
-                bounds=(1, 100),
-            )
         return b_compr
 
     def _define_capex_parameters(self, b_compr, data):
@@ -348,16 +362,16 @@ class Compressor(ModelComponent):
 
         # CAPEX
         if self.existing:
-            if self.component_options.decommission == "impossible":
-                # technology cannot be decommissioned
-                b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
-            else:
-                # b_compr.const_capex = pyo.Constraint(
-                #     expr=b_compr.var_capex
-                #     == (b_compr.para_size_initial - b_compr.var_size)
-                #     * b_compr.para_decommissioning_cost_annual
-                # )
-                b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
+            # if self.component_options.decommission == "impossible":
+            #     # technology cannot be decommissioned
+            #     b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
+            # else:
+            #     # b_compr.const_capex = pyo.Constraint(
+            #     #     expr=b_compr.var_capex
+            #     #     == (b_compr.para_size_initial - b_compr.var_size)
+            #     #     * b_compr.para_decommissioning_cost_annual
+            #     # )
+            b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
         else:
             # b_compr.const_capex = pyo.Constraint(
             #     expr=b_compr.var_capex == b_compr.var_capex_aux
@@ -365,22 +379,81 @@ class Compressor(ModelComponent):
             b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
         return b_compr
 
-    def _define_energy(self, b_compr, data):
+    def _define_energyconsumption_parameters(self, b_compr):
         """
-        Defines compressor energy
+        Constructs constraints for compressor energy consumption
 
-        :param b_netw: pyomo compressor block
-        :return: pyomo network block
+        :param b_compr: pyomo compressor block
+        :return: pyomo compressor block
         """
-        # energy_cons = self.input_parameters.performance_data["compression_energy"]
-        b_compr.var_compress_energy = pyo.Var(self.set_t_global)
+        # Set of consumed carriers
+        b_compr.set_consumed_carriers = pyo.Set(
+            initialize=list(self.energy_consumption.keys())
+        )
 
-        # to be fixed
-        def init_compr_energy(b, t):
-            return b_compr.var_compress_energy[t] == b_compr.var_flow[t] * 0
+        self.pressure_per_stage = self.performance_data["max_pressure_per_stage"]
+
+        # Consumption from compressor
+        b_compr.var_consumption_energy = pyo.Var(
+            self.set_t_global,
+            b_compr.set_consumed_carriers,
+            domain=pyo.NonNegativeReals,
+        )
+
+        return b_compr
+
+    def _define_energy_consumption(self, b_compr, data):
+        """
+        Defines compressor energy consumption
+
+        :param b_compr: pyomo compressor block
+        :return: pyomo compressor block
+        """
+        n_stages = math.ceil(
+            math.log(self.input_pressure / self.output_pressure)
+            / math.log(self.pressure_per_stage)
+        )
+        isentropic_efficiency = 0.85
+        R = 8.314  # kJ/mol/K
+        k = 1.4
+        T_in = 298.15  # K
+        Z = 1
+
+        # TODO: write correctly with units
+        def init_compr_energy(b, t, car):
+            """
+            Define energy for compression in J
+            """
+            return b_compr.var_consumption_energy[t, car] == Z * (
+                b_compr.var_flow[t] / 3600 / 2
+            ) / 100 * T_in * R * n_stages * (k / (k - 1)) * (
+                1 / isentropic_efficiency
+            ) * (
+                (self.input_pressure / self.output_pressure)
+                ** ((k - 1) / (n_stages * k))
+                - 1
+            )
 
         b_compr.const_compress_energy = pyo.Constraint(
-            self.set_t_global, rule=init_compr_energy
+            self.set_t_global, b_compr.set_consumed_carriers, rule=init_compr_energy
+        )
+
+        return b_compr
+
+    def _define_size(self, b_compr):
+        """
+        Defines variables and parameters related to compressor size.
+
+        :param b_compr: pyomo block with compressor model
+        :return: pyomo block with compressor model
+        """
+        b_compr.var_size = pyo.Var(within=pyo.NonNegativeReals)
+
+        def sizing_rule(b, t, car):
+            return b_compr.var_size >= b_compr.var_consumption_energy[t, car]
+
+        b_compr.const_size = pyo.Constraint(
+            self.set_t_global, b_compr.set_consumed_carriers, rule=sizing_rule
         )
 
         return b_compr
@@ -432,3 +505,165 @@ class Compressor(ModelComponent):
         # )
         b_compr.const_opex_fixed = pyo.Constraint(expr=0 == b_compr.var_opex_fixed)
         return b_compr
+
+    def write_results_compressor_design(self, h5_group, model_block):
+        """
+        Function to report compressor design
+
+        :param model_block: pyomo network block
+        :param h5_group: h5 group to write to
+        """
+        if self.compression_active == 1:
+            h5_group.create_dataset("compressor", data=[self.name])
+            h5_group.create_dataset("existing", data=[self.existing])
+            h5_group.create_dataset("size", data=[model_block.var_size.value])
+        else:
+            return
+        # h5_group.create_dataset(
+        #     "capex_tot",
+        #     data=[
+        #         (
+        #             model_block.var_capex.value + model_block.var_capex_ccs.value
+        #             if hasattr(model_block, "var_capex_ccs")
+        #             else 0
+        #         )
+        #     ],
+        # )
+        # h5_group.create_dataset(
+        #     "opex_variable",
+        #     data=[
+        #         sum(
+        #             (
+        #                 model_block.var_opex_variable[t].value
+        #                 + model_block.var_opex_variable_ccs.value
+        #                 if hasattr(model_block, "var_opex_variable_ccs")
+        #                 else 0
+        #             )
+        #             for t in self.set_t_global
+        #         )
+        #     ],
+        # )
+        # h5_group.create_dataset(
+        #     "opex_fixed",
+        #     data=[
+        #         (
+        #             model_block.var_opex_fixed.value
+        #             + model_block.var_opex_fixed_ccs.value
+        #             if hasattr(model_block, "var_opex_fixed_ccs")
+        #             else 0
+        #         )
+        #     ],
+        # )
+        # h5_group.create_dataset(
+        #     "emissions_pos",
+        #     data=[
+        #         sum(
+        #             model_block.var_tec_emissions_pos[t].value
+        #             for t in self.set_t_global
+        #         )
+        #     ],
+        # )
+        # h5_group.create_dataset(
+        #     "emissions_neg",
+        #     data=[
+        #         sum(
+        #             model_block.var_tec_emissions_neg[t].value
+        #             for t in self.set_t_global
+        #         )
+        #     ],
+        # )
+        # if self.ccs_possible:
+        #     h5_group.create_dataset("size_ccs", data=[model_block.var_size_ccs.value])
+        #     h5_group.create_dataset("capex_tec", data=[model_block.var_capex.value])
+        #     h5_group.create_dataset("capex_ccs", data=[model_block.var_capex_ccs.value])
+        #     h5_group.create_dataset(
+        #         "opex_fixed_ccs", data=[model_block.var_opex_fixed_ccs.value]
+        #     )
+        #
+        # h5_group.create_dataset(
+        #     "para_unitCAPEX", data=[model_block.para_unit_capex.value]
+        # )
+        # if hasattr(model_block, "para_fix_capex"):
+        #     h5_group.create_dataset(
+        #         "para_fixCAPEX", data=[model_block.para_fix_capex.value]
+        #     )
+
+    def write_results_compressor_operation(self, h5_group, model_block):
+        """
+        Function to report technology operation
+
+        :param model_block: pyomo network block
+        :param h5_group: h5 group to write to
+        """
+        # if model_block.find_component("var_flow"):
+        #     for car in model_block.set_input_carrier:
+        #         h5_group.create_dataset(
+        #             f"{car}_input",
+        #             data=[
+        #                 model_block.var_flow[t].value for t in self.set_t_global
+        #             ],
+        #         )
+
+        h5_group.create_dataset(
+            "flow", data=[model_block.var_flow[t].value for t in self.set_t_global]
+        )
+        # h5_group.create_dataset(
+        #     "emissions_pos",
+        #     data=[
+        #         model_block.var_tec_emissions_pos[t].value for t in self.set_t_global
+        #     ],
+        # )
+        # h5_group.create_dataset(
+        #     "emissions_neg",
+        #     data=[
+        #         model_block.var_tec_emissions_neg[t].value for t in self.set_t_global
+        #     ],
+        # )
+        # if model_block.find_component("var_x"):
+        #     h5_group.create_dataset(
+        #         "var_x",
+        #         data=[
+        #             0 if x is None else x
+        #             for x in [
+        #                 model_block.var_x[t].value for t in self.set_t_performance
+        #             ]
+        #         ],
+        #     )
+        # if model_block.find_component("var_y"):
+        #     h5_group.create_dataset(
+        #         "var_y",
+        #         data=[
+        #             0 if x is None else x
+        #             for x in [
+        #                 model_block.var_y[t].value for t in self.set_t_performance
+        #             ]
+        #         ],
+        #     )
+        # if model_block.find_component("var_z"):
+        #     h5_group.create_dataset(
+        #         "var_z",
+        #         data=[
+        #             0 if x is None else x
+        #             for x in [
+        #                 model_block.var_z[t].value for t in self.set_t_performance
+        #             ]
+        #         ],
+        #     )
+        #
+        # if model_block.find_component("set_input_carriers_ccs"):
+        #     for car in model_block.set_input_carriers_ccs:
+        #         h5_group.create_dataset(
+        #             f"{car}_var_input_ccs",
+        #             data=[
+        #                 model_block.var_input_ccs[t, car].value
+        #                 for t in self.set_t_performance
+        #             ],
+        #         )
+        #     for car in model_block.set_output_carriers_ccs:
+        #         h5_group.create_dataset(
+        #             f"{car}_var_output_ccs",
+        #             data=[
+        #                 model_block.var_output_ccs[t, car].value
+        #                 for t in self.set_t_performance
+        #             ],
+        #         )

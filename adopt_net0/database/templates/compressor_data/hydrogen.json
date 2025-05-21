@@ -60,7 +60,19 @@
     "SD_time": -1,
     "SU_load": -1,
     "SD_load": -1,
-    "max_startups": -1
+    "max_startups": -1,
+    "max_pressure_per_stage": 2.1,
+    "energyconsumption": {
+      "electricity": {
+        "cons_model": 2,
+        "p": 85,
+        "c": 0.00398,
+        "T": 300,
+        "eta": 0.65,
+        "gam": 1.405,
+        "LHV": 33.32
+      }
+    }
   },
   "Units": {
     "size": "MW",
