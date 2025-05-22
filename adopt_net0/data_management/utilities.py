@@ -190,6 +190,19 @@ def open_json(component: str, load_path: Path) -> dict:
 
 
 def get_pressure_info(component, carrier: str, direction: str) -> dict:
+    """
+    Obtains pressure-related information for a given component, carrier, and flow direction (input/output).
+
+    :param component: the component from which to extract pressure data
+    :param str carrier: the energy carrier for which pressure data is requested
+    :param str direction: either 'Input' or 'Output', specifying whether to retrieve inlet or outlet pressure
+
+    :return dict: A dictionary containing:
+            - "name": name of the component.
+            - "pressure": the inlet or outlet pressure associated with the specified carrier and component.
+            - "type": the type of the component ('Technology' or 'Network').
+            - "existing": 1 if the component is existing; 0 otherwise.
+    """
     pressure_data = component.performance_data["pressure"]
     component_name = component.name
     pressure = ()

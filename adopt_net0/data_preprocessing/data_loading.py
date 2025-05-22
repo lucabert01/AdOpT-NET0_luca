@@ -111,7 +111,10 @@ def fill_carrier_data(
         "Export price",
         "Import emission factor",
         "Export emission factor",
-        "Demand pressure" "Import pressure" "Export pressure" "Generic production",
+        "Demand pressure",
+        "Import pressure",
+        "Export pressure",
+        "Generic production",
     ]
 
     for period in (
@@ -244,7 +247,18 @@ def copy_network_data(folder_path: str | Path, ntw_data_path: str | Path = None)
 
 # TODO: fix this function
 def copy_compressor_data(folder_path: str | Path, compr_data_path: str | Path = None):
+    """
+    Copies compressor JSON files to the compressor_data folder for each investment period.
 
+    This function reads the topology JSON file to determine the existing and new compressors for
+    each investment period. It then searches for the corresponding JSON files in the specified `compr_data_path`
+    folder (and its subfolders) using the compressor names and copies them to folder_path.
+
+    :param str | Path folder_path: Path to the folder containing the case study data.
+    :param str | Path compr_data_path: Path to the folder containing the compressors data (if left
+    empty, standard folder is used).
+    :return: None
+    """
     config_file_path = folder_path / "ConfigModel.json"
     with open(config_file_path, "r") as json_file:
         config = json.load(json_file)

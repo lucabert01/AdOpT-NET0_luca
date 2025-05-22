@@ -59,7 +59,7 @@ def create_carrier_data(timesteps: pd.date_range) -> pd.DataFrame:
     Creates a data frame with carrier data
 
     :param pd.date_range timesteps: timesteps used as index
-    :return: Data frame with two columns "Demand", "Import limit", "Export limit", "Import price", "Export price", "Import emission factor", "Export emission factor", "Generic production",
+    :return: Data frame with two columns "Demand", "Import limit", "Export limit", "Import price", "Export price", "Import emission factor", "Export emission factor", "Demand pressure", "Export pressure", "Import pressure","Generic production",
     :rtype: pd.DataFrame
     """
     carrier_data = pd.DataFrame(
@@ -72,6 +72,9 @@ def create_carrier_data(timesteps: pd.date_range) -> pd.DataFrame:
             "Export price",
             "Import emission factor",
             "Export emission factor",
+            "Demand pressure",
+            "Export pressure",
+            "Import pressure",
             "Generic production",
         ],
     )

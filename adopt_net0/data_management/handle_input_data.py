@@ -30,8 +30,8 @@ class DataHandle:
     :param dict model_config: Container for the model configuration
     :param dict k_means_specs: Container for k-means clustering algorithm specifications
     :param dict averaged_specs: Container for averaging algorithm specifications
-
-    :param dict connection_pressures: Container for alla connection of outputs inputs and their pressures
+    :param dict connection_pressures: Container for all connection of outputs and inputs and their pressures
+    :param dict compressor_data: Container for compressor data
     :param int, None start_period: starting period to use, if None, the first available period is used
     :param int, None end_period: end period to use, if None, the last available period is used
     """
@@ -44,9 +44,9 @@ class DataHandle:
         self.data_path = Path()
         self.time_series = {}
         self.energybalance_options = {}
-        self.connection_pressures = {}
         self.technology_data = {}
         self.network_data = {}
+        self.connection_pressures = {}
         self.compressor_data = {}
         self.node_locations = pd.DataFrame()
         self.model_config = {}
@@ -704,13 +704,15 @@ class DataHandle:
 
     def calculate_possible_compressions(self):
         """
-        Create a dictionary with for each carrier, for which pressure level are considered, at each node,
-        considering all the possible connections between output and input for same carrier for different component.
-        The dictionary will have alla the possible connections and their pressures saved
+        Creates a dictionary that stores all possible compression connections for each carrier with defined pressure levels,
+        at each node. It identifies all valid connections where the same carrier is used as both input and output across
+        different components (e.g., technologies, networks, demand, import/export).
 
+        The resulting dictionary contains:
+            - All feasible input-output connections for the same carrier.
+            - Associated pressure levels for each connection.
+            - Relevant information about the two components involved in each connection (existing, type).
         """
-        # connection_pressures = {}
-
         target_carriers = self.model_config["performance"]["pressure"][
             "pressure_carriers"
         ]["value"]
@@ -736,6 +738,15 @@ class DataHandle:
         log.info(log_msg)
 
     def _collect_pressure_info_at_node(self, carrier_i, investment_period, node_i):
+        """
+        Collects all possible connections at a given node for a specific carrier and investment period.
+        This includes connections where the same carrier is used as input and output
+        across technologies, networks, demand, import, and export.
+
+        :param carrier_i: energy carrier for which connections are being collected
+        :param investment_period: investment period under consideration
+        :param node_i: node at which connections are being created
+        """
         pressure_data_at_node = {
             "inputs": [],
             "outputs": [],
@@ -825,8 +836,6 @@ class DataHandle:
     def _read_compressor_data(self):
         """
         Reads all compressor data and fits it
-
-        :param str aggregation_model: specifies the aggregation type and thus the dict key to write the data to
         """
         # compressor data always fitted based on full resolution
         aggregation_model = "full"

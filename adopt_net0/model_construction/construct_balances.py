@@ -105,6 +105,35 @@ def construct_network_constraints(model, config: dict):
 
 
 def construct_compressor_constrains(model, config: dict):
+    """
+    Construct the compressor constraints to calculate inflow and outflow for each compressor
+    For each carrier consider with pressure, at each node:
+
+    .. math::
+      inflowFromTechnology = \\sum(flow \for all compressor that as the technology as inflow)\\
+
+    .. math::
+      inflowFromNetwork = \\sum(flow \for all compressor that as the network as inflow)\\
+
+    .. math::
+      outflowToTechnology = \\sum(flow \for all compressor that as the technology as outflow)\\
+
+    .. math::
+      outflowToNetwork = \\sum(flow \for all compressor that as the network as outflow)\\
+
+    .. math::
+      outflowToDemand = \\sum(flow \for all compressor that as the demand as outflow)\\
+
+    .. math::
+      outflowToExport = \\sum(flow \for all compressor that as the export as outflow)\\
+
+    .. math::
+      inflowToImport = \\sum(flow \for all compressor that as the import as inflow)\\
+
+    :param model: pyomo model
+    :param dict config: dict containing model information
+    :return: pyomo model
+    """
 
     def init_compressor_constraints(b_compr_const, period, node, car):
         """Pyomo rule to generate compressor constraint block"""
@@ -243,7 +272,7 @@ def construct_nodal_energybalance(model, config: dict):
     .. math::
         outputFromTechnologies - inputToTechnologies + \\
         inflowFromNetwork - outflowToNetwork - consumptionNetwork+ \\
-        imports - exports + compression + violation = demand - genericProductionProfile
+        imports - exports + consumptionCompression + violation = demand - genericProductionProfile
 
     :param model: pyomo model
     :param dict config: dict containing model information
@@ -686,8 +715,8 @@ def construct_system_cost(model, data):
     - Total cost per investment period as a sum of technology, network, import,
       export, violation and carbon costs
       If considering pressure levels:
-    -Total capex of compressors
-    -Total opex of compressors
+        -Total capex of compressors
+        -Total opex of compressors
 
     :param model: pyomo model
     :param dict config: dict containing model information

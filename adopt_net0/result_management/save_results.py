@@ -313,12 +313,12 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
 
                 if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                     for compr_name in b_node.set_compressor:
-                        compressor_name = list(
-                            b_node.compressor_blocks_active[compr_name].set_name.data()
-                        )[0]
+                        compressor_name = str(
+                            b_node.compressor_blocks_active[compr_name].para_name.value
+                        )
                         compr_group = node_specific_group.create_group(compressor_name)
                         b_compr = b_node.compressor_blocks_active[compr_name]
-                        if b_compr.set_active.data()[0] == 1:
+                        if b_compr.para_active.value == 1:
                             data.compressor_data[period][node_name][
                                 compr_name
                             ].write_results_compressor_design(compr_group, b_compr)
@@ -360,10 +360,10 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
 
                 # if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                 #     for compr_name in b_node.set_compressor:
-                #         compressor_name = list(b_node.compressor_blocks_active[compr_name].set_name.data())[0]
+                #         compressor_name = list(b_node.compressor_blocks_active[compr_name].para_name.data())[0]
                 #         compr_group = node_specific_group.create_group(compressor_name)
                 #         b_compr = b_node.compressor_blocks_active[compr_name]
-                #         if b_compr.set_active.data()[0] == 1:
+                #         if b_compr.para_active.data()[0] == 1:
                 #             data.compressor_data[period][node_name][
                 #                 compr_name
                 #             ].write_results_compressor_design(compr_group, b_compr)

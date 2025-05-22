@@ -23,13 +23,24 @@ log = logging.getLogger(__name__)
 
 class Compressor(ModelComponent):
     """
-    Class to read and manage compression features
+    Class to read and manage data for compressors
+
+    **Set declarations:**
+
+    **Parameter declarations:**
+
+    **Variable declarations:**
+
+    **Arc Block declaration**
+
+    **Network constraint declarations**
+
 
     """
 
     def __init__(self, compr_data: dict):
         """
-        Initializes compression class from compressor data
+        Initializes compressor class from compressor data
 
         :param dict compr_data: compressor data
         """
@@ -68,6 +79,8 @@ class Compressor(ModelComponent):
         Fits compressor performance (bounds and coefficients).
         """
 
+        # TODO: double check on this
+
         # what do we need here?
         # from other classes: there are some parameter time independent that are saved here in self
 
@@ -95,6 +108,15 @@ class Compressor(ModelComponent):
     def construct_compressor_model(
         self, b_compr, data: dict, set_t_full, set_t_clustered
     ):
+        """
+        Construct the compressor model with all required parameters, variable, sets,...
+
+        :param b_compr: pyomo block with compressor model
+        :param dict data: data containing model configuration
+        :param set_t_full: pyomo set containing timesteps
+        :param set_t_clustered: pyomo set containing clustered timesteps
+        :return: pyomo block with compressor model
+        """
 
         # LOG
         log_msg = f"\t - Adding Compressor {self.name}"
@@ -150,7 +172,7 @@ class Compressor(ModelComponent):
         b_compr = self._define_output_pressure(b_compr)  # can I delete it?
         b_compr = self._define_input_pressure(b_compr)  # can I delete it?
         b_compr = self._define_carrier(b_compr)  # can I delete it?
-        b_compr = self._define_flow(b_compr, data)
+        b_compr = self._define_flow(b_compr)
         b_compr = self._define_compressor_name(b_compr)
         b_compr = self._define_compressor_active(b_compr)
         if self.compression_active == 1:
@@ -197,17 +219,17 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.set_name = pyo.Set(initialize=[self.name_compressor])
+        b_compr.para_name = pyo.Param(initialize=[self.name_compressor])
         return b_compr
 
     def _define_compressor_active(self, b_compr):
         """
-        Defines tif compressor is active
+        Defines if compressor is active
 
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.set_active = pyo.Set(initialize=[self.compression_active])
+        b_compr.para_active = pyo.Param(initialize=[self.compression_active])
         return b_compr
 
     def _define_output_component(self, b_compr):
@@ -217,7 +239,7 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.set_output_component = pyo.Set(initialize=[self.output_component])
+        b_compr.para_output_component = pyo.Param(initialize=[self.output_component])
         return b_compr
 
     def _define_output_pressure(self, b_compr):
@@ -227,7 +249,7 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.set_output_pressure = pyo.Param(initialize=self.output_pressure)
+        b_compr.para_output_pressure = pyo.Param(initialize=self.output_pressure)
         return b_compr
 
     def _define_input_component(self, b_compr):
@@ -237,36 +259,35 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.set_input_component = pyo.Set(initialize=[self.input_component])
+        b_compr.para_input_component = pyo.Param(initialize=[self.input_component])
         return b_compr
 
     def _define_input_pressure(self, b_compr):
         """
-        Defines the pressure to input component
+        Defines the pressure of input component
 
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.set_input_pressure = pyo.Param(initialize=self.input_pressure)
+        b_compr.para_input_pressure = pyo.Param(initialize=self.input_pressure)
         return b_compr
 
     def _define_carrier(self, b_compr):
         """
-        Defines the carrier
+        Defines the carrier of the compressor
 
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
         # to be fixed correctly
-        b_compr.set_input_carrier = pyo.Set(initialize=[self.input_carrier])
+        b_compr.para_input_carrier = pyo.Set(initialize=[self.input_carrier])
         return b_compr
 
-    def _define_flow(self, b_compr, data: dict):
+    def _define_flow(self, b_compr):
         """
         Defines variable for compressor flow.
 
         :param b_compr: pyomo block with compressor model
-        :param dict data: dict containing model information
         :return: pyomo block with compressor model
         """
 
@@ -342,9 +363,13 @@ class Compressor(ModelComponent):
         b_compr.var_capex = pyo.Var()
         return b_compr
 
-    def _define_capex_constraints(self, b_compr, data):
+    def _define_capex_constraints(self, b_compr, data: dict):
         """
         Defines constraints related to compressor capex.
+
+        :param b_compr: pyomo block with compressor model
+        :param dict data: dict containing model information
+        :return: pyomo block with compressor model
         """
         config = data["config"]
         economics = self.economics
@@ -463,7 +488,7 @@ class Compressor(ModelComponent):
 
         return b_compr
 
-    def _define_opex(self, b_compr, data):
+    def _define_opex(self, b_compr, data: dict):
         """
         Defines variable and fixed OPEX
 
