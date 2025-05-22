@@ -777,10 +777,18 @@ class DataHandle:
                             get_pressure_info(technologies_i, carrier_i, "Output")
                         )
 
+        info_node_exchange_pressure = self.time_series["full"][investment_period][
+            node_i
+        ]["CarrierData"][carrier_i]
+
         pressure_data_at_node["inputs"].append(
             {
                 "name": f"demand_{node_i}",
-                "pressure": 60,
+                "pressure": (
+                    info_node_exchange_pressure["Demand pressure"].iloc[0]
+                    if "Demand pressure" in info_node_exchange_pressure.columns
+                    else 50
+                ),
                 "type": "Exchange",
                 "existing": 1,
             }
@@ -789,7 +797,11 @@ class DataHandle:
         pressure_data_at_node["inputs"].append(
             {
                 "name": f"export_{node_i}",
-                "pressure": 40,
+                "pressure": (
+                    info_node_exchange_pressure["Export pressure"].iloc[0]
+                    if "Export pressure" in info_node_exchange_pressure.columns
+                    else 50
+                ),
                 "type": "Exchange",
                 "existing": 1,
             }
@@ -798,7 +810,11 @@ class DataHandle:
         pressure_data_at_node["outputs"].append(
             {
                 "name": f"import_{node_i}",
-                "pressure": 40,
+                "pressure": (
+                    info_node_exchange_pressure["Import pressure"].iloc[0]
+                    if "Import pressure" in info_node_exchange_pressure.columns
+                    else 50
+                ),
                 "type": "Exchange",
                 "existing": 1,
             }

@@ -371,12 +371,17 @@ class Compressor(ModelComponent):
             #     #     == (b_compr.para_size_initial - b_compr.var_size)
             #     #     * b_compr.para_decommissioning_cost_annual
             #     # )
-            b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
+            b_compr.const_capex = pyo.Constraint(
+                expr=b_compr.var_capex == 60000 + 56 * b_compr.var_size
+            )
+
         else:
             # b_compr.const_capex = pyo.Constraint(
             #     expr=b_compr.var_capex == b_compr.var_capex_aux
             # )
-            b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
+            b_compr.const_capex = pyo.Constraint(
+                expr=b_compr.var_capex == 60000 + 56 * b_compr.var_size
+            )
         return b_compr
 
     def _define_energyconsumption_parameters(self, b_compr):

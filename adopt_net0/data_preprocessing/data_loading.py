@@ -83,7 +83,8 @@ def fill_carrier_data(
     Updates carrier data for a time series based on a provided value or DataFrame and writes it to file.
 
     Allows you to update Demand, Import limit, Export limit, Import price,
-    Export price, Import emission factor, Export emission factor and/or Generic production.
+    Export price, Import emission factor, Export emission factor, Demand pressure,
+    Import pressure, Export pressure and/or Generic production.
 
     :param str folder_path: Path to the folder containing the case study data
     :param float | pd.DataFrame value_or_data: A float value to be applied or a DataFrame containing the new values for the carrier data
@@ -110,7 +111,7 @@ def fill_carrier_data(
         "Export price",
         "Import emission factor",
         "Export emission factor",
-        "Generic production",
+        "Demand pressure" "Import pressure" "Export pressure" "Generic production",
     ]
 
     for period in (
