@@ -29,9 +29,33 @@ class Compressor(ModelComponent):
 
     **Parameter declarations:**
 
+    The following is a list of declared pyomo parameters.
+
+    - para_name: name of the compressor, formatted as type_component1_component2_(existing)
+    - para_active: equals 1 if the compressor is active (a pressure increase is needed); otherwise equals to 0
+    - para_output_component: name of the component that outputs the carrier to the compressor
+    - para_output_pressure: pressure of the carrier at the output of the component that feeds the compressor
+    - para_input_component: name of the component that receives the carrier as input from the compressor
+    - para_input_pressure: pressure of the carrier at the input of the component fed by the compressor
+    - para_input_carrier: carrier that flows through the compressor
+    - para_unit_capex: investment costs per unit
+    - para_unit_capex_annual: Unit CAPEX annualized (annualized from given data on
+      up-front CAPEX, lifetime and discount rate)
+    - para_fix_capex: fixed costs independent of size
+    - para_fix_capex_annual: Fixed CAPEX annualized (annualized from given data on
+      up-front CAPEX, lifetime and discount rate)
+    - para_opex_variable: operational cost EUR/output or input
+    - para_opex_fixed: fixed opex as fraction of up-front capex
+
     **Variable declarations:**
 
-    **Arc Block declaration**
+    - var_flow: flow that is processed by the compressor
+    - var_consumption_energy: energy consumption required by the compressor to raise the pressure (only for if active)
+    - var_size: size of the compressor (only if active)
+    - var_capex: annualized investment of the compressor (only if active)
+    - var_opex_variable: variable operation costs, defined for each time slice
+    - var_opex_fixed: fixed operational costs as fraction of up-front CAPEX
+    - var_capex_aux: auxiliary variable to calculate the fixed opex of existing compressor
 
     **Network constraint declarations**
 
@@ -219,7 +243,7 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.para_name = pyo.Param(initialize=[self.name_compressor])
+        b_compr.para_name = pyo.Param(initialize=[self.name_compressor], within=pyo.Any)
         return b_compr
 
     def _define_compressor_active(self, b_compr):
@@ -229,7 +253,9 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.para_active = pyo.Param(initialize=[self.compression_active])
+        b_compr.para_active = pyo.Param(
+            initialize=[self.compression_active], within=pyo.Any
+        )
         return b_compr
 
     def _define_output_component(self, b_compr):
@@ -239,7 +265,9 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.para_output_component = pyo.Param(initialize=[self.output_component])
+        b_compr.para_output_component = pyo.Param(
+            initialize=[self.output_component], within=pyo.Any
+        )
         return b_compr
 
     def _define_output_pressure(self, b_compr):
@@ -249,7 +277,9 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.para_output_pressure = pyo.Param(initialize=self.output_pressure)
+        b_compr.para_output_pressure = pyo.Param(
+            initialize=self.output_pressure, within=pyo.Any
+        )
         return b_compr
 
     def _define_input_component(self, b_compr):
@@ -259,7 +289,9 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.para_input_component = pyo.Param(initialize=[self.input_component])
+        b_compr.para_input_component = pyo.Param(
+            initialize=[self.input_component], within=pyo.Any
+        )
         return b_compr
 
     def _define_input_pressure(self, b_compr):
@@ -269,7 +301,9 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        b_compr.para_input_pressure = pyo.Param(initialize=self.input_pressure)
+        b_compr.para_input_pressure = pyo.Param(
+            initialize=self.input_pressure, within=pyo.Any
+        )
         return b_compr
 
     def _define_carrier(self, b_compr):
@@ -280,7 +314,9 @@ class Compressor(ModelComponent):
         :return: pyomo block with compressor model
         """
         # to be fixed correctly
-        b_compr.para_input_carrier = pyo.Set(initialize=[self.input_carrier])
+        b_compr.para_input_carrier = pyo.Param(
+            initialize=[self.input_carrier], within=pyo.Any
+        )
         return b_compr
 
     def _define_flow(self, b_compr):
