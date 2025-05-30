@@ -35,7 +35,7 @@ def save_figure_for_paper(fig, filename, file_path_results):
     fig.set_size_inches(width_in, height_in)
 
 
-    # Save in PDF and JPG formats
+    # # Save in PDF and JPG formats
     fig.savefig(file_path_results / f"{filename}.pdf", format='pdf', bbox_inches='tight')
     fig.savefig(file_path_results / f"{filename}.jpg", format='jpeg', dpi=300, bbox_inches='tight')
 
@@ -157,7 +157,19 @@ plt.show()
 
 
 
-
+# Plot emission cement and emission WtE
+fig5 = plt.figure(figsize=(10, 6))
+plt.plot(days/365, emission_cement, color=batlow_colors[1], linewidth=2, label='Cement')
+plt.plot(days/365, emission_w2e, color=batlow_colors[2], linewidth=2, label='WtE')
+plt.xlabel('Time [y]')
+plt.ylabel('CO$_2$ emissions [t/day]')
+plt.ylim(0, max(emission_cement) * 1.5)
+# plt.title('Quality of the pump fit')
+plt.legend()
+plt.tight_layout()
+plt.xlim(0, 1800/365)
+save_figure_for_paper(fig5, "emissionsCementWtE_appendix", path_plot)
+plt.show()
 
 
 # Plotting power pump
