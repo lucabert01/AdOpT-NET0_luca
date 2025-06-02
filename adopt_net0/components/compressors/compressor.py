@@ -60,6 +60,7 @@ class Compressor(ModelComponent):
     **Network constraint declarations**
 
 
+
     """
 
     def __init__(self, compr_data: dict):
@@ -480,7 +481,7 @@ class Compressor(ModelComponent):
             / math.log(self.pressure_per_stage)
         )
         isentropic_efficiency = 0.85
-        R = 8.314  # kJ/mol/K
+        R = 8.314  # kJ/kmol/K
         k = 1.4
         T_in = 298.15  # K
         Z = 1
@@ -488,11 +489,11 @@ class Compressor(ModelComponent):
         # TODO: write correctly with units
         def init_compr_energy(b, t, car):
             """
-            Define energy for compression in J
+            Define energy for compression in MJ
             """
             return b_compr.var_consumption_energy[t, car] == Z * (
-                b_compr.var_flow[t] / 3600 / 2
-            ) / 100 * T_in * R * n_stages * (k / (k - 1)) * (
+                b_compr.var_flow[t] / 120 / 2
+            ) * T_in * (R / 1000) * n_stages * (k / (k - 1)) * (
                 1 / isentropic_efficiency
             ) * (
                 (self.input_pressure / self.output_pressure)

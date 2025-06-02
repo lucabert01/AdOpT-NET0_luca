@@ -22,6 +22,7 @@ dp.copy_compressor_data(path, "path to compressor data")
 # Read climate data and fill carried data (comment these lines if already defined)
 dp.load_climate_data_from_api(path)
 dp.fill_carrier_data(path, value=0)
+dp.fill_carrier_pressure_data(path, value=0)
 
 # Construct and solve the model
 pyhub = ModelHub()

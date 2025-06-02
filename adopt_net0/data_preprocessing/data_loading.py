@@ -111,9 +111,6 @@ def fill_carrier_data(
         "Export price",
         "Import emission factor",
         "Export emission factor",
-        "Demand pressure",
-        "Import pressure",
-        "Export pressure",
         "Generic production",
     ]
 
@@ -150,6 +147,73 @@ def fill_carrier_data(
                     parents=True, exist_ok=True
                 )  # Ensure directory exists
                 existing_data.to_csv(output_file, index=False, sep=";")
+
+
+def fill_carrier_pressure_data(
+    folder_path: str | Path,
+    value_or_data: float | pd.DataFrame,
+    connection: list = [],
+    carriers: list = [],
+    nodes: list = [],
+    investment_periods: list = None,
+):
+    # Convert to Path
+    if isinstance(folder_path, str):
+        folder_path = Path(folder_path)
+
+    # Read the topology json file
+    json_file_path = folder_path / "Topology.json"
+    with open(json_file_path, "r") as json_file:
+        topology = json.load(json_file)
+
+    for period in (
+        investment_periods if investment_periods else topology["investment_periods"]
+    ):
+        for node_name in nodes if nodes else topology["nodes"]:
+            for car in carriers if carriers else topology["carriers"]:
+                # Path to JSON file
+                output_file = (
+                    folder_path
+                    / period
+                    / "node_data"
+                    / node_name
+                    / "carrier_data"
+                    / "PressureExchangeData.json"
+                )
+
+                # Load existing data if the file exists
+                if output_file.exists():
+                    with open(output_file, "r") as f:
+                        existing_data = json.load(f)
+                else:
+                    existing_data = {}
+
+                # Ensure structure exists
+                if car not in existing_data:
+                    existing_data[car] = {}
+                for conn in connection:
+                    if conn not in existing_data[car]:
+                        existing_data[car][conn] = ""
+
+                    # Convert the value to something JSON serializable
+                    if isinstance(value_or_data, pd.DataFrame):
+                        data_to_store = (
+                            value_or_data.where(pd.notnull(value_or_data), None)
+                            .astype(object)
+                            .to_dict(orient="list")
+                        )
+                    elif hasattr(value_or_data, "item"):
+                        data_to_store = value_or_data.item()
+                    else:
+                        data_to_store = value_or_data
+
+                    # Update the correct field only
+                    existing_data[car][conn] = data_to_store
+
+                # Save updated JSON file
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(output_file, "w") as f:
+                    json.dump(existing_data, f, indent=4)
 
 
 def copy_technology_data(folder_path: str | Path, tec_data_path: str | Path = None):

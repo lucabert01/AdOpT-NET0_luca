@@ -44,6 +44,7 @@ class DataHandle:
         self.data_path = Path()
         self.time_series = {}
         self.energybalance_options = {}
+        self.connection_pressure_options = {}
         self.technology_data = {}
         self.network_data = {}
         self.connection_pressures = {}
@@ -100,6 +101,7 @@ class DataHandle:
         self._read_time_series()
         self._read_node_locations()
         self._read_energybalance_options()
+        self._read_pressure_connection_options()
         self._read_technology_data()
         self._read_network_data()
         if self.model_config["performance"]["pressure"]["pressure_on"]["value"] == 1:
@@ -302,6 +304,30 @@ class DataHandle:
 
         # Log success
         log_msg = "Energy balance options read successfully"
+        log.info(log_msg)
+
+    def _read_pressure_connection_options(self):
+        """
+        Reads energy balance options
+        """
+        for investment_period in self.topology["investment_periods"]:
+            self.connection_pressure_options[investment_period] = {}
+            for node in self.topology["nodes"]:
+                with open(
+                    self.data_path
+                    / investment_period
+                    / "node_data"
+                    / node
+                    / "carrier_data"
+                    / "PressureExchangeData.json"
+                ) as json_file:
+                    connection_pressure_options = json.load(json_file)
+                self.connection_pressure_options[investment_period][
+                    node
+                ] = connection_pressure_options
+
+        # Log success
+        log_msg = "Connection pressure options read successfully"
         log.info(log_msg)
 
     def _read_technology_data(self):
@@ -788,18 +814,14 @@ class DataHandle:
                             get_pressure_info(technologies_i, carrier_i, "Output")
                         )
 
-        info_node_exchange_pressure = self.time_series["full"][investment_period][
-            node_i
-        ]["CarrierData"][carrier_i]
+        info_node_exchange_pressure = self.connection_pressure_options[
+            investment_period
+        ][node_i][carrier_i]
 
         pressure_data_at_node["inputs"].append(
             {
                 "name": f"demand_{node_i}",
-                "pressure": (
-                    info_node_exchange_pressure["Demand pressure"].iloc[0]
-                    if "Demand pressure" in info_node_exchange_pressure.columns
-                    else 50
-                ),
+                "pressure": (info_node_exchange_pressure["Demand"]),
                 "type": "Exchange",
                 "existing": 1,
             }
@@ -808,11 +830,7 @@ class DataHandle:
         pressure_data_at_node["inputs"].append(
             {
                 "name": f"export_{node_i}",
-                "pressure": (
-                    info_node_exchange_pressure["Export pressure"].iloc[0]
-                    if "Export pressure" in info_node_exchange_pressure.columns
-                    else 50
-                ),
+                "pressure": (info_node_exchange_pressure["Export"]),
                 "type": "Exchange",
                 "existing": 1,
             }
@@ -821,11 +839,7 @@ class DataHandle:
         pressure_data_at_node["outputs"].append(
             {
                 "name": f"import_{node_i}",
-                "pressure": (
-                    info_node_exchange_pressure["Import pressure"].iloc[0]
-                    if "Import pressure" in info_node_exchange_pressure.columns
-                    else 50
-                ),
+                "pressure": (info_node_exchange_pressure["Import"]),
                 "type": "Exchange",
                 "existing": 1,
             }

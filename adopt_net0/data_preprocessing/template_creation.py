@@ -101,6 +101,9 @@ def create_input_data_folder_template(base_path: Path | str):
     with open(base_path / "Topology.json") as json_file:
         topology = json.load(json_file)
 
+    with open(base_path / "ConfigModel.json") as json_file:
+        configuration = json.load(json_file)
+
     timesteps = pd.date_range(
         start=topology["start_date"],
         end=topology["end_date"],
@@ -112,6 +115,13 @@ def create_input_data_folder_template(base_path: Path | str):
     technologies = {"existing": {}, "new": []}
     energy_balance_options = {
         carrier: {"curtailment_possible": 0} for carrier in topology["carriers"]
+    }
+
+    pressure_exchange_data = {
+        carrier: {"Demand": "", "Export": "", "Import": ""}
+        for carrier in configuration["performance"]["pressure"]["pressure_carriers"][
+            "value"
+        ]
     }
 
     # Template csvs
@@ -217,6 +227,16 @@ def create_input_data_folder_template(base_path: Path | str):
                 "w",
             ) as f:
                 json.dump(energy_balance_options, f, indent=4)
+            with open(
+                base_path
+                / investment_period
+                / "node_data"
+                / node
+                / "carrier_data"
+                / "PressureExchangeData.json",
+                "w",
+            ) as f:
+                json.dump(pressure_exchange_data, f, indent=4)
             for carrier in topology["carriers"]:
                 carrier_data.to_csv(
                     base_path
