@@ -221,7 +221,7 @@ def construct_compressor_constrains(model, config: dict):
                 return b_node.para_demand[t, car] == sum(
                     b_node.compressor_blocks_active[compressor].var_flow[t]
                     for compressor in b_node.set_compressor
-                    if (compressor[0] == car) and (compressor[2] == f"demand_{node}")
+                    if (compressor[0] == car) and (compressor[2] == "Demand")
                 )
 
             b_compr_const.const_compr_outflow_demand = pyo.Constraint(
@@ -233,7 +233,7 @@ def construct_compressor_constrains(model, config: dict):
                 return b_node.var_export_flow[t, car] == sum(
                     b_node.compressor_blocks_active[compressor].var_flow[t]
                     for compressor in b_node.set_compressor
-                    if (compressor[0] == car) and (compressor[2] == f"export_{node}")
+                    if (compressor[0] == car) and (compressor[2] == "Export")
                 )
 
             b_compr_const.const_compr_outflow_export = pyo.Constraint(
@@ -245,7 +245,7 @@ def construct_compressor_constrains(model, config: dict):
                 return b_node.var_import_flow[t, car] == sum(
                     b_node.compressor_blocks_active[compressor].var_flow[t]
                     for compressor in b_node.set_compressor
-                    if (compressor[0] == car) and (compressor[1] == f"import_{node}")
+                    if (compressor[0] == car) and (compressor[1] == "Import")
                 )
 
             b_compr_const.const_compr_inflow_import = pyo.Constraint(

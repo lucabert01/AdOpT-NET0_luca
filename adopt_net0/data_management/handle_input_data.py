@@ -101,10 +101,10 @@ class DataHandle:
         self._read_time_series()
         self._read_node_locations()
         self._read_energybalance_options()
-        self._read_pressure_connection_options()
         self._read_technology_data()
         self._read_network_data()
         if self.model_config["performance"]["pressure"]["pressure_on"]["value"] == 1:
+            self._read_pressure_connection_options()
             self.calculate_possible_compressions()
             self._read_compressor_data()
 
@@ -308,7 +308,7 @@ class DataHandle:
 
     def _read_pressure_connection_options(self):
         """
-        Reads energy balance options
+        Reads connection pressure options
         """
         for investment_period in self.topology["investment_periods"]:
             self.connection_pressure_options[investment_period] = {}
@@ -322,6 +322,15 @@ class DataHandle:
                     / "PressureExchangeData.json"
                 ) as json_file:
                     connection_pressure_options = json.load(json_file)
+
+                    # CHeck for correct data
+                    for carrier, connections in connection_pressure_options.items():
+                        for connection_type, value in connections.items():
+                            if not isinstance(value, (int, float)):
+                                raise ValueError(
+                                    f"Invalid pressure value at node '{node}', carrier '{carrier}', connection '{connection_type}': {value}"
+                                )
+
                 self.connection_pressure_options[investment_period][
                     node
                 ] = connection_pressure_options
@@ -820,7 +829,7 @@ class DataHandle:
 
         pressure_data_at_node["inputs"].append(
             {
-                "name": f"demand_{node_i}",
+                "name": "Demand",
                 "pressure": (info_node_exchange_pressure["Demand"]),
                 "type": "Exchange",
                 "existing": 1,
@@ -829,7 +838,7 @@ class DataHandle:
 
         pressure_data_at_node["inputs"].append(
             {
-                "name": f"export_{node_i}",
+                "name": "Export",
                 "pressure": (info_node_exchange_pressure["Export"]),
                 "type": "Exchange",
                 "existing": 1,
@@ -838,7 +847,7 @@ class DataHandle:
 
         pressure_data_at_node["outputs"].append(
             {
-                "name": f"import_{node_i}",
+                "name": "Import",
                 "pressure": (info_node_exchange_pressure["Import"]),
                 "type": "Exchange",
                 "existing": 1,
