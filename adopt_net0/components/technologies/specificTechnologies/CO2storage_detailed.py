@@ -101,6 +101,7 @@ class CO2storageDetailed(Technology):
         phi = self.processed_coeff.time_independent['matrices_data']['phi']
         WI = self.processed_coeff.time_independent['matrices_data']['WI']
         mobTotal = self.processed_coeff.time_independent['matrices_data']['mobTotal']
+        self.processed_coeff.time_independent['matrices_data']['c_alpha_co2'] = 1
         c_alpha_co2 = self.processed_coeff.time_independent['matrices_data']['c_alpha_co2']
         rho_co2_reservoir = 887.8 # at 25C and 166 bar (average pressure in training run)
         self.processed_coeff.time_independent["rho_co2_surface"] = 876.5
@@ -128,7 +129,7 @@ class CO2storageDetailed(Technology):
         nu = 1/self.processed_coeff.time_independent["rho_co2_surface"]
         eta_pump = 0.75
         pout_min = whp_t0[0,0] + p_loss_offshorepipeline
-        range_delta_p = [pout_min, 115]  # in bar
+        range_delta_p = [pout_min, 108.5]  # in bar
         range_flowrate = [0, 4000]  # in t/day
 
         def compute_W_pump(m_dot, p_pump_out):

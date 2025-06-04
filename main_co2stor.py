@@ -147,7 +147,7 @@ adopt.fill_carrier_data(path, value_or_data=cement_emissions/3*2, columns=['Dema
 adopt.fill_carrier_data(path, value_or_data=waste_emissions/2, columns=['Demand'], carriers=['waste'], nodes=['industrial_cluster'])
 
 carbon_price = carbon_price_timeseries['price'].values
-carbon_price = np.linspace(100, 170, 8760)
+carbon_price = np.linspace(100, 190, 8760)
 carbon_cost_path = path / "period1" / "node_data" / "industrial_cluster" /"CarbonCost.csv"
 carbon_cost_template = pd.read_csv(carbon_cost_path, sep=';', index_col=0, header=0)
 carbon_cost_template['price'] = carbon_price

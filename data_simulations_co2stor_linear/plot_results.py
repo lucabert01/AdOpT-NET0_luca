@@ -41,7 +41,7 @@ def save_figure_for_paper(fig, filename, file_path_results):
 
 
 
-file_path = Path(__file__).parent.parent/"userData/FullRun20241210/optimization_results.h5"
+file_path = Path(__file__).parent.parent/"userData/20250602234844-1/optimization_results.h5"
 
 
 print_h5_tree(file_path)
@@ -53,7 +53,7 @@ with h5py.File(file_path, 'r') as hdf_file:
 print(df_operation)
 rho_co2_surface = 876.5
 convert_inj_rate = 1/(rho_co2_surface*3.6)
-pmax = 210
+pmax = 210*0.9
 cement_output_df = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'CementEmitter')]
 w2e_output_df = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'WasteToEnergyEmitter')]
 co2stor_results_df = df_operation.loc[:, ("technology_operation", "period1","storage", "PermanentStorage_CO2_detailed")]
@@ -138,10 +138,10 @@ ax1.set_ylim(max(average_inj_rate) * 0.6, max(average_inj_rate) * 1.1)
 ax2 = ax1.twinx()
 color2 = batlow_colors[2]
 ax2.plot(days / 365, bhp, color=color2, linewidth=2, label='BHP')
-ax2.axhline(y=pmax, color=color2, linestyle='--', linewidth=1, label='p$_{max}$')
+ax2.axhline(y=pmax, color=color2, linestyle='--', linewidth=1, label='Safety pressure')
 ax2.set_ylabel('Pressure [bar]')
 ax2.tick_params(axis='y', labelsize=14)
-ax2.set_ylim(min(bhp) * 0.80, pmax * 1.04)
+ax2.set_ylim(min(bhp) * 0.9, pmax * 1.04)
 
 # Set common x-axis
 ax1.set_xlabel('Time [y]')
