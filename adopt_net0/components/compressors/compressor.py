@@ -201,13 +201,15 @@ class Compressor(ModelComponent):
         b_compr = self._define_compressor_name(b_compr)
         b_compr = self._define_compressor_active(b_compr)
         if self.compression_active == 1:
+            b_compr = self._define_size_fluid(b_compr)
             b_compr = self._define_energyconsumption_parameters(b_compr)
             b_compr = self._define_energy_consumption(b_compr, data)
-            b_compr = self._define_size(b_compr)
-            b_compr = self._define_capex_parameters(b_compr, data)
-            b_compr = self._define_capex_variables(b_compr, data)
-            b_compr = self._define_capex_constraints(b_compr, data)
             b_compr = self._define_opex(b_compr, data)
+            if self.existing == 0:
+                b_compr = self._define_size(b_compr)
+                b_compr = self._define_capex_parameters(b_compr, data)
+                b_compr = self._define_capex_variables(b_compr, data)
+                b_compr = self._define_capex_constraints(b_compr, data)
 
         # EXISTING TECHNOLOGY CONSTRAINTS
         # if self.existing and self.component_options.decommission == "only_complete":
@@ -434,7 +436,7 @@ class Compressor(ModelComponent):
             #     #     * b_compr.para_decommissioning_cost_annual
             #     # )
             b_compr.const_capex = pyo.Constraint(
-                expr=b_compr.var_capex == 60000 + 56 * b_compr.var_size
+                expr=b_compr.var_capex == 147.890 + 5.170 * b_compr.var_size
             )
 
         else:
@@ -442,7 +444,7 @@ class Compressor(ModelComponent):
             #     expr=b_compr.var_capex == b_compr.var_capex_aux
             # )
             b_compr.const_capex = pyo.Constraint(
-                expr=b_compr.var_capex == 60000 + 56 * b_compr.var_size
+                expr=b_compr.var_capex == 147.890 + 5.170 * b_compr.var_size
             )
         return b_compr
 
@@ -480,16 +482,15 @@ class Compressor(ModelComponent):
             math.log(self.input_pressure / self.output_pressure)
             / math.log(self.pressure_per_stage)
         )
-        isentropic_efficiency = 0.85
+        isentropic_efficiency = 0.75
         R = 8.314  # kJ/kmol/K
         k = 1.4
         T_in = 298.15  # K
         Z = 1
 
-        # TODO: write correctly with units
         def init_compr_energy(b, t, car):
             """
-            Define energy for compression in MJ
+            Define energy for compression in MW
             """
             return b_compr.var_consumption_energy[t, car] == Z * (
                 b_compr.var_flow[t] / 120 / 2
@@ -499,10 +500,28 @@ class Compressor(ModelComponent):
                 (self.input_pressure / self.output_pressure)
                 ** ((k - 1) / (n_stages * k))
                 - 1
-            )
+            )  # MW
 
         b_compr.const_compress_energy = pyo.Constraint(
             self.set_t_global, b_compr.set_consumed_carriers, rule=init_compr_energy
+        )
+
+        return b_compr
+
+    def _define_size_fluid(self, b_compr):
+        """
+        Defines variables and parameters related to compressor size.
+
+        :param b_compr: pyomo block with compressor model
+        :return: pyomo block with compressor model
+        """
+        b_compr.var_size_fluid = pyo.Var(within=pyo.NonNegativeReals)
+
+        def sizing_rule_fluid(b, t):
+            return b_compr.var_size_fluid >= b_compr.var_flow[t]
+
+        b_compr.const_size_fluid = pyo.Constraint(
+            self.set_t_global, rule=sizing_rule_fluid
         )
 
         return b_compr
@@ -549,28 +568,31 @@ class Compressor(ModelComponent):
 
         def init_opex_variable(const, t):
             """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
-            opex_variable_based_on = b_compr.var_flow[t]
-            # return (
-            #     opex_variable_based_on * b_compr.para_opex_variable
-            #     == b_compr.var_opex_variable[t]
-            # )
-            return 0 == b_compr.var_opex_variable[t]
+            return (
+                b_compr.var_opex_variable[t]
+                == b_compr.para_opex_variable * b_compr.var_flow[t]
+            )
 
         b_compr.const_opex_variable = pyo.Constraint(
             self.set_t_global, rule=init_opex_variable
         )
 
-        # FIXED OPEX
-        b_compr.para_opex_fixed = pyo.Param(
-            domain=pyo.Reals, initialize=economics["opex_fixed"], mutable=True
-        )
-        b_compr.var_opex_fixed = pyo.Var()
+        # # FIXED OPEX
+        # b_compr.para_opex_fixed = pyo.Param(
+        #     domain=pyo.Reals, initialize=economics["opex_fixed"], mutable=True
+        # )
+        # b_compr.var_opex_fixed = pyo.Var()
+        #
         # b_compr.const_opex_fixed = pyo.Constraint(
-        #     expr=(b_compr.var_capex_aux / annualization_factor)
+        #     expr=(b_compr.var_capex_aux / annualization_factor),
         #     * b_compr.para_opex_fixed
         #     == b_compr.var_opex_fixed
         # )
-        b_compr.const_opex_fixed = pyo.Constraint(expr=0 == b_compr.var_opex_fixed)
+        #
+        # b_compr.var_total_flow = pyo.Var()
+        #
+        #
+        # b_compr.const_opex_fixed = pyo.Constraint(expr= (b_compr.para_opex_fixed * b_compr.var_flow[t]) == b_compr.var_opex_fixed)
         return b_compr
 
     def write_results_compressor_design(self, h5_group, model_block):
@@ -583,7 +605,12 @@ class Compressor(ModelComponent):
         if self.compression_active == 1:
             h5_group.create_dataset("compressor", data=[self.name])
             h5_group.create_dataset("existing", data=[self.existing])
-            h5_group.create_dataset("size", data=[model_block.var_size.value])
+            h5_group.create_dataset("size", data=[model_block.var_size_fluid.value])
+            if self.existing == 0:
+                # h5_group.create_dataset("size", data=[model_block.var_size_fluid.value])
+                h5_group.create_dataset("capex", data=[model_block.var_capex.value])
+            else:
+                return
         else:
             return
         # h5_group.create_dataset(

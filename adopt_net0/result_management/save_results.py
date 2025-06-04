@@ -316,9 +316,11 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
                         compressor_name = str(
                             b_node.compressor_blocks_active[compr_name].para_name.value
                         )
-                        compr_group = node_specific_group.create_group(compressor_name)
                         b_compr = b_node.compressor_blocks_active[compr_name]
-                        if b_compr.para_active.value == 1:
+                        if b_compr.para_active.value == [1]:
+                            compr_group = node_specific_group.create_group(
+                                compressor_name
+                            )
                             data.compressor_data[period][node_name][
                                 compr_name
                             ].write_results_compressor_design(compr_group, b_compr)
@@ -358,15 +360,19 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
                         tec_name
                     ].write_results_tec_operation(tec_group, b_tec)
 
-                # if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
-                #     for compr_name in b_node.set_compressor:
-                #         compressor_name = list(b_node.compressor_blocks_active[compr_name].para_name.data())[0]
-                #         compr_group = node_specific_group.create_group(compressor_name)
-                #         b_compr = b_node.compressor_blocks_active[compr_name]
-                #         if b_compr.para_active.data()[0] == 1:
-                #             data.compressor_data[period][node_name][
-                #                 compr_name
-                #             ].write_results_compressor_design(compr_group, b_compr)
+                if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
+                    for compr_name in b_node.set_compressor:
+                        compressor_name = str(
+                            b_node.compressor_blocks_active[compr_name].para_name.value
+                        )
+                        b_compr = b_node.compressor_blocks_active[compr_name]
+                        if b_compr.para_active.value == [1]:
+                            compr_group = node_specific_group.create_group(
+                                compressor_name
+                            )
+                            data.compressor_data[period][node_name][
+                                compr_name
+                            ].write_results_compressor_operation(compr_group, b_compr)
 
         # ENERGY BALANCE [g] > within: node > specific carrier [g]
         ebalance_group = operation.create_group("energy_balance")
@@ -473,28 +479,28 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
                             "network_consumption", data=network_consumption
                         )
 
-                    if (  # change number 1
-                        config["performance"]["pressure"]["pressure_on"]["value"] == 1
-                    ):
-                        compress_node = [
-                            sum(
-                                node_data.compressor_blocks_active[compr]
-                                .var_consumption_energy[t, car]
-                                .value
-                                for compr in node_data.set_compressor
-                                if hasattr(
-                                    node_data.compressor_blocks_active[compr],
-                                    "var_consumption_energy",
-                                )
-                                if car
-                                in node_data.compressor_blocks_active[
-                                    compr
-                                ].set_consumed_carriers
-                            )
-                            for t in set_t
-                        ]
-
-                        car_group.create_dataset("compressor", data=compress_node)
+                    # if (  # change number 1
+                    #     config["performance"]["pressure"]["pressure_on"]["value"] == 1
+                    # ):
+                    #     compress_node = [
+                    #         sum(
+                    #             node_data.compressor_blocks_active[compr]
+                    #             .var_consumption_energy[t, car]
+                    #             .value
+                    #             for compr in node_data.set_compressor
+                    #             if hasattr(
+                    #                 node_data.compressor_blocks_active[compr],
+                    #                 "var_consumption_energy",
+                    #             )
+                    #             if car
+                    #             in node_data.compressor_blocks_active[
+                    #                 compr
+                    #             ].set_consumed_carriers
+                    #         )
+                    #         for t in set_t
+                    #     ]
+                    #
+                    #     car_group.create_dataset("compressor", data=compress_node)
 
                     car_group.create_dataset(
                         "import",
