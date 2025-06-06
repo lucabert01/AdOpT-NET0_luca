@@ -827,32 +827,50 @@ class DataHandle:
             investment_period
         ][node_i][carrier_i]
 
-        pressure_data_at_node["inputs"].append(
-            {
-                "name": "Demand",
-                "pressure": (info_node_exchange_pressure["Demand"]),
-                "type": "Exchange",
-                "existing": 1,
-            }
-        )
+        if (
+            self.time_series["full"][investment_period][node_i]["CarrierData"][
+                carrier_i
+            ]["Demand"].any()
+            != 0
+        ):
+            pressure_data_at_node["inputs"].append(
+                {
+                    "name": "Demand",
+                    "pressure": (info_node_exchange_pressure["Demand"]),
+                    "type": "Exchange",
+                    "existing": 1,
+                }
+            )
 
-        pressure_data_at_node["inputs"].append(
-            {
-                "name": "Export",
-                "pressure": (info_node_exchange_pressure["Export"]),
-                "type": "Exchange",
-                "existing": 1,
-            }
-        )
+        if (
+            self.time_series["full"][investment_period][node_i]["CarrierData"][
+                carrier_i
+            ]["Export limit"].any()
+            != 0
+        ):
+            pressure_data_at_node["inputs"].append(
+                {
+                    "name": "Export",
+                    "pressure": (info_node_exchange_pressure["Export"]),
+                    "type": "Exchange",
+                    "existing": 1,
+                }
+            )
 
-        pressure_data_at_node["outputs"].append(
-            {
-                "name": "Import",
-                "pressure": (info_node_exchange_pressure["Import"]),
-                "type": "Exchange",
-                "existing": 1,
-            }
-        )
+        if (
+            self.time_series["full"][investment_period][node_i]["CarrierData"][
+                carrier_i
+            ]["Import limit"].any()
+            != 0
+        ):
+            pressure_data_at_node["outputs"].append(
+                {
+                    "name": "Import",
+                    "pressure": (info_node_exchange_pressure["Import"]),
+                    "type": "Exchange",
+                    "existing": 1,
+                }
+            )
 
         return pressure_data_at_node
 

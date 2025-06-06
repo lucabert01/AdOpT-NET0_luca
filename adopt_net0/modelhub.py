@@ -9,8 +9,6 @@ import pandas as pd
 import sys
 import datetime
 
-from .model_construction.construct_balances import construct_compressor_constrains
-from .model_construction.construct_compressor import construct_compressor_block
 from .utilities import get_set_t
 from .data_management import DataHandle, create_technology_class
 from .model_construction import *
@@ -353,12 +351,102 @@ class ModelHub:
                     b_node.compressor_blocks_active = pyo.Block(
                         b_node.set_compressor, rule=init_compressor_block
                     )
-                else:
-                    pass
-
                 return b_node
 
             b_period.node_blocks = pyo.Block(model.set_nodes, rule=init_node_block)
+
+            # TODO: give a size to all compressor exisiting (fix a var or constrain it)
+            # .fix(value)
+            if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
+                for node in b_period.node_blocks:
+                    for compressor in b_period.node_blocks[node].set_compressor:
+                        compr = b_period.node_blocks[node].compressor_blocks_active[
+                            compressor
+                        ]
+                        if compr.para_active == 1:
+                            if compr.para_existing == 1:
+
+                                component_output_bound = float("inf")
+                                component_input_bound = float("inf")
+
+                                for tec in b_period.node_blocks[node].set_technologies:
+                                    if compressor[1] == tec:
+                                        var_output = (
+                                            b_period.node_blocks[node]
+                                            .tech_blocks_active[tec]
+                                            .var_output
+                                        )
+                                        component_output_bound = max(
+                                            var_output[idx].ub for idx in var_output
+                                        )
+                                    if compressor[2] == tec:
+                                        var_input = (
+                                            b_period.node_blocks[node]
+                                            .tech_blocks_active[tec]
+                                            .var_input
+                                        )
+                                        component_input_bound = max(
+                                            var_input[idx].ub for idx in var_input
+                                        )
+
+                                for netw in b_period.set_networks:
+                                    if compressor[1] == netw:
+                                        component_output_bound = next(
+                                            iter(
+                                                b_period.network_block[
+                                                    netw
+                                                ].para_size_initial.values()
+                                            )
+                                        )
+                                    if compressor[2] == netw:
+                                        component_input_bound = next(
+                                            iter(
+                                                b_period.network_block[
+                                                    netw
+                                                ].para_size_initial.values()
+                                            )
+                                        )
+
+                                size = min(
+                                    component_output_bound, component_input_bound
+                                )
+
+                                isentropic_efficiency = 0.75
+                                R = 8.314  # kJ/kmol/K
+                                k = 1.4
+                                T_in = 298.15  # K
+                                Z = 1
+
+                                size_elet = (
+                                    Z
+                                    * (size / 120 / 2)
+                                    * T_in
+                                    * (R / 1000)
+                                    * (k / (k - 1))
+                                    * (1 / isentropic_efficiency)
+                                    * (
+                                        (
+                                            compr.para_input_pressure
+                                            / compr.para_output_pressure
+                                        )
+                                        ** ((k - 1) / k)
+                                        - 1
+                                    )
+                                )
+
+                                def sizing_existing_compressor(b):
+                                    return (
+                                        b_period.node_blocks[node]
+                                        .compressor_blocks_active[compressor]
+                                        .var_size
+                                        == size_elet
+                                    )
+
+                                b_period.node_blocks[node].compressor_blocks_active[
+                                    compressor
+                                ].const_size_existing = pyo.Constraint(
+                                    rule=sizing_existing_compressor
+                                )
 
             return b_period
 

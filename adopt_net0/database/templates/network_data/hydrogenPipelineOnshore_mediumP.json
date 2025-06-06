@@ -10,7 +10,7 @@
     "gamma2": 0,
     "gamma3": 0,
     "gamma4": 0,
-    "opex_variable": 0,
+    "opex_variable": 0.01,
     "opex_fixed": 0,
     "discount_rate": 0.1,
     "lifetime": 30,

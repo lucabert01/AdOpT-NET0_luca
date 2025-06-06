@@ -218,11 +218,17 @@ def construct_compressor_constrains(model, config: dict):
 
             def init_compr_outflow_demand(const, t):
                 """Define constrain for the flow output from compressor to demand"""
-                return b_node.para_demand[t, car] == sum(
-                    b_node.compressor_blocks_active[compressor].var_flow[t]
+                if any(
+                    compressor[0] == car and compressor[2] == "Demand"
                     for compressor in b_node.set_compressor
-                    if (compressor[0] == car) and (compressor[2] == "Demand")
-                )
+                ):
+                    return b_node.para_demand[t, car] == sum(
+                        b_node.compressor_blocks_active[compressor].var_flow[t]
+                        for compressor in b_node.set_compressor
+                        if (compressor[0] == car) and (compressor[2] == "Demand")
+                    )
+                else:
+                    return pyo.Constraint.Skip
 
             b_compr_const.const_compr_outflow_demand = pyo.Constraint(
                 set_t, rule=init_compr_outflow_demand
@@ -230,11 +236,17 @@ def construct_compressor_constrains(model, config: dict):
 
             def init_compr_outflow_export(const, t):
                 """Define constrain for the flow output from compressor to export"""
-                return b_node.var_export_flow[t, car] == sum(
-                    b_node.compressor_blocks_active[compressor].var_flow[t]
+                if any(
+                    compressor[0] == car and compressor[2] == "Export"
                     for compressor in b_node.set_compressor
-                    if (compressor[0] == car) and (compressor[2] == "Export")
-                )
+                ):
+                    return b_node.var_export_flow[t, car] == sum(
+                        b_node.compressor_blocks_active[compressor].var_flow[t]
+                        for compressor in b_node.set_compressor
+                        if (compressor[0] == car) and (compressor[2] == "Export")
+                    )
+                else:
+                    return pyo.Constraint.Skip
 
             b_compr_const.const_compr_outflow_export = pyo.Constraint(
                 set_t, rule=init_compr_outflow_export
@@ -242,11 +254,17 @@ def construct_compressor_constrains(model, config: dict):
 
             def init_compr_inflow_import(const, t):
                 """Define constrain for the flow input to compressor from import"""
-                return b_node.var_import_flow[t, car] == sum(
-                    b_node.compressor_blocks_active[compressor].var_flow[t]
+                if any(
+                    compressor[0] == car and compressor[2] == "Import"
                     for compressor in b_node.set_compressor
-                    if (compressor[0] == car) and (compressor[1] == "Import")
-                )
+                ):
+                    return b_node.var_import_flow[t, car] == sum(
+                        b_node.compressor_blocks_active[compressor].var_flow[t]
+                        for compressor in b_node.set_compressor
+                        if (compressor[0] == car) and (compressor[1] == "Import")
+                    )
+                else:
+                    return pyo.Constraint.Skip
 
             b_compr_const.const_compr_inflow_import = pyo.Constraint(
                 set_t, rule=init_compr_inflow_import

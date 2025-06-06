@@ -151,75 +151,70 @@ def fill_carrier_data(
 
 def fill_carrier_pressure_data(
     folder_path: str | Path,
-    value_or_data: float | pd.DataFrame,
+    pressure_value_bar: float,
     connection: list = [],
     carriers: list = [],
     nodes: list = [],
     investment_periods: list = None,
 ):
+    # TODO: documentation
+
     # Convert to Path
     if isinstance(folder_path, str):
         folder_path = Path(folder_path)
+
+    # Read the Configuration json file
+    json_file_path = folder_path / "ConfigModel.json"
+    with open(json_file_path, "r") as json_file:
+        configuration = json.load(json_file)
 
     # Read the topology json file
     json_file_path = folder_path / "Topology.json"
     with open(json_file_path, "r") as json_file:
         topology = json.load(json_file)
 
-    # Read the topology json file
-    json_file_path = folder_path / "ConfigModel.json"
-    with open(json_file_path, "r") as json_file:
-        configuration = json.load(json_file)
+    if configuration["performance"]["pressure"]["pressure_on"]["value"] == 0:
+        warnings.warn(
+            "Pressure configuration is turned off and pressure information will not be used"
+        )
 
-    if configuration["performance"]["pressure"]["pressure_on"]["value"] == 1:
-        for period in (
-            investment_periods if investment_periods else topology["investment_periods"]
+    for car in carriers:
+        if (
+            car
+            not in configuration["performance"]["pressure"]["pressure_carriers"][
+                "value"
+            ]
         ):
-            for node_name in nodes if nodes else topology["nodes"]:
-                for car in carriers if carriers else topology["carriers"]:
-                    # Path to JSON file
-                    output_file = (
-                        folder_path
-                        / period
-                        / "node_data"
-                        / node_name
-                        / "carrier_data"
-                        / "PressureExchangeData.json"
-                    )
+            raise ValueError(
+                f"Carrier '{car} is not configured for pressure information. Change it in configuration"
+            )
 
-                    # Load existing data if the file exists
-                    if output_file.exists():
-                        with open(output_file, "r") as f:
-                            existing_data = json.load(f)
-                    else:
-                        existing_data = {}
+    for period in (
+        investment_periods if investment_periods else topology["investment_periods"]
+    ):
+        for node_name in nodes:
+            # Path to JSON file
+            output_file = (
+                folder_path
+                / period
+                / "node_data"
+                / node_name
+                / "carrier_data"
+                / "PressureExchangeData.json"
+            )
 
-                    # Ensure structure exists
-                    if car not in existing_data:
-                        existing_data[car] = {}
-                    for conn in connection:
-                        if conn not in existing_data[car]:
-                            existing_data[car][conn] = ""
+            for car in carriers:
+                # Load existing data if the file exists
+                with open(output_file, "r") as f:
+                    existing_data = json.load(f)
 
-                        # Convert the value to something JSON serializable
-                        if isinstance(value_or_data, pd.DataFrame):
-                            data_to_store = (
-                                value_or_data.where(pd.notnull(value_or_data), None)
-                                .astype(object)
-                                .to_dict(orient="list")
-                            )
-                        elif hasattr(value_or_data, "item"):
-                            data_to_store = value_or_data.item()
-                        else:
-                            data_to_store = value_or_data
+                for conn in connection:
+                    existing_data[car][conn] = pressure_value_bar
 
-                        # Update the correct field only
-                        existing_data[car][conn] = data_to_store
-
-                    # Save updated JSON file
-                    output_file.parent.mkdir(parents=True, exist_ok=True)
-                    with open(output_file, "w") as f:
-                        json.dump(existing_data, f, indent=4)
+            # Save updated JSON file
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_file, "w") as f:
+                json.dump(existing_data, f, indent=4)
 
 
 def copy_technology_data(folder_path: str | Path, tec_data_path: str | Path = None):

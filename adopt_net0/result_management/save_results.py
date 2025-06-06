@@ -317,7 +317,7 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
                             b_node.compressor_blocks_active[compr_name].para_name.value
                         )
                         b_compr = b_node.compressor_blocks_active[compr_name]
-                        if b_compr.para_active.value == [1]:
+                        if b_compr.para_active.value == 1:
                             compr_group = node_specific_group.create_group(
                                 compressor_name
                             )
@@ -366,7 +366,7 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
                             b_node.compressor_blocks_active[compr_name].para_name.value
                         )
                         b_compr = b_node.compressor_blocks_active[compr_name]
-                        if b_compr.para_active.value == [1]:
+                        if b_compr.para_active.value == 1:
                             compr_group = node_specific_group.create_group(
                                 compressor_name
                             )
