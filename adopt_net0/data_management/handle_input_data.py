@@ -415,7 +415,27 @@ class DataHandle:
                     sep=";",
                     index_col=0,
                 )
-
+                a = 1
+                netw_data.gamma = {}
+                for gamma_num in range(1, 5):
+                    if os.path.isfile(
+                        self.data_path
+                        / investment_period
+                        / "network_topology"
+                        / "new"
+                        / network
+                        / f"gamma_{gamma_num}_{network}.csv"
+                    ):
+                        netw_data.gamma[gamma_num] = pd.read_csv(
+                            self.data_path
+                            / investment_period
+                            / "network_topology"
+                            / "new"
+                            / network
+                            / f"gamma_{gamma_num}_{network}.csv",
+                            sep=";",
+                            index_col=0,
+                        )
                 if os.path.isfile(
                     self.data_path
                     / investment_period

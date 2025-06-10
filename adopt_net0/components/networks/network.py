@@ -263,7 +263,6 @@ class Network(ModelComponent):
             b_netw = self._define_unique_arcs(b_netw)
 
         b_netw = self._define_size(b_netw)
-        b_netw = self._define_capex_parameters(b_netw, data)
         b_netw = self._define_opex_parameters(b_netw)
         b_netw = self._define_emission_vars(b_netw)
         b_netw = self._define_network_carrier(b_netw)
@@ -279,6 +278,9 @@ class Network(ModelComponent):
 
             b_arc.big_m_transformation_required = 0
             b_arc = self._define_size_arc(b_arc, b_netw, node_from, node_to)
+            b_arc = self._define_capex_parameters_arc(
+                b_netw, b_arc, data, node_from, node_to
+            )
             b_arc = self._define_capex_variables_arc(b_arc, b_netw)
             b_arc = self._define_capex_constraints_arc(
                 b_arc, b_netw, node_from, node_to
@@ -408,59 +410,6 @@ class Network(ModelComponent):
                             coeff_ti["size_initial"].at[from_node, to_node]
                             == coeff_ti["size_initial"].at[to_node, from_node]
                         )
-        return b_netw
-
-    def _define_capex_parameters(self, b_netw, data: dict):
-        """
-        Defines parameters related to technology capex.
-
-        :param b_netw: pyomo network block
-        :param dict data: dict containing model information
-        :return: pyomo network block
-        """
-
-        config = data["config"]
-        economics = self.economics
-
-        # CHECK FOR GLOBAL ECONOMIC OPTIONS
-        discount_rate = set_discount_rate(config, economics)
-        fraction_of_year_modelled = data["topology"]["fraction_of_year_modelled"]
-
-        # CAPEX
-        annualization_factor = annualize(
-            discount_rate, economics["lifetime"], fraction_of_year_modelled
-        )
-
-        b_netw.para_capex_gamma1 = pyo.Param(
-            domain=pyo.Reals,
-            mutable=True,
-            initialize=economics["gamma1"] * annualization_factor,
-        )
-        b_netw.para_capex_gamma2 = pyo.Param(
-            domain=pyo.Reals,
-            mutable=True,
-            initialize=economics["gamma2"] * annualization_factor,
-        )
-        b_netw.para_capex_gamma3 = pyo.Param(
-            domain=pyo.Reals,
-            mutable=True,
-            initialize=economics["gamma3"] * annualization_factor,
-        )
-        b_netw.para_capex_gamma4 = pyo.Param(
-            domain=pyo.Reals,
-            mutable=True,
-            initialize=economics["gamma4"] * annualization_factor,
-        )
-
-        if self.existing:
-            b_netw.para_decommissioning_cost_annual = pyo.Param(
-                domain=pyo.Reals,
-                initialize=economics["decommission_cost"] * annualization_factor,
-                mutable=True,
-            )
-
-        b_netw.var_capex = pyo.Var()
-
         return b_netw
 
     def _define_opex_parameters(self, b_netw):
@@ -600,6 +549,68 @@ class Network(ModelComponent):
 
         return b_arc
 
+    def _define_capex_parameters_arc(
+        self, b_arc, b_netw, node_from: str, node_to: str, data: dict
+    ):
+        """
+        Defines the size of an arc
+
+        :param b_arc: pyomo arc block
+        :param b_netw: pyomo network block
+        :param str node_from: node from which arc comes
+        :param str node_to: node to which arc goes
+        :return: pyomo arc block
+        """
+        coeff_ti = self.processed_coeff.time_independent
+
+        config = data["config"]
+        economics = self.economics
+        # TODO add if
+        gamma1_per_arc = self.gamma.at[node_from, node_to]
+        gamma2_per_arc = self.gamma.at[node_from, node_to]
+        gamma3_per_arc = self.gamma.at[node_from, node_to]
+        gamma4_per_arc = self.gamma.at[node_from, node_to]
+        # CHECK FOR GLOBAL ECONOMIC OPTIONS
+        discount_rate = set_discount_rate(config, economics)
+        fraction_of_year_modelled = data["topology"]["fraction_of_year_modelled"]
+
+        # CAPEX
+        annualization_factor = annualize(
+            discount_rate, economics["lifetime"], fraction_of_year_modelled
+        )
+
+        b_arc.para_capex_gamma1 = pyo.Param(
+            domain=pyo.Reals,
+            mutable=True,
+            initialize=gamma1_per_arc * annualization_factor,
+        )
+        b_arc.para_capex_gamma2 = pyo.Param(
+            domain=pyo.Reals,
+            mutable=True,
+            initialize=gamma2_per_arc * annualization_factor,
+        )
+        b_arc.para_capex_gamma3 = pyo.Param(
+            domain=pyo.Reals,
+            mutable=True,
+            initialize=gamma3_per_arc * annualization_factor,
+        )
+        b_arc.para_capex_gamma4 = pyo.Param(
+            domain=pyo.Reals,
+            mutable=True,
+            initialize=gamma4_per_arc * annualization_factor,
+        )
+
+        if self.existing:
+            b_arc.para_decommissioning_cost_annual = pyo.Param(
+                domain=pyo.Reals,
+                initialize=economics["decommission_cost"] * annualization_factor,
+                mutable=True,
+            )
+
+        b_netw.var_capex = pyo.Var()
+
+        return b_arc
+
     def _define_capex_variables_arc(self, b_arc, b_netw):
         """
         Defines the capex variables of an arc
@@ -613,10 +624,10 @@ class Network(ModelComponent):
 
         def calculate_max_capex():
             max_capex = (
-                b_netw.para_capex_gamma1
-                + b_netw.para_capex_gamma2 * b_arc.para_size_max
-                + b_netw.para_capex_gamma3 * b_arc.distance
-                + b_netw.para_capex_gamma4 * b_arc.para_size_max * b_arc.distance
+                b_arc.para_capex_gamma1
+                + b_arc.para_capex_gamma2 * b_arc.para_size_max
+                + b_arc.para_capex_gamma3 * b_arc.distance
+                + b_arc.para_capex_gamma4 * b_arc.para_size_max * b_arc.distance
             )
             return (0, max_capex)
 
@@ -648,10 +659,10 @@ class Network(ModelComponent):
         def init_capex(const):
             return (
                 b_arc.var_capex_aux
-                == b_netw.para_capex_gamma1
-                + b_netw.para_capex_gamma2 * b_arc.var_size
-                + b_netw.para_capex_gamma3 * b_arc.distance
-                + b_netw.para_capex_gamma4 * b_arc.var_size * b_arc.distance
+                == b_arc.para_capex_gamma1
+                + b_arc.para_capex_gamma2 * b_arc.var_size
+                + b_arc.para_capex_gamma3 * b_arc.distance
+                + b_arc.para_capex_gamma4 * b_arc.var_size * b_arc.distance
             )
 
         # CAPEX aux:
@@ -660,8 +671,8 @@ class Network(ModelComponent):
                 b_arc.const_capex_aux = pyo.Constraint(expr=b_arc.var_capex_aux == 0)
             else:
                 b_arc.const_capex_aux = pyo.Constraint(rule=init_capex)
-        elif (b_netw.para_capex_gamma1.value == 0) and (
-            b_netw.para_capex_gamma3.value == 0
+        elif (b_arc.para_capex_gamma1.value == 0) and (
+            b_arc.para_capex_gamma3.value == 0
         ):
             b_arc.const_capex_aux = pyo.Constraint(rule=init_capex)
         else:
