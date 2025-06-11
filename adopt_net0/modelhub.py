@@ -1349,10 +1349,10 @@ class ModelHub:
 
             def calculate_max_capex():
                 max_capex = (
-                    b_netw.para_capex_gamma1
-                    + b_netw.para_capex_gamma2 * b_arc.para_size_max
-                    + b_netw.para_capex_gamma3 * b_arc.distance
-                    + b_netw.para_capex_gamma4 * b_arc.para_size_max * b_arc.distance
+                    b_arc.para_capex_gamma1
+                    + b_arc.para_capex_gamma2 * b_arc.para_size_max
+                    + b_arc.para_capex_gamma3 * b_arc.distance
+                    + b_arc.para_capex_gamma4 * b_arc.para_size_max * b_arc.distance
                 )
                 return (0, max_capex)
 

@@ -415,7 +415,6 @@ class DataHandle:
                     sep=";",
                     index_col=0,
                 )
-                a = 1
                 netw_data.gamma = {}
                 for gamma_num in range(1, 5):
                     if os.path.isfile(
@@ -424,15 +423,15 @@ class DataHandle:
                         / "network_topology"
                         / "new"
                         / network
-                        / f"gamma_{gamma_num}_{network}.csv"
+                        / f"gamma{gamma_num}.csv"
                     ):
-                        netw_data.gamma[gamma_num] = pd.read_csv(
+                        netw_data.gamma[f"gamma{gamma_num}"] = pd.read_csv(
                             self.data_path
                             / investment_period
                             / "network_topology"
                             / "new"
                             / network
-                            / f"gamma_{gamma_num}_{network}.csv",
+                            / f"gamma{gamma_num}.csv",
                             sep=";",
                             index_col=0,
                         )
@@ -488,6 +487,26 @@ class DataHandle:
                     sep=";",
                     index_col=0,
                 )
+                netw_data.gamma = {}
+                for gamma_num in range(1, 5):
+                    if os.path.isfile(
+                        self.data_path
+                        / investment_period
+                        / "network_topology"
+                        / "new"
+                        / network
+                        / f"gamma{gamma_num}.csv"
+                    ):
+                        netw_data.gamma[f"gamma{gamma_num}"] = pd.read_csv(
+                            self.data_path
+                            / investment_period
+                            / "network_topology"
+                            / "new"
+                            / network
+                            / f"gamma{gamma_num}.csv",
+                            sep=";",
+                            index_col=0,
+                        )
                 netw_data.size_initial = pd.read_csv(
                     self.data_path
                     / investment_period
