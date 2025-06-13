@@ -29,7 +29,11 @@ class Network(ModelComponent):
     bidirectional and are treated respectively with their size and costs. Other
     networks, e.g. pipelines, require two installations to be able to transport in
     two directions. As such their CAPEX is double and their size in both directions
-    can be different.
+    can be different. The CAPEX parameters (gamma1,2,3,4) can either be specified in
+    the json file of the network or for every arc. In the latter case, the user needs
+    to create 1 csv file for every gamma (gamma1.csv etc) with a matrix-like structure (nodes
+    as index and columns). These files need to be placed in the corresponding folder
+    in "network_topology", e.g. my_case_study/period1/network_topology/new(or existing)/my_network_type
 
     **Set declarations:**
 
@@ -52,7 +56,7 @@ class Network(ModelComponent):
     - ``para_size_initial``, var_size, var_capex: for existing networks
     - ``para_capex_gamma``: :math:`{\\gamma}_1, {\\gamma}_2, {\\gamma}_3, {\\gamma}_4` for
       CAPEX calculation (annualized from given data on up-front CAPEX, lifetime and
-      discount rate)
+      discount rate) (either for the network or for each arc)
     - ``para_opex_variable``: Variable OPEX
     - ``para_opex_fixed``: Fixed OPEX in % of up-front CAPEX
     - ``para_decommissioning_cost_annual``: decommissioning costs for existing networks
@@ -553,12 +557,15 @@ class Network(ModelComponent):
         self, b_arc, b_netw, node_from: str, node_to: str, data: dict
     ):
         """
-        Defines the size of an arc
+        Defines the capex parameters of each arc. If these are not specified with gamma1.csv,..., gamma4.csv
+        files in the folder "network_topology/existing(or new)/name_of_network", then the gammas are taken
+        from the json file of the network and are assumed to be the same for every arc
 
         :param b_arc: pyomo arc block
         :param b_netw: pyomo network block
         :param str node_from: node from which arc comes
         :param str node_to: node to which arc goes
+        :param dict data: dict containing model information
         :return: pyomo arc block
         """
         coeff_ti = self.processed_coeff.time_independent
