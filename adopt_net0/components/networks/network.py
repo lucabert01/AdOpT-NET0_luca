@@ -268,8 +268,8 @@ class Network(ModelComponent):
         b_netw = self._define_network_carrier(b_netw)
         b_netw = self._define_inflow_vars(b_netw)
         b_netw = self._define_outflow_vars(b_netw)
-
         b_netw = self._define_energyconsumption_parameters(b_netw)
+
 
         def arc_block_init(b_arc, node_from, node_to):
             """
@@ -279,7 +279,7 @@ class Network(ModelComponent):
             b_arc.big_m_transformation_required = 0
             b_arc = self._define_size_arc(b_arc, b_netw, node_from, node_to)
             b_arc = self._define_capex_parameters_arc(
-                b_netw, b_arc, node_from, node_to, data
+                b_arc, b_netw, node_from, node_to, data
             )
             b_arc = self._define_capex_variables_arc(b_arc)
             b_arc = self._define_capex_constraints_arc(
@@ -566,11 +566,11 @@ class Network(ModelComponent):
         config = data["config"]
         economics = self.economics
         # check if costs (gammas) are defined per arc
-        if "gamma" in self.gamma:
-            gamma1 = self.gamma["gamma1"].at[node_from, node_to]
-            gamma2 = self.gamma["gamma2"].at[node_from, node_to]
-            gamma3 = self.gamma["gamma3"].at[node_from, node_to]
-            gamma4 = self.gamma["gamma4"].at[node_from, node_to]
+        if self.gamma_per_arc:
+            gamma1 = self.gamma_per_arc["gamma1"].at[node_from, node_to]
+            gamma2 = self.gamma_per_arc["gamma2"].at[node_from, node_to]
+            gamma3 = self.gamma_per_arc["gamma3"].at[node_from, node_to]
+            gamma4 = self.gamma_per_arc["gamma4"].at[node_from, node_to]
         else:
             gamma1 = economics["gamma1"]
             gamma2 = economics["gamma2"]
@@ -1075,16 +1075,16 @@ class Network(ModelComponent):
             arc_group = h5_group.create_group(str)
 
             arc_group.create_dataset(
-                "para_capex_gamma1", data=model_block.para_capex_gamma1.value
+                "para_capex_gamma1", data=arc.para_capex_gamma1.value
             )
             arc_group.create_dataset(
-                "para_capex_gamma2", data=model_block.para_capex_gamma2.value
+                "para_capex_gamma2", data=arc.para_capex_gamma2.value
             )
             arc_group.create_dataset(
-                "para_capex_gamma3", data=model_block.para_capex_gamma3.value
+                "para_capex_gamma3", data=arc.para_capex_gamma3.value
             )
             arc_group.create_dataset(
-                "para_capex_gamma4", data=model_block.para_capex_gamma4.value
+                "para_capex_gamma4", data=arc.para_capex_gamma4.value
             )
             arc_group.create_dataset("network", data=self.name)
             arc_group.create_dataset("fromNode", data=arc_name[0])

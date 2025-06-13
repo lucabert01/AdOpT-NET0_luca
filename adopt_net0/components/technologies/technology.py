@@ -1135,7 +1135,7 @@ class Technology(ModelComponent):
                 sum(
                     (
                         model_block.var_opex_variable[t].value
-                        + model_block.var_opex_variable_ccs.value
+                        + model_block.var_opex_variable_ccs[t].value
                         if hasattr(model_block, "var_opex_variable_ccs")
                         else 0
                     )
