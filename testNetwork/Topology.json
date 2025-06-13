@@ -6,9 +6,9 @@
     "carriers": [
         "electricity",
         "CO2captured",
-        "cement",
+        "hydrogen",
         "heat",
-        "waste"
+        "gas"
     ],
     "investment_periods": [
         "period1"

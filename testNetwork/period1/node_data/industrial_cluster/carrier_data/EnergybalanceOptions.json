@@ -5,13 +5,13 @@
     "CO2captured": {
         "curtailment_possible": 0
     },
-    "cement": {
+    "hydrogen": {
         "curtailment_possible": 0
     },
     "heat": {
         "curtailment_possible": 0
     },
-    "waste": {
+    "gas": {
         "curtailment_possible": 0
     }
 }

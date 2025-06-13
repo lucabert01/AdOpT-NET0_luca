@@ -1,5 +1,8 @@
 from pathlib import Path
 from warnings import warn
+import pandas as pd
+from adopt_net0.components.utilities import annualize
+
 
 from pyomo.opt import TerminationCondition
 
@@ -118,6 +121,67 @@ def test_full_model_flow(request):
     )
     assert cost2 < cost1
 
+def test_netw_cost_per_arc(request):
+    """
+    Test the network costs (gamma parameters) when defined per arc
+    Gamma2 is set to 1.1 for the arcs node1-node2 and node2-node1
+    """
+    path = Path("tests/case_study_full_pipeline")
+    netw_path = Path(path/"period1/network_topology/new/electricitySimple")
+
+    nodes = ["node1", "node2"]
+    gamma2 = pd.DataFrame([[0, 1.1], [1.1, 0]], index=nodes, columns=nodes)
+    gamma_matrices = {
+        "gamma1.csv": pd.DataFrame(0.0, index=nodes, columns=nodes),
+        "gamma2.csv": gamma2,
+        "gamma3.csv": pd.DataFrame(0.0, index=nodes, columns=nodes),
+        "gamma4.csv": pd.DataFrame(0.0, index=nodes, columns=nodes),
+    }
+
+    # Save each matrix as a CSV file
+    for name, gamma_df in gamma_matrices.items():
+        gamma_df.to_csv(netw_path / name, sep=';')
+    start_period = 0
+    end_period =1
+    pyhub = ModelHub()
+    pyhub.read_data(path, start_period=start_period, end_period=end_period)
+    # pyhub.data.model_config["solveroptions"]["solver"]["value"] = request.config.solver
+    pyhub.data.model_config["solveroptions"]["solver"]["value"] = "gurobi"
+    pyhub.data.model_config["reporting"]["save_summary_path"][
+        "value"
+    ] = request.config.result_folder_path
+    pyhub.data.model_config["reporting"]["save_path"][
+        "value"
+    ] = request.config.result_folder_path
+    pyhub.construct_model()
+    f = (end_period-start_period) / 8760
+    lifetime = 1
+    discount_rate = 0.1
+    a = annualize(discount_rate, lifetime, f)
+    pyhub.construct_balances()
+    pyhub.solve()
+
+    m = pyhub.model["full"]
+    p = m.periods["period1"]
+
+    # NETWORK CHECKS
+    netw_block = p.network_block["electricitySimple"]
+
+    # Size same in both directions
+    s_arc1 = round(netw_block.arc_block["node1", "node2"].var_size.value, 3)
+    s_arc2 = round(netw_block.arc_block["node2", "node1"].var_size.value, 3)
+    assert s_arc1 == s_arc2
+
+    # Flow in one direction is larger 1
+    capex_arc1 = round(netw_block.arc_block["node1", "node2"].var_capex.value, 3)
+    assert capex_arc1 == round(s_arc1*gamma2.loc["node1", "node2"]*a,3)
+
+    # delete the gamma files, not used in any other test
+    gamma_files = ["gamma1.csv", "gamma2.csv", "gamma3.csv", "gamma4.csv"]
+    for filename in gamma_files:
+        file_path = netw_path / filename
+        if file_path.exists():
+            file_path.unlink()
 
 def test_clustering_algo(request):
     """

@@ -19,7 +19,7 @@
         "monte_carlo": {
             "N": {
                 "description": "Number of Monte Carlo simulations (0 = off).",
-                "value": 1
+                "value": 0
             },
             "type": {
                 "description": "Type of Monte Carlo simulation. For type 1 the user defines the standard deviation and the components to vary. For type 2 the user provides a csv file with the parameters and their min, max and reference values. ",

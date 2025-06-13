@@ -21,14 +21,14 @@ with open(path / "Topology.json", "r") as json_file:
 # Nodes
 topology["nodes"] = ["storage", "industrial_cluster"]
 # Carriers:
-topology["carriers"] = ["electricity", "CO2captured", "cement", "heat", "waste"]
+topology["carriers"] = ["electricity", "CO2captured", "hydrogen", "heat", "gas"]
 # Investment periods:
 topology["investment_periods"] = ["period1"]
 # Save json template
 with open(path / "Topology.json", "w") as json_file:
     json.dump(topology, json_file, indent=4)
 
-end_period = 10 * 180
+end_period = 1
 
 
 # Load json template
@@ -56,29 +56,18 @@ node_location.to_csv(path / "NodeLocations.csv", sep=";", index=False)
 
 # Add technologies
 with open(
-    path / "period1" / "node_data" / "storage" / "Technologies.json", "r"
-) as json_file:
-    technologies = json.load(json_file)
-technologies["new"] = ["PermanentStorage_CO2_simple"]
-
-with open(
-    path / "period1" / "node_data" / "storage" / "Technologies.json", "w"
-) as json_file:
-    json.dump(technologies, json_file, indent=4)
-
-with open(
     path / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
 ) as json_file:
     technologies = json.load(json_file)
-technologies["new"] = ["GasTurbine_simple_CCS"]
+technologies["new"] = ["CementEmitter"]
 
 with open(
     path / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "w"
 ) as json_file:
     json.dump(technologies, json_file, indent=4)
 
-# Copy over technology files
-adopt.copy_technology_data(path)
+# # Copy over technology files
+# adopt.copy_technology_data(path)
 
 
 # Add networks
@@ -178,9 +167,16 @@ adopt.fill_carrier_data(
     carriers=["heat"],
     nodes=["industrial_cluster", "storage"],
 )
+adopt.fill_carrier_data(
+    path,
+    value_or_data=10,
+    columns=["Demand"],
+    carriers=["CO2captured"],
+    nodes=["storage"],
+)
 
 
-carbon_price = np.linspace(70, 170, 8760)
+carbon_price = np.linspace(0, 0, 8760)
 carbon_cost_path = (
     path / "period1" / "node_data" / "industrial_cluster" / "CarbonCost.csv"
 )
@@ -197,15 +193,8 @@ m.construct_balances()
 m.solve()
 
 
-co2_stored = sum(
-    m.model["full"]
-    .periods["period1"]
-    .node_blocks["storage"]
-    .tech_blocks_active["PermanentStorage_CO2_detailed"]
-    .var_input[t, "CO2captured"]
-    .value
-    for t in range(1, end_period)
-)
+capex_pipeline = m.model["full"].periods["period1"].network_block["CO2_Pipeline"].var_capex.value
+
 
 print("Some results:")
 print(f"CO2 Stored: {co2_stored:.2f}")

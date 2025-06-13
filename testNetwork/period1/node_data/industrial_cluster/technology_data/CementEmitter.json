@@ -18,19 +18,14 @@
   "Performance": {
     "comment": "contains fitting data on unit of input, technology types and input/output carriers",
     "performance_function_type": 1,
-    "main_output_carrier": "clinker",
+    "main_output_carrier": "CO2captured",
     "output_carrier": [
-      "clinker"
+      "CO2captured"
     ],
     "output_ratios": {
     },
     "emission_factor": 0.833,
     "min_part_load": 0,
-    "ccs": {
-      "possible": 1,
-      "co2_concentration" : 0.20,
-      "ccs_type": "MEA_medium"
-    },
     "ramping_rate": -1,
     "standby_power": -1,
     "min_uptime": -1,
