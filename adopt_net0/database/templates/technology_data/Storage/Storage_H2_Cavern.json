@@ -41,6 +41,12 @@
           "electricity": 0.011
         }
       }
+    },
+    "pressure": {
+      "hydrogen": {
+        "inlet": 450,
+        "outlet": 450
+      }
     }
   },
   "Flexibility": {

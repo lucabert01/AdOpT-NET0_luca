@@ -177,6 +177,7 @@ def fill_carrier_pressure_data(
         warnings.warn(
             "Pressure configuration is turned off and pressure information will not be used"
         )
+        return
 
     for car in carriers:
         if (

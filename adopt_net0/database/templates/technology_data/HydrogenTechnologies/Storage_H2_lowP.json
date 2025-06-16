@@ -38,8 +38,8 @@
     },
     "pressure": {
       "hydrogen": {
-        "inlet": 300,
-        "outlet": 300
+        "inlet": 80,
+        "outlet": 80
       }
     }
   },
