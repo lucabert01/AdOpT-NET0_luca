@@ -633,8 +633,6 @@ class Network(ModelComponent):
                 mutable=True,
             )
 
-
-
         return b_arc
 
     def _define_capex_variables_arc(self, b_arc):

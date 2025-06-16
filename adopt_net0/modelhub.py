@@ -1338,10 +1338,14 @@ class ModelHub:
                             )
                         setattr(b_arc, f"para_capex_{param}", gamma_val)
             else:
-                source = netw_data.gamma_per_arc if netw_data.gamma_per_arc else economics
+                source = (
+                    netw_data.gamma_per_arc if netw_data.gamma_per_arc else economics
+                )
                 for param in gamma_keys:
                     if netw_data.gamma_per_arc:
-                        gamma_val = source[param].loc[arc] * annualization_factor * sd_random
+                        gamma_val = (
+                            source[param].loc[arc] * annualization_factor * sd_random
+                        )
                     else:
                         gamma_val = source[param] * annualization_factor * sd_random
                     setattr(b_arc, f"para_capex_{param}", gamma_val)
