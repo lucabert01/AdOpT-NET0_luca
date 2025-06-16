@@ -1122,8 +1122,9 @@ class Technology(ModelComponent):
         h5_group.create_dataset(
             "capex_tot",
             data=[
-                (
-                    model_block.var_capex.value + model_block.var_capex_ccs.value
+                model_block.var_capex.value
+                + (
+                    model_block.var_capex_ccs.value
                     if hasattr(model_block, "var_capex_ccs")
                     else 0
                 )
@@ -1146,9 +1147,9 @@ class Technology(ModelComponent):
         h5_group.create_dataset(
             "opex_fixed",
             data=[
-                (
-                    model_block.var_opex_fixed.value
-                    + model_block.var_opex_fixed_ccs.value
+                model_block.var_opex_fixed.value
+                + (
+                    model_block.var_opex_fixed_ccs.value
                     if hasattr(model_block, "var_opex_fixed_ccs")
                     else 0
                 )
