@@ -267,13 +267,13 @@ class Network(ModelComponent):
             b_netw = self._define_unique_arcs(b_netw)
 
         b_netw = self._define_size(b_netw)
+        b_netw = self._define_capex_variables_netw(b_netw)
         b_netw = self._define_opex_parameters(b_netw)
         b_netw = self._define_emission_vars(b_netw)
         b_netw = self._define_network_carrier(b_netw)
         b_netw = self._define_inflow_vars(b_netw)
         b_netw = self._define_outflow_vars(b_netw)
         b_netw = self._define_energyconsumption_parameters(b_netw)
-
 
         def arc_block_init(b_arc, node_from, node_to):
             """
@@ -414,6 +414,18 @@ class Network(ModelComponent):
                             coeff_ti["size_initial"].at[from_node, to_node]
                             == coeff_ti["size_initial"].at[to_node, from_node]
                         )
+        return b_netw
+
+    def _define_capex_variables_netw(self, b_netw):
+        """
+        Defines the capex variable of the network
+
+        :param b_netw: pyomo network bloc
+        :return: pyomo network bloc
+        """
+
+        b_netw.var_capex = pyo.Var()
+
         return b_netw
 
     def _define_opex_parameters(self, b_netw):
@@ -621,7 +633,7 @@ class Network(ModelComponent):
                 mutable=True,
             )
 
-        b_netw.var_capex = pyo.Var()
+
 
         return b_arc
 

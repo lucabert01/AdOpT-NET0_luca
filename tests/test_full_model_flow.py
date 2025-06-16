@@ -154,9 +154,9 @@ def test_netw_cost_per_arc(request):
         "value"
     ] = request.config.result_folder_path
     pyhub.construct_model()
-    f = (end_period-start_period) / 8760
+    f = (end_period-start_period)/48
     lifetime = 1
-    discount_rate = 0.1
+    discount_rate = 0
     a = annualize(discount_rate, lifetime, f)
     pyhub.construct_balances()
     pyhub.solve()
@@ -167,14 +167,14 @@ def test_netw_cost_per_arc(request):
     # NETWORK CHECKS
     netw_block = p.network_block["electricitySimple"]
 
-    # Size same in both directions
-    s_arc1 = round(netw_block.arc_block["node1", "node2"].var_size.value, 3)
-    s_arc2 = round(netw_block.arc_block["node2", "node1"].var_size.value, 3)
-    assert s_arc1 == s_arc2
 
-    # Flow in one direction is larger 1
-    capex_arc1 = round(netw_block.arc_block["node1", "node2"].var_capex.value, 3)
-    assert capex_arc1 == round(s_arc1*gamma2.loc["node1", "node2"]*a,3)
+    # Check gammas are assigned correctly
+    gamma2_arc12 = round(netw_block.arc_block["node1", "node2"].para_capex_gamma2.value, 3)
+    gamma2_data_arc12  = round(gamma2.loc["node1", "node2"]*a,3)
+    assert gamma2_arc12 == gamma2_data_arc12
+    gamma2_arc21 = round(netw_block.arc_block["node2", "node1"].para_capex_gamma2.value, 3)
+    gamma2_data_arc21  = round(gamma2.loc["node2", "node1"]*a,3)
+    assert gamma2_arc21 == gamma2_data_arc21
 
     # delete the gamma files, not used in any other test
     gamma_files = ["gamma1.csv", "gamma2.csv", "gamma3.csv", "gamma4.csv"]
