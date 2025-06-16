@@ -724,7 +724,7 @@ class Network(ModelComponent):
                 b_arc.const_capex = pyo.Constraint(
                     expr=b_arc.var_capex
                     == (b_netw.para_size_initial[node_from, node_to] - b_arc.var_size)
-                    * b_netw.para_decommissioning_cost_annual
+                    * b_arc.para_decommissioning_cost_annual
                 )
         else:
             b_arc.const_capex = pyo.Constraint(
