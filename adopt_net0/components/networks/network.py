@@ -177,6 +177,8 @@ class Network(ModelComponent):
         self.distance = []
         self.size_max_arcs = []
         self.energy_consumption = {}
+        self.gamma_per_arc = {}
+
         self.transported_carrier = netw_data["Performance"]["carrier"]
 
         self.set_nodes = []

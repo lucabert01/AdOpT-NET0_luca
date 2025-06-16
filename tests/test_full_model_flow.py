@@ -145,8 +145,7 @@ def test_netw_cost_per_arc(request):
     end_period =1
     pyhub = ModelHub()
     pyhub.read_data(path, start_period=start_period, end_period=end_period)
-    # pyhub.data.model_config["solveroptions"]["solver"]["value"] = request.config.solver
-    pyhub.data.model_config["solveroptions"]["solver"]["value"] = "gurobi"
+    pyhub.data.model_config["solveroptions"]["solver"]["value"] = request.config.solver
     pyhub.data.model_config["reporting"]["save_summary_path"][
         "value"
     ] = request.config.result_folder_path

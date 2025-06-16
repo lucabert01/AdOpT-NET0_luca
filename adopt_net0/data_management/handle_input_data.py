@@ -415,7 +415,6 @@ class DataHandle:
                     sep=";",
                     index_col=0,
                 )
-                netw_data.gamma_per_arc = {}
                 for gamma_num in range(1, 5):
                     if os.path.isfile(
                         self.data_path
@@ -487,7 +486,6 @@ class DataHandle:
                     sep=";",
                     index_col=0,
                 )
-                netw_data.gamma_per_arc = {}
                 for gamma_num in range(1, 5):
                     if os.path.isfile(
                         self.data_path
