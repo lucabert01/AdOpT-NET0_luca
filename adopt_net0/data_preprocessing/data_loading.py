@@ -83,8 +83,7 @@ def fill_carrier_data(
     Updates carrier data for a time series based on a provided value or DataFrame and writes it to file.
 
     Allows you to update Demand, Import limit, Export limit, Import price,
-    Export price, Import emission factor, Export emission factor, Demand pressure,
-    Import pressure, Export pressure and/or Generic production.
+    Export price, Import emission factor, Export emission factor and/or Generic production.
 
     :param str folder_path: Path to the folder containing the case study data
     :param float | pd.DataFrame value_or_data: A float value to be applied or a DataFrame containing the new values for the carrier data
@@ -157,7 +156,19 @@ def fill_carrier_pressure_data(
     nodes: list = [],
     investment_periods: list = None,
 ):
-    # TODO: documentation
+    """
+    Updates carrier pressure data for exchange connections for a time series
+    based on a provided value and writes it to file.
+
+    Allows you to update Demand pressure, Export pressure and Import pressure.
+
+    :param str folder_path: Path to the folder containing the case study data
+    :param float pressure_value_bar: A float value to be applied containing the values of the carrier pressure data
+    :param list connection: Name of the connection that need to be changed
+    :param list investment_periods: Name of investment periods to be changed
+    :param list nodes: Name of the nodes that need to be changed
+    :param list carriers: Name of the carriers that need to be changed
+    """
 
     # Convert to Path
     if isinstance(folder_path, str):
@@ -210,7 +221,7 @@ def fill_carrier_pressure_data(
                     existing_data = json.load(f)
 
                 for conn in connection:
-                    existing_data[car][conn] = pressure_value_bar
+                    existing_data[car][conn]["value"] = pressure_value_bar
 
             # Save updated JSON file
             output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -311,7 +322,6 @@ def copy_network_data(folder_path: str | Path, ntw_data_path: str | Path = None)
             _copy_data(ntw_data_path, ntw_name, output_folder)
 
 
-# TODO: fix this function
 def copy_compressor_data(folder_path: str | Path, compr_data_path: str | Path = None):
     """
     Copies compressor JSON files to the compressor_data folder for each investment period.

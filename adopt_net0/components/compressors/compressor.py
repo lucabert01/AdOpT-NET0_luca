@@ -37,7 +37,7 @@ class Compressor(ModelComponent):
     - para_output_pressure: pressure of the carrier at the output of the component that feeds the compressor
     - para_input_component: name of the component that receives the carrier as input from the compressor
     - para_input_pressure: pressure of the carrier at the input of the component fed by the compressor
-    - para_input_carrier: carrier that flows through the compressor
+    - para_carrier: carrier that flows through the compressor
     - para_unit_capex: investment costs per unit
     - para_unit_capex_annual: Unit CAPEX annualized (annualized from given data on
       up-front CAPEX, lifetime and discount rate)
@@ -89,12 +89,14 @@ class Compressor(ModelComponent):
         self.output_pressure = compr_data["connection_info"]["pressure"][0]
         self.input_pressure = compr_data["connection_info"]["pressure"][1]
         # to be fixed
-        self.input_carrier = compr_data["carrier"]
+        self.carrier = compr_data["carrier"]
         self.output_type = compr_data["connection_info"]["type"][0]
         self.input_type = compr_data["connection_info"]["type"][1]
         self.output_existing = compr_data["connection_info"]["existing"][0]
         self.input_existing = compr_data["connection_info"]["existing"][1]
-        self.name_compressor = f"{self.input_carrier}_Compressor_{self.output_component}_{self.input_component}"
+        self.name_compressor = (
+            f"{self.carrier}_Compressor_{self.output_component}_{self.input_component}"
+        )
 
         if self.output_existing == 1 and self.input_existing == 1:
             self.name_compressor = self.name_compressor + "_existing"
@@ -111,9 +113,13 @@ class Compressor(ModelComponent):
 
         # to be fixed (gamma)
         # self.performance_data["compression_energy"] = 5
-        # time_independent = {}
+        time_independent = {}
 
         self.energy_consumption = self.performance_data["energyconsumption"]
+
+        # Size
+        time_independent["size_min"] = self.size_min
+        time_independent["size_max"] = self.size_max
 
         # energy
         # self.processed_coeff.time_independent["compression_energy"] = (
@@ -129,6 +135,8 @@ class Compressor(ModelComponent):
             self.existing = 1
         else:
             self.existing = 0
+
+        self.processed_coeff.time_independent = time_independent
 
     def construct_compressor_model(
         self, b_compr, data: dict, set_t_full, set_t_clustered
@@ -153,6 +161,11 @@ class Compressor(ModelComponent):
 
         # SET T
         self.set_t_full = set_t_full
+
+        # MODELING TYPICAL DAYS
+        technologies_modelled_with_full_res = config["optimization"]["typicaldays"][
+            "technologies_with_full_res"
+        ]["value"]
 
         if config["optimization"]["typicaldays"]["N"]["value"] == 0:
             # everything with full resolution
@@ -188,15 +201,12 @@ class Compressor(ModelComponent):
                 self.processed_coeff.time_dependent_clustered
             )
 
-        # # CALCULATE BOUNDS
-        # self._calculate_bounds()
-
         # GENERAL TECHNOLOGY CONSTRAINTS
         b_compr = self._define_output_component(b_compr)  # can I delete it?
         b_compr = self._define_input_component(b_compr)  # can I delete it?
         b_compr = self._define_output_pressure(b_compr)  # can I delete it?
         b_compr = self._define_input_pressure(b_compr)  # can I delete it?
-        b_compr = self._define_carrier(b_compr)  # can I delete it?
+        b_compr = self._define_carrier(b_compr)
         b_compr = self._define_existing(b_compr)
         b_compr = self._define_flow(b_compr)
         b_compr = self._define_compressor_name(b_compr)
@@ -206,32 +216,41 @@ class Compressor(ModelComponent):
             b_compr = self._define_energy_consumption(b_compr, data)
             b_compr = self._define_opex_var(b_compr, data)
             b_compr = self._define_size(b_compr)
-            if self.existing == 0:
-                b_compr = self._define_capex_parameters(b_compr, data)
-                b_compr = self._define_capex_variables(b_compr, data)
-                b_compr = self._define_capex_constraints(b_compr, data)
-                b_compr = self._define_opex_fixed(b_compr, data)
+            # if self.existing == 0:
+            b_compr = self._define_capex_parameters(b_compr, data)
+            b_compr = self._define_capex_variables(b_compr, data)
+            b_compr = self._define_capex_constraints(b_compr, data)
+            b_compr = self._define_opex_fixed(b_compr, data)
 
-        # EXISTING TECHNOLOGY CONSTRAINTS
-        # if self.existing and self.component_options.decommission == "only_complete":
+        # TODO: understand what to do with decommission
+
+        # # EXISTING TECHNOLOGY CONSTRAINTS
+        # if self.existing and self.decommission == "only_complete":
         #     b_compr = self._define_decommissioning_at_once_constraints(b_compr)
 
-        # CLUSTERED DATA
-        if (config["optimization"]["typicaldays"]["N"]["value"] == 0) or (
-            config["optimization"]["typicaldays"]["method"]["value"] == 1
-        ):
-            # input/output to calculate performance is the same as var_input
-            if b_compr.find_component("var_input"):
-                self.input = b_compr.var_input
-            if b_compr.find_component("var_output"):
-                self.output = b_compr.var_output
-        elif config["optimization"]["typicaldays"]["method"]["value"] == 2:
-            # input/output to calculate performance has lower resolution
-            b_compr = self._define_auxiliary_vars(b_compr, data)
-            if b_compr.find_component("var_input"):
-                self.input = b_compr.var_input_aux
-            if b_compr.find_component("var_output"):
-                self.output = b_compr.var_output_aux
+        # # CLUSTERED DATA
+        # if (config["optimization"]["typicaldays"]["N"]["value"] == 0) or (
+        #     config["optimization"]["typicaldays"]["method"]["value"] == 1
+        # ):
+        #     # input/output to calculate performance is the same as var_input
+        #     if b_compr.find_component("var_input"):
+        #         self.input = b_compr.var_input
+        #     if b_compr.find_component("var_output"):
+        #         self.output = b_compr.var_output
+        # elif config["optimization"]["typicaldays"]["method"]["value"] == 2:
+        #     if self.technology_model in technologies_modelled_with_full_res:
+        #         # input/output to calculate performance is the same as var_input
+        #         if b_compr.find_component("var_input"):
+        #             self.input = b_compr.var_input
+        #         if b_compr.find_component("var_output"):
+        #             self.output = b_compr.var_output
+        #     else:
+        #         # input/output to calculate performance has lower resolution
+        #         b_tec = self._define_auxiliary_vars(b_compr, data)
+        #         if b_tec.find_component("var_input"):
+        #             self.input = b_tec.var_input_aux
+        #         if b_tec.find_component("var_output"):
+        #             self.output = b_tec.var_output_aux
 
         # AGGREGATE ALL VARIABLES
         # self._aggregate_input(b_compr)
@@ -242,7 +261,7 @@ class Compressor(ModelComponent):
 
     def _define_compressor_name(self, b_compr):
         """
-        Defines the name of the component
+        Defines the name of the component as carrier_component1_component2(_existing)
 
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
@@ -252,7 +271,7 @@ class Compressor(ModelComponent):
 
     def _define_compressor_active(self, b_compr):
         """
-        Defines if compressor is active
+        Defines if compressor is active (1 for active, 0 for no active)
 
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
@@ -288,7 +307,7 @@ class Compressor(ModelComponent):
 
     def _define_input_component(self, b_compr):
         """
-        Defines the component which has the carrier as output
+        Defines the component which has the carrier as input
 
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
@@ -317,10 +336,8 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        # to be fixed correctly
-        b_compr.para_input_carrier = pyo.Param(
-            initialize=[self.input_carrier], within=pyo.Any
-        )
+
+        b_compr.para_carrier = pyo.Param(initialize=[self.carrier], within=pyo.Any)
         return b_compr
 
     def _define_existing(self, b_compr):
@@ -330,7 +347,7 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
-        # to be fixed correctly
+
         b_compr.para_existing = pyo.Param(initialize=self.existing, within=pyo.Any)
         return b_compr
 
@@ -370,9 +387,19 @@ class Compressor(ModelComponent):
             initialize=economics["unit_capex"],
             mutable=True,
         )
+        b_compr.para_fix_capex = pyo.Param(
+            domain=pyo.Reals,
+            initialize=economics["fix_capex"],
+            mutable=True,
+        )
         b_compr.para_unit_capex_annual = pyo.Param(
             domain=pyo.Reals,
             initialize=annualization_factor * economics["unit_capex"],
+            mutable=True,
+        )
+        b_compr.para_fix_capex_annual = pyo.Param(
+            domain=pyo.Reals,
+            initialize=annualization_factor * economics["fix_capex"],
             mutable=True,
         )
 
@@ -402,16 +429,21 @@ class Compressor(ModelComponent):
         )
 
         def calculate_max_capex():
-            max_capex = 1000
+            max_capex = (
+                b_compr.para_size_max * economics["unit_capex"] + economics["fix_capex"]
+            ) * annualization_factor
             bounds = (0, max_capex)
+
             return bounds
 
         # CAPEX auxilliary (used to calculate theoretical CAPEX)
         # For new compressor, this is equal to actual CAPEX
         # For existing compressor it is used to calculate fixed OPEX
-        b_compr.var_capex_aux = pyo.Var(bounds=calculate_max_capex())
+        # b_compr.var_capex_aux = pyo.Var(bounds=calculate_max_capex())
+        b_compr.var_capex_aux = pyo.Var()
 
         b_compr.var_capex = pyo.Var()
+
         return b_compr
 
     def _define_capex_constraints(self, b_compr, data: dict):
@@ -430,34 +462,65 @@ class Compressor(ModelComponent):
             discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
 
-        # b_compr.const_capex_aux = pyo.Constraint(
-        #     expr=b_compr.var_size * b_compr.para_unit_capex_annual
-        #     == b_compr.var_capex_aux
-        # )
-        b_compr.const_capex_aux = pyo.Constraint(expr=0 == b_compr.var_capex_aux)
-
         # CAPEX
-        if self.existing:
-            # if self.component_options.decommission == "impossible":
-            #     # technology cannot be decommissioned
-            #     b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
-            # else:
-            #     # b_compr.const_capex = pyo.Constraint(
-            #     #     expr=b_compr.var_capex
-            #     #     == (b_compr.para_size_initial - b_compr.var_size)
-            #     #     * b_compr.para_decommissioning_cost_annual
-            #     # )
-            b_compr.const_capex = pyo.Constraint(
-                expr=b_compr.var_capex == 147.890 + 5.170 * b_compr.var_size
+        self.big_m_transformation_required = 1
+        s_indicators = range(0, 2)
+
+        if self.existing == 1:
+            b_compr.const_capex_aux = pyo.Constraint(
+                expr=b_compr.var_size * b_compr.para_unit_capex_annual
+                + b_compr.para_fix_capex_annual
+                == b_compr.var_capex_aux
             )
 
         else:
-            # b_compr.const_capex = pyo.Constraint(
-            #     expr=b_compr.var_capex == b_compr.var_capex_aux
-            # )
-            b_compr.const_capex = pyo.Constraint(
-                expr=b_compr.var_capex == 147.890 + 5.170 * b_compr.var_size
+
+            def init_installation(dis, ind):
+                if ind == 0:  # compressor not installed
+                    dis.const_capex_aux = pyo.Constraint(
+                        expr=b_compr.var_capex_aux == 0
+                    )
+                    dis.const_not_installed = pyo.Constraint(expr=b_compr.var_size == 0)
+                else:  # tech installed
+                    dis.const_capex_aux = pyo.Constraint(
+                        expr=b_compr.var_size * b_compr.para_unit_capex_annual
+                        + b_compr.para_fix_capex_annual
+                        == b_compr.var_capex_aux
+                    )
+
+            b_compr.dis_installation = gdp.Disjunct(
+                s_indicators, rule=init_installation
             )
+
+            def bind_disjunctions(dis):
+                return [b_compr.dis_installation[i] for i in s_indicators]
+
+            b_compr.disjunction_installation = gdp.Disjunction(rule=bind_disjunctions)
+
+        if self.existing == 1:
+            if self.decommission == "impossible":
+                # compressor cannot be decommissioned
+                b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
+            else:
+                b_compr.const_capex = pyo.Constraint(
+                    expr=b_compr.var_capex
+                    == (b_compr.para_size_initial - b_compr.var_size)
+                    * b_compr.para_decommissioning_cost_annual
+                )
+        else:
+            b_compr.const_capex = pyo.Constraint(
+                expr=b_compr.var_capex == b_compr.var_capex_aux
+            )
+        b_compr.const_capex_aux = pyo.Constraint(
+            expr=b_compr.var_size * b_compr.para_unit_capex_annual
+            + b_compr.para_fix_capex_annual
+            == b_compr.var_capex_aux
+        )
+        #
+        # b_compr.const_capex = pyo.Constraint(
+        #         expr=b_compr.var_capex == b_compr.var_capex_aux
+        #     )
+
         return b_compr
 
     def _define_energyconsumption_parameters(self, b_compr):
@@ -473,6 +536,11 @@ class Compressor(ModelComponent):
         )
 
         self.pressure_per_stage = self.performance_data["max_pressure_per_stage"]
+        self.isentropic_efficiency = self.performance_data["isentropic_efficiency"]
+        self.heat_coefficient = self.performance_data["heat_coefficient"]
+        self.mean_compressibility_factor = self.performance_data[
+            "mean_compressibility_factor"
+        ]
 
         # Consumption from compressor
         b_compr.var_consumption_energy = pyo.Var(
@@ -494,25 +562,34 @@ class Compressor(ModelComponent):
             math.log(self.input_pressure / self.output_pressure)
             / math.log(self.pressure_per_stage)
         )
-        isentropic_efficiency = 0.75
+
         R = 8.314  # kJ/kmol/K
-        k = 1.4
         T_in = 298.15  # K
-        Z = 1
+
+        energy_consumption = (
+            self.mean_compressibility_factor
+            / 120
+            / 2
+            * T_in
+            * (R / 1000)
+            * n_stages
+            * (self.heat_coefficient / (self.heat_coefficient - 1))
+            * (1 / self.isentropic_efficiency)
+            * (
+                (self.input_pressure / self.output_pressure)
+                ** ((self.heat_coefficient - 1) / (n_stages * self.heat_coefficient))
+                - 1
+            )
+        )  # MW_el/MW_H2
 
         def init_compr_energy(b, t, car):
             """
             Define energy for compression in MW
             """
-            return b_compr.var_consumption_energy[t, car] == Z * (
-                b_compr.var_flow[t] / 120 / 2
-            ) * T_in * (R / 1000) * n_stages * (k / (k - 1)) * (
-                1 / isentropic_efficiency
-            ) * (
-                (self.input_pressure / self.output_pressure)
-                ** ((k - 1) / (n_stages * k))
-                - 1
-            )  # MW
+            return (
+                b_compr.var_consumption_energy[t, car]
+                == b_compr.var_flow[t] * energy_consumption
+            )  # MW_el
 
         b_compr.const_compress_energy = pyo.Constraint(
             self.set_t_global, b_compr.set_consumed_carriers, rule=init_compr_energy
@@ -527,6 +604,15 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo block with compressor model
         :return: pyomo block with compressor model
         """
+        coeff_ti = self.processed_coeff.time_independent
+
+        b_compr.para_size_min = pyo.Param(
+            domain=pyo.NonNegativeReals, initialize=coeff_ti["size_min"], mutable=True
+        )
+        b_compr.para_size_max = pyo.Param(
+            domain=pyo.NonNegativeReals, initialize=coeff_ti["size_max"], mutable=True
+        )
+
         b_compr.var_size = pyo.Var(within=pyo.NonNegativeReals)
 
         def sizing_rule(b, t, car):
@@ -595,6 +681,42 @@ class Compressor(ModelComponent):
             * b_compr.para_opex_fixed
             == b_compr.var_opex_fixed
         )
+
+        return b_compr
+
+    def _define_decommissioning_at_once_constraints(self, b_compr):
+        """
+        Defines constraints to ensure that a technology can only be decommissioned as a whole.
+
+        This function creates a disjunction formulation that enforces
+        full-plant decommissioning decisions, meaning that either the technology is fully installed
+        or fully decommissioned, with no partial decommissioning allowed.
+
+        :param b_tec: The block representing the technology.
+
+        :return: The modified technology block with added decommissioning constraints.
+        """
+
+        # Full plant decommissioned only
+        self.big_m_transformation_required = 1
+        s_indicators = range(0, 2)
+
+        def init_decommission_full(dis, ind):
+            if ind == 0:  # tech not installed
+                dis.const_decommissioned = pyo.Constraint(expr=b_compr.var_size == 0)
+            else:  # tech installed
+                dis.const_installed = pyo.Constraint(
+                    expr=b_compr.var_size == b_compr.para_size_initial
+                )
+
+        b_compr.dis_decommission_full = gdp.Disjunct(
+            s_indicators, rule=init_decommission_full
+        )
+
+        def bind_disjunctions(dis):
+            return [b_compr.dis_decommission_full[i] for i in s_indicators]
+
+        b_compr.disjunction_decommission_full = gdp.Disjunction(rule=bind_disjunctions)
 
         return b_compr
 
@@ -698,7 +820,7 @@ class Compressor(ModelComponent):
         :param h5_group: h5 group to write to
         """
         # if model_block.find_component("var_flow"):
-        #     for car in model_block.set_input_carrier:
+        #     for car in model_block.set_carrier:
         #         h5_group.create_dataset(
         #             f"{car}_input",
         #             data=[
@@ -765,8 +887,8 @@ class Compressor(ModelComponent):
         #         ],
         #     )
         #
-        # if model_block.find_component("set_input_carriers_ccs"):
-        #     for car in model_block.set_input_carriers_ccs:
+        # if model_block.find_component("set_carriers_ccs"):
+        #     for car in model_block.set_carriers_ccs:
         #         h5_group.create_dataset(
         #             f"{car}_var_input_ccs",
         #             data=[

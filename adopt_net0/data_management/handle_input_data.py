@@ -24,6 +24,7 @@ class DataHandle:
     :param Path data_path: Container data_path
     :param dict time_series: Container for all time series
     :param dict energybalance_options: Container for energy balance options
+    :param dict connection_pressure_options: Container for pressure options for demand, export, import
     :param dict technology_data: Container for technology data
     :param dict network_data: Container for network data
     :param pd.DataFrame node_locations: Container for node locations
@@ -308,7 +309,7 @@ class DataHandle:
 
     def _read_pressure_connection_options(self):
         """
-        Reads connection pressure options
+        Reads connection pressure options for demand, import and export
         """
         for investment_period in self.topology["investment_periods"]:
             self.connection_pressure_options[investment_period] = {}
@@ -326,9 +327,12 @@ class DataHandle:
                     # CHeck for correct data
                     for carrier, connections in connection_pressure_options.items():
                         for connection_type, value in connections.items():
-                            if not isinstance(value, (int, float)):
+                            if not isinstance(value["value"], (int, float)):
                                 raise ValueError(
-                                    f"Invalid pressure value at node '{node}', carrier '{carrier}', connection '{connection_type}': {value}"
+                                    f"Invalid pressure value at node '{node}',"
+                                    f" carrier '{carrier}',"
+                                    f" connection '{connection_type}'"
+                                    f": {value['value']}"
                                 )
 
                 self.connection_pressure_options[investment_period][
@@ -836,7 +840,7 @@ class DataHandle:
             pressure_data_at_node["inputs"].append(
                 {
                     "name": "Demand",
-                    "pressure": (info_node_exchange_pressure["Demand"]),
+                    "pressure": (info_node_exchange_pressure["Demand"]["value"]),
                     "type": "Exchange",
                     "existing": 1,
                 }
@@ -851,7 +855,7 @@ class DataHandle:
             pressure_data_at_node["inputs"].append(
                 {
                     "name": "Export",
-                    "pressure": (info_node_exchange_pressure["Export"]),
+                    "pressure": (info_node_exchange_pressure["Export"]["value"]),
                     "type": "Exchange",
                     "existing": 1,
                 }
@@ -866,7 +870,7 @@ class DataHandle:
             pressure_data_at_node["outputs"].append(
                 {
                     "name": "Import",
-                    "pressure": (info_node_exchange_pressure["Import"]),
+                    "pressure": (info_node_exchange_pressure["Import"]["value"]),
                     "type": "Exchange",
                     "existing": 1,
                 }

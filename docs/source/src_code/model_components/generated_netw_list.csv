@@ -1,0 +1,16 @@
+Network name; Network_type 
+CO2PipelineOffshore; fluid 
+CO2PipelineOnshore; fluid 
+CO2Railway; fluid 
+CO2Ship; fluid 
+CO2Truck; fluid 
+electricityOffshore; electricity 
+electricityOnshore; electricity 
+electricitySimple; electricity 
+heat; fluid 
+hydrogenPipelineOffshore; fluid 
+hydrogenPipelineOnshore; fluid 
+hydrogenRailway; fluid 
+hydrogenShip; fluid 
+hydrogenSimple; fluid 
+hydrogenTruck; fluid 
