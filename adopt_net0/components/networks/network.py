@@ -7,7 +7,7 @@ from ..utilities import (
     determine_constraint_scaling,
     get_attribute_from_dict,
 )
-
+import warnings
 import pandas as pd
 import copy
 import pyomo.environ as pyo
@@ -592,6 +592,8 @@ class Network(ModelComponent):
             gamma3 = self.gamma_per_arc["gamma3"].at[node_from, node_to]
             gamma4 = self.gamma_per_arc["gamma4"].at[node_from, node_to]
         else:
+            warnings.warn(f"The CAPEX parameters gamma for {self.name} are NOT defined per arc. "
+                          f"The values defined in the {self.name}.json file are being used")
             gamma1 = economics["gamma1"]
             gamma2 = economics["gamma2"]
             gamma3 = economics["gamma3"]
