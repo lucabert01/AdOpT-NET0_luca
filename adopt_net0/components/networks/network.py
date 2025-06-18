@@ -241,7 +241,7 @@ class Network(ModelComponent):
                     self.economics[gamma],
                     index=self.distance.index,
                     columns=self.distance.columns,
-            )
+                )
 
         # Other
         time_independent["min_transport"] = self.performance_data["min_transport"]

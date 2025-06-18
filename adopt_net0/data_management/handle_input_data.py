@@ -432,17 +432,21 @@ class DataHandle:
                                 index_col=0,
                             )
                         except FileNotFoundError:
-                            raise FileNotFoundError(f"capex_defined_per_arc==1 for network {network}, a matrix needs to be provided for each gamma")
+                            raise FileNotFoundError(
+                                f"capex_defined_per_arc==1 for network {network}, a matrix needs to be provided for each gamma"
+                            )
                     else:
                         if os.path.isfile(
-                                self.data_path
-                                / investment_period
-                                / "network_topology"
-                                / "new"
-                                / network
-                                / f"{gamma}.csv",
+                            self.data_path
+                            / investment_period
+                            / "network_topology"
+                            / "new"
+                            / network
+                            / f"{gamma}.csv",
                         ):
-                            warn(f"capex_defined_per_arc==0, but you defined a file for each gamma parameter for network {network}")
+                            warn(
+                                f"capex_defined_per_arc==0, but you defined a file for each gamma parameter for network {network}"
+                            )
 
                 if netw_data.size_max_defined_per_arc:
                     try:
@@ -458,18 +462,20 @@ class DataHandle:
                         )
                     except FileNotFoundError:
                         raise FileNotFoundError(
-                            f" size_max_defined_per_arc==1 for network {network}, a matrix needs to be provided for size_max_arcs")
+                            f" size_max_defined_per_arc==1 for network {network}, a matrix needs to be provided for size_max_arcs"
+                        )
                 else:
                     if os.path.isfile(
-                            self.data_path
-                            / investment_period
-                            / "network_topology"
-                            / "new"
-                            / network
-                            / "size_max_arcs.csv"
+                        self.data_path
+                        / investment_period
+                        / "network_topology"
+                        / "new"
+                        / network
+                        / "size_max_arcs.csv"
                     ):
                         warn(
-                            f"size_max_defined_per_arc==0, but you defined a file for it for network {network}")
+                            f"size_max_defined_per_arc==0, but you defined a file for it for network {network}"
+                        )
 
                 netw_data.fit_network_performance()
                 self.network_data[investment_period][network] = netw_data
@@ -520,18 +526,21 @@ class DataHandle:
                             )
                         except FileNotFoundError:
                             raise FileNotFoundError(
-                                f" capex_defined_per_arc==1 for network {network}, a matrix needs to be provided for each gamma")
+                                f" capex_defined_per_arc==1 for network {network}, a matrix needs to be provided for each gamma"
+                            )
                     else:
                         if os.path.isfile(
-                                self.data_path
-                                / investment_period
-                                / "network_topology"
-                                / "existing"
-                                / network
-                                / f"{gamma}.csv",
+                            self.data_path
+                            / investment_period
+                            / "network_topology"
+                            / "existing"
+                            / network
+                            / f"{gamma}.csv",
                         ):
-                            warn(f"capex_defined_per_arc==0, but you defined a file for each gamma parameter for network {network}")
-                        
+                            warn(
+                                f"capex_defined_per_arc==0, but you defined a file for each gamma parameter for network {network}"
+                            )
+
                 netw_data.size_initial = pd.read_csv(
                     self.data_path
                     / investment_period
