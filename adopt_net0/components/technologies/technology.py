@@ -1254,6 +1254,7 @@ class Technology(ModelComponent):
                     ]
                 ],
             )
+
         if model_block.find_component("set_input_carriers_ccs"):
             for car in model_block.set_input_carriers_ccs:
                 h5_group.create_dataset(
