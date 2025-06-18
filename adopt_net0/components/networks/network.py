@@ -171,6 +171,9 @@ class Network(ModelComponent):
         :param dict netw_data: technology data
         """
         super().__init__(netw_data)
+        # Options
+        self.capex_defined_per_arc = netw_data["capex_defined_per_arc"]
+        self.size_max_defined_per_arc = netw_data["size_max_defined_per_arc"]
 
         # General information
         self.connection = []
@@ -206,15 +209,16 @@ class Network(ModelComponent):
             time_independent["size_initial"] = self.size_initial
 
         if self.existing == 0:
-            if not isinstance(self.size_max_arcs, pd.DataFrame):
+            if self.size_max_defined_per_arc:
+                time_independent["size_max_arcs"] = self.size_max_arcs
+            else:
                 # Use max size
                 time_independent["size_max_arcs"] = pd.DataFrame(
                     time_independent["size_max"],
                     index=self.distance.index,
                     columns=self.distance.columns,
                 )
-            else:
-                time_independent["size_max_arcs"] = self.size_max_arcs
+
         elif self.existing == 1:
             # Use initial size
             time_independent["size_max_arcs"] = time_independent["size_initial"]
@@ -222,6 +226,21 @@ class Network(ModelComponent):
         time_independent["rated_capacity"] = get_attribute_from_dict(
             self.performance_data, "rated_capacity", 1
         )
+
+        # Cost parameters
+        time_independent["cost_per_arc"] = {}
+        if self.capex_defined_per_arc:
+            # Use gammas from file (defined per arc)
+            time_independent["cost_per_arc"] = self.gamma_per_arc
+        else:
+            # Use global cost parameters, as defined in the json file
+            gammas = ["gamma1", "gamma2", "gamma3", "gamma4"]
+            for gamma in gammas:
+                time_independent["cost_per_arc"][gamma] = pd.DataFrame(
+                    self.economics[gamma],
+                    index=self.distance.index,
+                    columns=self.distance.columns,
+            )
 
         # Other
         time_independent["min_transport"] = self.performance_data["min_transport"]
@@ -584,20 +603,13 @@ class Network(ModelComponent):
         """
 
         config = data["config"]
+        coeff_ti = self.processed_coeff.time_independent
         economics = self.economics
-        # check if costs (gammas) are defined per arc
-        if self.gamma_per_arc:
-            gamma1 = self.gamma_per_arc["gamma1"].at[node_from, node_to]
-            gamma2 = self.gamma_per_arc["gamma2"].at[node_from, node_to]
-            gamma3 = self.gamma_per_arc["gamma3"].at[node_from, node_to]
-            gamma4 = self.gamma_per_arc["gamma4"].at[node_from, node_to]
-        else:
-            warnings.warn(f"The CAPEX parameters gamma for {self.name} are NOT defined per arc. "
-                          f"The values defined in the {self.name}.json file are being used")
-            gamma1 = economics["gamma1"]
-            gamma2 = economics["gamma2"]
-            gamma3 = economics["gamma3"]
-            gamma4 = economics["gamma4"]
+
+        gamma1 = coeff_ti["cost_per_arc"]["gamma1"].at[node_from, node_to]
+        gamma2 = coeff_ti["cost_per_arc"]["gamma2"].at[node_from, node_to]
+        gamma3 = coeff_ti["cost_per_arc"]["gamma3"].at[node_from, node_to]
+        gamma4 = coeff_ti["cost_per_arc"]["gamma4"].at[node_from, node_to]
 
         # CHECK FOR GLOBAL ECONOMIC OPTIONS
         discount_rate = set_discount_rate(config, economics)

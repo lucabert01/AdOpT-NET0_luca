@@ -2,7 +2,7 @@
   "network_type": "electricity",
   "size_is_int": 0,
   "capex_defined_per_arc": 0,
-  "max_size_defined_per_arc": 0,
+  "size_max_defined_per_arc": 0,
   "decommission": "impossible",
   "size_min": 0,
   "size_max": 10000,
