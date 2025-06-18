@@ -389,6 +389,8 @@ class DataHandle:
             ) as json_file:
                 networks = json.load(json_file)
 
+            gammas = ["gamma1", "gamma2", "gamma3", "gamma4"]
+
             # New networks
             for network in networks["new"]:
 
@@ -415,22 +417,22 @@ class DataHandle:
                     sep=";",
                     index_col=0,
                 )
-                for gamma_num in range(1, 5):
+                for gamma in gammas:
                     if os.path.isfile(
                         self.data_path
                         / investment_period
                         / "network_topology"
                         / "new"
                         / network
-                        / f"gamma{gamma_num}.csv"
+                        / f"{gamma}.csv"
                     ):
-                        netw_data.gamma_per_arc[f"gamma{gamma_num}"] = pd.read_csv(
+                        netw_data.gamma_per_arc[f"{gamma}"] = pd.read_csv(
                             self.data_path
                             / investment_period
                             / "network_topology"
                             / "new"
                             / network
-                            / f"gamma{gamma_num}.csv",
+                            / f"{gamma}.csv",
                             sep=";",
                             index_col=0,
                         )
@@ -486,22 +488,22 @@ class DataHandle:
                     sep=";",
                     index_col=0,
                 )
-                for gamma_num in range(1, 5):
+                for gamma in gammas:
                     if os.path.isfile(
                         self.data_path
                         / investment_period
                         / "network_topology"
                         / "new"
                         / network
-                        / f"gamma{gamma_num}.csv"
+                        / f"{gamma}.csv"
                     ):
-                        netw_data.gamma_per_arc[f"gamma{gamma_num}"] = pd.read_csv(
+                        netw_data.gamma_per_arc[f"{gamma}"] = pd.read_csv(
                             self.data_path
                             / investment_period
                             / "network_topology"
                             / "new"
                             / network
-                            / f"gamma{gamma_num}.csv",
+                            / f"{gamma}.csv",
                             sep=";",
                             index_col=0,
                         )

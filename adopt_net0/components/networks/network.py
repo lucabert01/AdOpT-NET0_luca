@@ -582,7 +582,6 @@ class Network(ModelComponent):
         :param dict data: dict containing model information
         :return: pyomo arc block
         """
-        coeff_ti = self.processed_coeff.time_independent
 
         config = data["config"]
         economics = self.economics
