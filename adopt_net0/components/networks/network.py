@@ -31,9 +31,10 @@ class Network(ModelComponent):
     two directions. As such their CAPEX is double and their size in both directions
     can be different. The CAPEX parameters (gamma1,2,3,4) can either be specified in
     the json file of the network or for every arc. In the latter case, the user needs
-    to create 1 csv file for every gamma (gamma1.csv etc) with a matrix-like structure (nodes
-    as index and columns). These files need to be placed in the corresponding folder
-    in "network_topology", e.g. my_case_study/period1/network_topology/new(or existing)/my_network_type
+    to create a csv file for every gamma (gamma1.csv etc) with a matrix-like structure (nodes
+    as index and columns, similar to the distance.csv). These files need to be placed in the corresponding folder
+    in "network_topology", e.g. my_case_study/period1/network_topology/new(or existing)/my_network_type.
+    You can use the capex per arc if capex_defined_per_arc is set to 1 in the corresponding json file.
 
     **Set declarations:**
 
