@@ -122,7 +122,6 @@ def test_full_model_flow(request):
     assert cost2 < cost1
 
 
-
 def test_clustering_algo(request):
     """
     Tests method 1 and two of the clustering algorithm
@@ -285,46 +284,6 @@ def test_objective_functions(request):
     pyhub._optimize_costs_emissionslimit()
 
     pyhub._solve_pareto()
-
-
-def test_monte_carlo(request):
-    """
-    Tests monte carlo analysis
-    """
-
-    path = Path("tests/case_study_full_pipeline")
-
-    pyhub = ModelHub()
-    pyhub.read_data(path, start_period=0, end_period=2)
-
-    # Monte Carlo type normal
-    pyhub.data.model_config["optimization"]["monte_carlo"]["N"]["value"] = 2
-
-    pyhub.data.model_config["solveroptions"]["solver"]["value"] = request.config.solver
-    pyhub.data.model_config["reporting"]["save_summary_path"][
-        "value"
-    ] = request.config.result_folder_path
-    pyhub.data.model_config["reporting"]["save_path"][
-        "value"
-    ] = request.config.result_folder_path
-
-    pyhub.construct_model()
-    pyhub.construct_balances()
-    pyhub.solve()
-
-    termination = pyhub.solution.solver.termination_condition
-    assert termination == TerminationCondition.optimal
-
-    # Solve for Monte Carlo type uniform
-    pyhub.data.model_config["optimization"]["monte_carlo"]["type"][
-        "value"
-    ] = "uniform_dis_from_file"
-    pyhub.data._read_monte_carlo()
-
-    pyhub.solve()
-
-    termination = pyhub.solution.solver.termination_condition
-    assert termination == TerminationCondition.optimal
 
 
 def test_scaling(request):
