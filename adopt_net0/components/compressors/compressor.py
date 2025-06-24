@@ -462,64 +462,64 @@ class Compressor(ModelComponent):
             discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
 
-        # CAPEX
-        self.big_m_transformation_required = 1
-        s_indicators = range(0, 2)
-
-        if self.existing == 1:
-            b_compr.const_capex_aux = pyo.Constraint(
-                expr=b_compr.var_size * b_compr.para_unit_capex_annual
-                + b_compr.para_fix_capex_annual
-                == b_compr.var_capex_aux
-            )
-
-        else:
-
-            def init_installation(dis, ind):
-                if ind == 0:  # compressor not installed
-                    dis.const_capex_aux = pyo.Constraint(
-                        expr=b_compr.var_capex_aux == 0
-                    )
-                    dis.const_not_installed = pyo.Constraint(expr=b_compr.var_size == 0)
-                else:  # tech installed
-                    dis.const_capex_aux = pyo.Constraint(
-                        expr=b_compr.var_size * b_compr.para_unit_capex_annual
-                        + b_compr.para_fix_capex_annual
-                        == b_compr.var_capex_aux
-                    )
-
-            b_compr.dis_installation = gdp.Disjunct(
-                s_indicators, rule=init_installation
-            )
-
-            def bind_disjunctions(dis):
-                return [b_compr.dis_installation[i] for i in s_indicators]
-
-            b_compr.disjunction_installation = gdp.Disjunction(rule=bind_disjunctions)
-
-        if self.existing == 1:
-            if self.decommission == "impossible":
-                # compressor cannot be decommissioned
-                b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
-            else:
-                b_compr.const_capex = pyo.Constraint(
-                    expr=b_compr.var_capex
-                    == (b_compr.para_size_initial - b_compr.var_size)
-                    * b_compr.para_decommissioning_cost_annual
-                )
-        else:
-            b_compr.const_capex = pyo.Constraint(
-                expr=b_compr.var_capex == b_compr.var_capex_aux
-            )
+        # # CAPEX
+        # self.big_m_transformation_required = 1
+        # s_indicators = range(0, 2)
+        #
+        # if self.existing == 1:
+        #     b_compr.const_capex_aux = pyo.Constraint(
+        #         expr=b_compr.var_size * b_compr.para_unit_capex_annual
+        #         + b_compr.para_fix_capex_annual
+        #         == b_compr.var_capex_aux
+        #     )
+        #
+        # else:
+        #
+        #     def init_installation(dis, ind):
+        #         if ind == 0:  # compressor not installed
+        #             dis.const_capex_aux = pyo.Constraint(
+        #                 expr=b_compr.var_capex_aux == 0
+        #             )
+        #             dis.const_not_installed = pyo.Constraint(expr=b_compr.var_size == 0)
+        #         else:  # tech installed
+        #             dis.const_capex_aux = pyo.Constraint(
+        #                 expr=b_compr.var_size * b_compr.para_unit_capex_annual
+        #                 + b_compr.para_fix_capex_annual
+        #                 == b_compr.var_capex_aux
+        #             )
+        #
+        #     b_compr.dis_installation = gdp.Disjunct(
+        #         s_indicators, rule=init_installation
+        #     )
+        #
+        #     def bind_disjunctions(dis):
+        #         return [b_compr.dis_installation[i] for i in s_indicators]
+        #
+        #     b_compr.disjunction_installation = gdp.Disjunction(rule=bind_disjunctions)
+        #
+        # if self.existing == 1:
+        #     if self.decommission == "impossible":
+        #         # compressor cannot be decommissioned
+        #         b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
+        #     else:
+        #         b_compr.const_capex = pyo.Constraint(
+        #             expr=b_compr.var_capex
+        #             == (b_compr.para_size_initial - b_compr.var_size)
+        #             * b_compr.para_decommissioning_cost_annual
+        #         )
+        # else:
+        #     b_compr.const_capex = pyo.Constraint(
+        #         expr=b_compr.var_capex == b_compr.var_capex_aux
+        #     )
         b_compr.const_capex_aux = pyo.Constraint(
             expr=b_compr.var_size * b_compr.para_unit_capex_annual
             + b_compr.para_fix_capex_annual
             == b_compr.var_capex_aux
         )
-        #
-        # b_compr.const_capex = pyo.Constraint(
-        #         expr=b_compr.var_capex == b_compr.var_capex_aux
-        #     )
+        if self.existing == 0:
+            b_compr.const_capex = pyo.Constraint(
+                expr=b_compr.var_capex == b_compr.var_capex_aux
+            )
 
         return b_compr
 

@@ -5,6 +5,7 @@ from pyomo.environ import (
     SolverFactory,
 )
 
+from adopt_net0.model_construction import construct_compressor_constrains
 from tests.utilities import make_data_handle
 from adopt_net0.modelhub import ModelHub
 from adopt_net0.model_construction.construct_balances import (
@@ -67,6 +68,7 @@ def test_model_nodal_energy_balance(request):
     config = {
         "energybalance": {"violation": {"value": 0}},
         "optimization": {"typicaldays": {"N": {"value": 0}}},
+        "performance": {"pressure": {"pressure_on": {"value": 0}}},
     }
     period = dh.topology["investment_periods"][0]
     node = dh.topology["nodes"][0]
@@ -78,6 +80,75 @@ def test_model_nodal_energy_balance(request):
     m = construct_model(dh)
     m = construct_network_constraints(m, config)
     m = construct_nodal_energybalance(m, config)
+
+    termination_condition = solve_model(m, request.config.solver)
+
+    assert termination_condition == TerminationCondition.infeasible
+
+    # FEASIBILITY CASE
+    # Through violation
+    config["energybalance"]["violation"]["value"] = 1
+    m = construct_model(dh)
+    m = construct_network_constraints(m, config)
+    m = construct_nodal_energybalance(m, config)
+
+    termination_condition = solve_model(m, request.config.solver)
+
+    assert termination_condition == TerminationCondition.optimal
+    assert m.periods[period].var_violation[1, carrier, node].value == 1
+
+    # Through import
+    config["energybalance"]["violation"]["value"] = 0
+    dh.time_series["full"].loc[
+        :, (period, node, "CarrierData", carrier, "Import limit")
+    ] = 1
+    m = construct_model(dh)
+    m = construct_network_constraints(m, config)
+    m = construct_nodal_energybalance(m, config)
+
+    termination_condition = solve_model(m, request.config.solver)
+
+    assert termination_condition == TerminationCondition.optimal
+    assert m.periods[period].node_blocks[node].var_import_flow[1, carrier].value == 1
+
+
+def test_model_nodal_energy_balance_with_compression(request):
+    """
+    Tests the energy balance on a nodal level while adding compression
+
+    This testing function contains three subtests:
+
+    INFEASIBILITY CASES
+    1) Demand at first node is 1, with no imports and exports
+
+    FEASIBILITY CASES
+    2) Demand at first node is 1, violation is allowed
+    3) Demand at first node is 1, import is allowed
+    """
+    nr_timesteps = 1
+
+    dh = make_data_handle(nr_timesteps)
+    config = {
+        "energybalance": {"violation": {"value": 0}},
+        "optimization": {"typicaldays": {"N": {"value": 0}}},
+        "performance": {
+            "pressure": {
+                "pressure_on": {"value": 1},
+                "pressure_carriers": {"value": ["hydrogen"]},
+            }
+        },
+    }
+    period = dh.topology["investment_periods"][0]
+    node = dh.topology["nodes"][0]
+    carrier = dh.topology["carriers"][0]
+
+    # INFEASIBILITY CASE
+    dh.time_series["full"].loc[:, (period, node, "CarrierData", carrier, "Demand")] = 1
+
+    m = construct_model(dh)
+    m = construct_network_constraints(m, config)
+    m = construct_nodal_energybalance(m, config)
+    m = construct_compressor_constrains(m, config)
 
     termination_condition = solve_model(m, request.config.solver)
 
@@ -129,6 +200,7 @@ def test_model_global_energy_balance(request):
     config = {
         "energybalance": {"violation": {"value": 0}},
         "optimization": {"typicaldays": {"N": {"value": 0}}},
+        "performance": {"pressure": {"pressure_on": {"value": 0}}},
     }
     period = dh.topology["investment_periods"][0]
     node1 = dh.topology["nodes"][0]
@@ -192,6 +264,7 @@ def test_model_emission_balance(request):
     config = {
         "energybalance": {"violation": {"value": 0}, "copperplate": {"value": 0}},
         "optimization": {"typicaldays": {"N": {"value": 0}}},
+        "performance": {"pressure": {"pressure_on": {"value": 0}}},
     }
     period = dh.topology["investment_periods"][0]
     node = dh.topology["nodes"][0]
@@ -255,6 +328,7 @@ def test_model_cost_balance(request):
     config = {
         "energybalance": {"violation": {"value": 0}, "copperplate": {"value": 0}},
         "optimization": {"typicaldays": {"N": {"value": 0}}},
+        "performance": {"pressure": {"pressure_on": {"value": 0}}},
     }
     period = dh.topology["investment_periods"][0]
     node = dh.topology["nodes"][0]

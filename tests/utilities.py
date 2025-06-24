@@ -225,6 +225,17 @@ def _read_network_data_data_patch(self):
         self.network_data[investment_period] = {}
 
 
+def _read_compressor_data_data_patch(self):
+    """
+    Monkey patch read compressor data
+    """
+    compressor_data = {}
+    for investment_period in self.topology["investment_periods"]:
+        compressor_data[investment_period] = {}
+        for node in self.topology["nodes"]:
+            compressor_data[investment_period][node] = {}
+
+
 def read_input_data_patch(self):
     """
     Monkey patch read data
@@ -235,6 +246,7 @@ def read_input_data_patch(self):
     self._read_energybalance_options()
     self._read_technology_data()
     self._read_network_data()
+    self._read_compressor_data()
 
 
 def make_data_handle(nr_timesteps: int, topology=None):
@@ -264,6 +276,7 @@ def make_data_handle(nr_timesteps: int, topology=None):
     dh._read_energybalance_options = _read_energybalance_options_patch.__get__(dh)
     dh._read_technology_data = _read_technology_data_patch.__get__(dh)
     dh._read_network_data = _read_network_data_data_patch.__get__(dh)
+    dh._read_compressor_data = _read_compressor_data_data_patch.__get__(dh)
     dh.set_settings = read_input_data_patch.__get__(dh)
 
     dh.start_period = 0
@@ -283,7 +296,9 @@ def run_model(model, solver: str, objective: str = "capex"):
     :return: termination condition for respective model
     """
     if objective == "capex_tot":
-        model.obj = Objective(expr=model.var_capex + model.var_capex_ccs, sense=minimize)
+        model.obj = Objective(
+            expr=model.var_capex + model.var_capex_ccs, sense=minimize
+        )
     elif objective == "capex":
         model.obj = Objective(expr=model.var_capex, sense=minimize)
     elif objective == "emissions":
