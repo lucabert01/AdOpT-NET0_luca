@@ -511,11 +511,18 @@ class Compressor(ModelComponent):
         #     b_compr.const_capex = pyo.Constraint(
         #         expr=b_compr.var_capex == b_compr.var_capex_aux
         #     )
+
         b_compr.const_capex_aux = pyo.Constraint(
             expr=b_compr.var_size * b_compr.para_unit_capex_annual
-            + b_compr.para_fix_capex_annual
             == b_compr.var_capex_aux
+            # + b_compr.para_fix_capex_annual
         )
+        # b_compr.const_capex_aux = pyo.Constraint(
+        #     expr=b_compr.var_size * b_compr.para_unit_capex_annual
+        #     + b_compr.para_fix_capex_annual
+        #          == b_compr.var_capex_aux
+        # )
+
         if self.existing == 0:
             b_compr.const_capex = pyo.Constraint(
                 expr=b_compr.var_capex == b_compr.var_capex_aux

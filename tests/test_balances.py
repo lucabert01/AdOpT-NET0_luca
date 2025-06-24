@@ -145,14 +145,14 @@ def test_model_nodal_energy_balance_with_compression(request):
     # INFEASIBILITY CASE
     dh.time_series["full"].loc[:, (period, node, "CarrierData", carrier, "Demand")] = 1
 
-    # m = construct_model(dh)
-    # m = construct_network_constraints(m, config)
-    # m = construct_nodal_energybalance(m, config)
-    # m = construct_compressor_constrains(m, config)
-    #
-    # termination_condition = solve_model(m, request.config.solver)
-    #
-    # assert termination_condition == TerminationCondition.infeasible
+    m = construct_model(dh)
+    m = construct_network_constraints(m, config)
+    m = construct_nodal_energybalance(m, config)
+    m = construct_compressor_constrains(m, config)
+
+    termination_condition = solve_model(m, request.config.solver)
+
+    assert termination_condition == TerminationCondition.infeasible
 
     # FEASIBILITY CASE
     # Through violation
