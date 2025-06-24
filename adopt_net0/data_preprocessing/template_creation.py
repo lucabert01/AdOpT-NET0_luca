@@ -279,34 +279,6 @@ def initialize_configuration_templates() -> dict:
                 "is costs_emissionlimit",
                 "value": 0,
             },
-            "monte_carlo": {
-                "N": {
-                    "description": "Number of Monte Carlo simulations (0 = off).",
-                    "value": 0,
-                },
-                "type": {
-                    "description": "Type of Monte Carlo simulation. For type 1 the user defines the standard "
-                    "deviation and the components to vary. For type 2 the user provides a csv file "
-                    "with the parameters and their min, max and reference values. ",
-                    "options": ["normal_dis", "uniform_dis_from_file"],
-                    "value": "normal_dis",
-                },
-                "sd": {
-                    "description": "Value defining the range in which variables are varied in Monte Carlo simulations "
-                    "(defined as the standard deviation of the original value).",
-                    "value": 0.2,
-                },
-                "on_what": {
-                    "description": "List: Defines component to vary.",
-                    "options": [
-                        "Technologies",
-                        "Networks",
-                        "Import",
-                        "Export",
-                    ],
-                    "value": ["Technologies"],
-                },
-            },
             "pareto_points": {"description": "Number of Pareto points.", "value": 5},
             "timestaging": {
                 "description": "Defines number of timesteps that are averaged (0 = off).",
@@ -509,38 +481,3 @@ def create_optimization_templates(path: Path | str):
         json.dump(topology_template, f, indent=4)
     with open(config_file, "w") as f:
         json.dump(configuration_template, f, indent=4)
-
-
-def create_montecarlo_template_csv(base_path: Path | str):
-    """
-    Creates a template CSV file for the monte carlo parameters and saves it to the given path. The monte carlo can
-    only be performed on economic parameters.
-
-    The file should be filled by specifying the type ("Technologies", "Networks", "Import", "Export"), the name (
-    specific technology or network name, carrier in case of import or export), and the parameter ('unit_capex' or
-    'fix_capex' for technology, 'gamma1' 'gamma2' 'gamma3' or 'gamma4' for network and 'price' for import
-    and export).
-
-    :param str/Path path: path to folder to create Topology.json
-    """
-    if isinstance(base_path, str):
-        base_path = Path(base_path)
-
-    montecarlo_file = base_path / "MonteCarlo.csv"
-
-    # Check if the file already exists
-    if montecarlo_file.exists():
-        print(f"File already exists: {montecarlo_file}")
-        return
-
-    data = {
-        "type": [None],
-        "name": [None],
-        "parameter": [None],
-        "min": [None],
-        "ref": [None],
-        "max": [None],
-    }
-    df = pd.DataFrame(data)
-
-    df.to_csv(montecarlo_file, sep=";", index=False)

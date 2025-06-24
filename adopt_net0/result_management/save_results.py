@@ -196,7 +196,6 @@ def get_summary(model, solution, folder_path: Path, model_info: dict, data) -> d
         "value"
     ]
     summary_dict["pareto_point"] = model_info["pareto_point"]
-    summary_dict["monte_carlo_run"] = model_info["monte_carlo_run"]
     summary_dict["time_stage"] = model_info["time_stage"]
 
     summary_dict["case"] = model_info["config"]["reporting"]["case_name"]["value"]
