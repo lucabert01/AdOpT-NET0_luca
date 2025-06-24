@@ -490,7 +490,7 @@ def initialize_configuration_templates() -> dict:
                 "pressure_on": {
                     "description": "Determines if pressure levels are used, 0 (no pressure levels) is default.",
                     "options": [0, 1],
-                    "value": 0,
+                    "value": 1,
                 },
                 "pressure_carriers": {
                     "description": "Determines which carriers are considered for pressure calculations. Should be a list of carrier strings",

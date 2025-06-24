@@ -235,6 +235,8 @@ def _read_compressor_data_data_patch(self):
         for node in self.topology["nodes"]:
             compressor_data[investment_period][node] = {}
 
+    self.compressor_data = compressor_data
+
 
 def read_input_data_patch(self):
     """
