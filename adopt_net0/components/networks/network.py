@@ -7,6 +7,7 @@ from ..utilities import (
     determine_constraint_scaling,
     get_attribute_from_dict,
 )
+
 import warnings
 import pandas as pd
 import copy
@@ -312,7 +313,7 @@ class Network(ModelComponent):
                 b_arc, b_netw, node_from, node_to
             )
             b_arc = self._define_flow(b_arc, b_netw)
-            b_arc = self._define_opex_arc(b_arc, b_netw)
+            b_arc = self._define_opex_arc(b_arc, b_netw, data)
             b_arc = self._define_emissions_arc(b_arc, b_netw)
 
             b_arc = self._define_energyconsumption_arc(b_arc, b_netw)
@@ -466,7 +467,7 @@ class Network(ModelComponent):
             domain=pyo.Reals, initialize=economics["opex_fixed"], mutable=True
         )
 
-        b_netw.var_opex_variable = pyo.Var(self.set_t)
+        b_netw.var_opex_variable = pyo.Var()
         b_netw.var_opex_fixed = pyo.Var()
 
         return b_netw
@@ -812,7 +813,7 @@ class Network(ModelComponent):
 
         return b_arc
 
-    def _define_opex_arc(self, b_arc, b_netw):
+    def _define_opex_arc(self, b_arc, b_netw, data):
         """
         Defines OPEX per Arc
 
@@ -820,15 +821,19 @@ class Network(ModelComponent):
         :param b_netw: pyomo network block
         :return: pyomo arc block
         """
-        b_arc.var_opex_variable = pyo.Var(self.set_t)
+        b_arc.var_opex_variable = pyo.Var()
 
-        def init_opex_variable(const, t):
-            return (
-                b_arc.var_opex_variable[t]
-                == b_arc.var_flow[t] * b_netw.para_opex_variable
+        hour_factors = data["hour_factors"]
+        nr_timesteps_averaged = data["nr_timesteps_averaged"]
+
+        def init_opex_variable(const):
+            return b_arc.var_opex_variable == sum(
+                (b_arc.var_flow[t] * nr_timesteps_averaged * hour_factors[t - 1])
+                * b_netw.para_opex_variable
+                for t in self.set_t
             )
 
-        b_arc.const_opex_variable = pyo.Constraint(self.set_t, rule=init_opex_variable)
+        b_arc.const_opex_variable = pyo.Constraint(rule=init_opex_variable)
         return b_arc
 
     def _define_emissions_arc(self, b_arc, b_netw):
@@ -972,16 +977,13 @@ class Network(ModelComponent):
 
         b_netw.const_opex_fixed = pyo.Constraint(rule=init_opex_fixed)
 
-        def init_opex_variable(const, t):
+        def init_opex_variable(const):
             return (
-                sum(
-                    b_netw.arc_block[arc].var_opex_variable[t]
-                    for arc in b_netw.set_arcs
-                )
-                == b_netw.var_opex_variable[t]
+                sum(b_netw.arc_block[arc].var_opex_variable for arc in b_netw.set_arcs)
+                == b_netw.var_opex_variable
             )
 
-        b_netw.const_opex_var = pyo.Constraint(self.set_t, rule=init_opex_variable)
+        b_netw.const_opex_var = pyo.Constraint(rule=init_opex_variable)
         return b_netw
 
     def _define_inflow_constraints(self, b_netw):
@@ -1133,7 +1135,7 @@ class Network(ModelComponent):
             )
             arc_group.create_dataset(
                 "opex_variable",
-                data=sum(arc.var_opex_variable[t].value for t in self.set_t),
+                data=arc.var_opex_variable.value,
             )
             arc_group.create_dataset(
                 "total_flow", data=sum(arc.var_flow[t].value for t in self.set_t)
