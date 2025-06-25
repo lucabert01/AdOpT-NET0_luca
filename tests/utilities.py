@@ -136,6 +136,8 @@ def make_data_for_testing(nr_timesteps: int) -> dict:
     data = {}
     data["topology"] = dh.topology
     data["config"] = initialize_configuration_templates()
+    data["hour_factors"] = nr_timesteps * [1]
+    data["nr_timesteps_averaged"] = 1
 
     return data
 
@@ -283,7 +285,9 @@ def run_model(model, solver: str, objective: str = "capex"):
     :return: termination condition for respective model
     """
     if objective == "capex_tot":
-        model.obj = Objective(expr=model.var_capex + model.var_capex_ccs, sense=minimize)
+        model.obj = Objective(
+            expr=model.var_capex + model.var_capex_ccs, sense=minimize
+        )
     elif objective == "capex":
         model.obj = Objective(expr=model.var_capex, sense=minimize)
     elif objective == "emissions":
