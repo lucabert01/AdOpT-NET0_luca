@@ -72,12 +72,6 @@ class Compressor(ModelComponent):
         super().__init__(compr_data)
 
         # Modelling attributes
-        self.n_stages = None
-        self.pressure_per_stage = None
-        self.isentropic_efficiency = None
-        self.heat_coefficient = None
-        self.mean_compressibility_factor = None
-        self.energy_consumption = None
         self.input = None
         self.output = None
         self.set_t_full = None
@@ -85,9 +79,6 @@ class Compressor(ModelComponent):
         self.set_t_global = None
         self.sequence = None
         self.compression_active = None
-
-        # General information
-        self.consumption = {}
 
         # TODO: definition of input/output
         self.output_component = compr_data["connection_info"]["components"][0]
@@ -130,37 +121,49 @@ class Compressor(ModelComponent):
         else:
             self.compression_active = 1
 
-            self.consumption = self.performance_data["energyconsumption"]
-            self.pressure_per_stage = self.performance_data["max_pressure_per_stage"]
-            self.isentropic_efficiency = self.performance_data["isentropic_efficiency"]
-            self.heat_coefficient = self.performance_data["heat_coefficient"]
-            self.mean_compressibility_factor = self.performance_data[
+            time_independent["consumption"] = self.performance_data["energyconsumption"]
+            time_independent["pressure_per_stage"] = self.performance_data[
+                "max_pressure_per_stage"
+            ]
+            time_independent["isentropic_efficiency"] = self.performance_data[
+                "isentropic_efficiency"
+            ]
+            time_independent["heat_coefficient"] = self.performance_data[
+                "heat_coefficient"
+            ]
+            time_independent["mean_compressibility_factor"] = self.performance_data[
                 "mean_compressibility_factor"
             ]
 
-            # energy
-            self.n_stages = math.ceil(
+            # Energy
+            time_independent["n_stages"] = math.ceil(
                 math.log(self.input_pressure / self.output_pressure)
-                / math.log(self.pressure_per_stage)
+                / math.log(time_independent["pressure_per_stage"])
             )
 
             R = 8.314  # kJ/kmol/K
             T_in = 298.15  # K
 
-            self.energy_consumption = (
-                self.mean_compressibility_factor
+            time_independent["energy_consumption"] = (
+                time_independent["mean_compressibility_factor"]
                 / 120
                 / 2
                 * T_in
                 * (R / 1000)
-                * self.n_stages
-                * (self.heat_coefficient / (self.heat_coefficient - 1))
-                * (1 / self.isentropic_efficiency)
+                * time_independent["n_stages"]
+                * (
+                    time_independent["heat_coefficient"]
+                    / (time_independent["heat_coefficient"] - 1)
+                )
+                * (1 / time_independent["isentropic_efficiency"])
                 * (
                     (self.input_pressure / self.output_pressure)
                     ** (
-                        (self.heat_coefficient - 1)
-                        / (self.n_stages * self.heat_coefficient)
+                        (time_independent["heat_coefficient"] - 1)
+                        / (
+                            time_independent["n_stages"]
+                            * time_independent["heat_coefficient"]
+                        )
                     )
                     - 1
                 )
@@ -602,15 +605,8 @@ class Compressor(ModelComponent):
         """
         # Set of consumed carriers
         b_compr.set_consumed_carriers = pyo.Set(
-            initialize=list(self.consumption.keys())
+            initialize=list(self.processed_coeff.time_independent["consumption"].keys())
         )
-
-        self.pressure_per_stage = self.performance_data["max_pressure_per_stage"]
-        self.isentropic_efficiency = self.performance_data["isentropic_efficiency"]
-        self.heat_coefficient = self.performance_data["heat_coefficient"]
-        self.mean_compressibility_factor = self.performance_data[
-            "mean_compressibility_factor"
-        ]
 
         # Consumption from compressor
         b_compr.var_consumption_energy = pyo.Var(
@@ -635,7 +631,8 @@ class Compressor(ModelComponent):
             """
             return (
                 b_compr.var_consumption_energy[t, car]
-                == b_compr.var_flow[t] * self.energy_consumption
+                == b_compr.var_flow[t]
+                * self.processed_coeff.time_independent["energy_consumption"]
             )  # MW_el
 
         b_compr.const_compress_energy = pyo.Constraint(
@@ -684,7 +681,11 @@ class Compressor(ModelComponent):
         if self.existing == 1:
 
             def sizing_existing_compressor(b):
-                return b_compr.var_size == size * self.energy_consumption
+                return (
+                    b_compr.var_size
+                    == size
+                    * self.processed_coeff.time_independent["energy_consumption"]
+                )
 
             b_compr.const_size_existing = pyo.Constraint(
                 rule=sizing_existing_compressor

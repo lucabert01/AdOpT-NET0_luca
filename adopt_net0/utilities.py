@@ -86,10 +86,22 @@ def get_nr_timesteps_averaged(config: dict) -> int:
     return nr_timesteps_averaged
 
 
-def determine_flow_existing_compressors(compr, compressor, b_period, node):
+def determine_flow_existing_compressors(self, compr, compressor, b_period, node):
+    """
+    Determines the flow capacity of an existing compressor connection by returning
+    the minimum available capacity between the output and input components
+
+    :param compr: pyomo block data for compressor
+    :param compressor: tuple with carrier, component1, component 2
+    :param b_period: pyomo block data for period
+    :param node: pyomo block data for node
+    :return float: minimum capacity between input and output component
+    """
     component_output_bound = float("inf")
     component_input_bound = float("inf")
+    period_name = b_period.name.split("[")[-1].rstrip("]")
     type_component = [compr.para_type_output, compr.para_type_input]
+
     if type_component[0].value == "Technology":
         var_output = (
             b_period.node_blocks[node].tech_blocks_active[compressor[1]].var_output
@@ -99,8 +111,12 @@ def determine_flow_existing_compressors(compr, compressor, b_period, node):
         component_output_bound = next(
             iter(b_period.network_block[compressor[1]].para_size_initial.values())
         )
-    elif type_component[0].value == "Exchange":
-        pass
+    elif type_component[0].value == "Import":
+        component_output_bound = max(
+            self.data.time_series["full"][period_name][node]["CarrierData"][
+                compressor[0]
+            ]["Import limit"]
+        )
 
     if type_component[1].value == "Technology":
         var_output = (
@@ -111,8 +127,18 @@ def determine_flow_existing_compressors(compr, compressor, b_period, node):
         component_input_bound = next(
             iter(b_period.network_block[compressor[2]].para_size_initial.values())
         )
-    elif type_component[1].value == "Exchange":
-        pass
+    elif type_component[1].value == "Demand":
+        component_input_bound = max(
+            self.data.time_series["full"][period_name][node]["CarrierData"][
+                compressor[0]
+            ]["Demand"]
+        )
+    elif type_component[1].value == "Export":
+        component_input_bound = max(
+            self.data.time_series["full"][period_name][node]["CarrierData"][
+                compressor[0]
+            ]["Export limit"]
+        )
 
     size = min(component_output_bound, component_input_bound)
 

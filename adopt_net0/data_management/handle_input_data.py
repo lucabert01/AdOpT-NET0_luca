@@ -841,7 +841,7 @@ class DataHandle:
                 {
                     "name": "Demand",
                     "pressure": (info_node_exchange_pressure["Demand"]["value"]),
-                    "type": "Exchange",
+                    "type": "Demand",
                     "existing": 1,
                 }
             )
@@ -856,7 +856,7 @@ class DataHandle:
                 {
                     "name": "Export",
                     "pressure": (info_node_exchange_pressure["Export"]["value"]),
-                    "type": "Exchange",
+                    "type": "Export",
                     "existing": 1,
                 }
             )
@@ -871,7 +871,7 @@ class DataHandle:
                 {
                     "name": "Import",
                     "pressure": (info_node_exchange_pressure["Import"]["value"]),
-                    "type": "Exchange",
+                    "type": "Import",
                     "existing": 1,
                 }
             )

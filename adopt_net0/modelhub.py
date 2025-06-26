@@ -330,6 +330,7 @@ class ModelHub:
 
                 # TECHNOLOGY BLOCK
                 def init_technology_block(b_tec, tec):
+                    """Pyomo rule to initialize a block holding all technologies at node"""
                     b_tec = construct_technology_block(
                         b_tec, data_node, b_period.set_t_full, b_period.set_t_clustered
                     )
@@ -340,10 +341,11 @@ class ModelHub:
                     b_node.set_technologies, rule=init_technology_block
                 )
 
-                # Compressor Block
+                # COMPRESSOR BLOCK
                 if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
 
                     def init_compressor_block(b_compr, car, comp1, comp2):
+                        """Pyomo rule to initialize a block holding all compressors at node"""
                         b_compr = construct_compressor_block(
                             b_compr,
                             data_node,
@@ -371,7 +373,7 @@ class ModelHub:
 
                         if (b_compr.para_active == 1) and (b_compr.para_existing == 1):
                             size = determine_flow_existing_compressors(
-                                b_compr, compr, b_period, node
+                                self, b_compr, compr, b_period, node
                             )
                             b_compr = compressor.fix_size(b_compr, size)
 

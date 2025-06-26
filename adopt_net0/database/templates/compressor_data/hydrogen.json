@@ -13,7 +13,7 @@
     "opex_variable": 0,
     "opex_fixed": 0.04,
     "discount_rate": 0.1,
-    "lifetime": 25,
+    "lifetime": 15,
     "decommission_cost": 0
   },
   "Performance": {

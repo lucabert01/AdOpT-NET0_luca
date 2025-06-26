@@ -855,11 +855,7 @@ def construct_system_cost(model, data):
 
         b_period_cost.const_opex_netw = pyo.Constraint(rule=init_cost_opex_netws)
 
-        # Change number 2
-        # here I added the var, but they still don't exist
-        # they need to be initialized in construct node and construct investment period
-
-        # Capex compressors
+        # Capex Compressors
         def init_cost_capex_compression(const):
             if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                 return b_period.var_cost_capex_compress == sum(
@@ -882,7 +878,7 @@ def construct_system_cost(model, data):
             rule=init_cost_capex_compression
         )
 
-        # Opex compressors
+        # Opex Compressors
         def init_cost_opex_compression(const):
             if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                 compress_opex_variable = sum(
@@ -930,15 +926,6 @@ def construct_system_cost(model, data):
             rule=init_cost_opex_compression
         )
 
-        # Total compressors Costs
-        def init_cost_compress(const):
-            return (
-                b_period.var_cost_compress
-                == b_period.var_cost_capex_compress + b_period.var_cost_opex_compress
-            )
-
-        b_period_cost.const_cost_compress = pyo.Constraint(rule=init_cost_compress)
-
         # Total technology costs
         def init_cost_tecs(const):
             return (
@@ -956,6 +943,15 @@ def construct_system_cost(model, data):
             )
 
         b_period_cost.const_cost_netws = pyo.Constraint(rule=init_cost_netw)
+
+        # Total compressors costs
+        def init_cost_compress(const):
+            return (
+                b_period.var_cost_compress
+                == b_period.var_cost_capex_compress + b_period.var_cost_opex_compress
+            )
+
+        b_period_cost.const_cost_compress = pyo.Constraint(rule=init_cost_compress)
 
         # Total import/export cost
         b_period_cost.const_cost_import = construct_import_costs(b_period, data, period)
