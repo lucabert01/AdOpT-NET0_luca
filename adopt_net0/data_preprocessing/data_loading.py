@@ -363,8 +363,6 @@ def copy_compressor_data(folder_path: str | Path, compr_data_path: str | Path = 
 
             for period in topology["investment_periods"]:
                 # Read the JSON compressor file
-                json_compr_file_path = folder_path / period / "compressor_data"
-
                 output_folder = folder_path / period / "compressor_data"
                 # Copy JSON files corresponding to compressor names to output folder
                 for compr_name in config["performance"]["pressure"][

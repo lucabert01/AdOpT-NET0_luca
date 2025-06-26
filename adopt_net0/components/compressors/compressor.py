@@ -72,6 +72,12 @@ class Compressor(ModelComponent):
         super().__init__(compr_data)
 
         # Modelling attributes
+        self.n_stages = None
+        self.pressure_per_stage = None
+        self.isentropic_efficiency = None
+        self.heat_coefficient = None
+        self.mean_compressibility_factor = None
+        self.energy_consumption = None
         self.input = None
         self.output = None
         self.set_t_full = None
@@ -81,7 +87,7 @@ class Compressor(ModelComponent):
         self.compression_active = None
 
         # General information
-        self.energy_consumption = {}
+        self.consumption = {}
 
         # TODO: definition of input/output
         self.output_component = compr_data["connection_info"]["components"][0]
@@ -98,7 +104,7 @@ class Compressor(ModelComponent):
             f"{self.carrier}_Compressor_{self.output_component}_{self.input_component}"
         )
 
-        if self.output_existing == 1 and self.input_existing == 1:
+        if (self.output_existing == 1) and (self.input_existing == 1):
             self.name_compressor = self.name_compressor + "_existing"
 
     def fit_compressor_performance(self):
@@ -112,26 +118,55 @@ class Compressor(ModelComponent):
         # from other classes: there are some parameter time independent that are saved here in self
 
         # to be fixed (gamma)
-        # self.performance_data["compression_energy"] = 5
         time_independent = {}
-
-        self.energy_consumption = self.performance_data["energyconsumption"]
 
         # Size
         time_independent["size_min"] = self.size_min
         time_independent["size_max"] = self.size_max
 
-        # energy
-        # self.processed_coeff.time_independent["compression_energy"] = (
-        #     self.performance_data["compression_energy"]
-        # )
-
         if self.output_pressure >= self.input_pressure:
             self.compression_active = 0
+
         else:
             self.compression_active = 1
 
-        if self.output_existing == 1 and self.input_existing == 1:
+            self.consumption = self.performance_data["energyconsumption"]
+            self.pressure_per_stage = self.performance_data["max_pressure_per_stage"]
+            self.isentropic_efficiency = self.performance_data["isentropic_efficiency"]
+            self.heat_coefficient = self.performance_data["heat_coefficient"]
+            self.mean_compressibility_factor = self.performance_data[
+                "mean_compressibility_factor"
+            ]
+
+            # energy
+            self.n_stages = math.ceil(
+                math.log(self.input_pressure / self.output_pressure)
+                / math.log(self.pressure_per_stage)
+            )
+
+            R = 8.314  # kJ/kmol/K
+            T_in = 298.15  # K
+
+            self.energy_consumption = (
+                self.mean_compressibility_factor
+                / 120
+                / 2
+                * T_in
+                * (R / 1000)
+                * self.n_stages
+                * (self.heat_coefficient / (self.heat_coefficient - 1))
+                * (1 / self.isentropic_efficiency)
+                * (
+                    (self.input_pressure / self.output_pressure)
+                    ** (
+                        (self.heat_coefficient - 1)
+                        / (self.n_stages * self.heat_coefficient)
+                    )
+                    - 1
+                )
+            )  # MW_el/MW_H2
+
+        if (self.output_existing == 1) and (self.input_existing == 1):
             self.existing = 1
         else:
             self.existing = 0
@@ -208,6 +243,8 @@ class Compressor(ModelComponent):
         b_compr = self._define_input_pressure(b_compr)  # can I delete it?
         b_compr = self._define_carrier(b_compr)
         b_compr = self._define_existing(b_compr)
+        b_compr = self._define_type_output(b_compr)
+        b_compr = self._define_type_input(b_compr)
         b_compr = self._define_flow(b_compr)
         b_compr = self._define_compressor_name(b_compr)
         b_compr = self._define_compressor_active(b_compr)
@@ -349,6 +386,30 @@ class Compressor(ModelComponent):
         """
 
         b_compr.para_existing = pyo.Param(initialize=self.existing, within=pyo.Any)
+        return b_compr
+
+    def _define_type_output(self, b_compr):
+        """
+        Defines type of component as output component
+
+        :param b_compr: pyomo block with compressor model
+        :return: pyomo block with compressor model
+        """
+
+        b_compr.para_type_output = pyo.Param(
+            initialize=self.output_type, within=pyo.Any
+        )
+        return b_compr
+
+    def _define_type_input(self, b_compr):
+        """
+        Defines type of component as input component
+
+        :param b_compr: pyomo block with compressor model
+        :return: pyomo block with compressor model
+        """
+
+        b_compr.para_type_input = pyo.Param(initialize=self.input_type, within=pyo.Any)
         return b_compr
 
     def _define_flow(self, b_compr):
@@ -527,6 +588,8 @@ class Compressor(ModelComponent):
             b_compr.const_capex = pyo.Constraint(
                 expr=b_compr.var_capex == b_compr.var_capex_aux
             )
+        elif self.existing == 1:
+            b_compr.const_capex = pyo.Constraint(expr=b_compr.var_capex == 0)
 
         return b_compr
 
@@ -539,7 +602,7 @@ class Compressor(ModelComponent):
         """
         # Set of consumed carriers
         b_compr.set_consumed_carriers = pyo.Set(
-            initialize=list(self.energy_consumption.keys())
+            initialize=list(self.consumption.keys())
         )
 
         self.pressure_per_stage = self.performance_data["max_pressure_per_stage"]
@@ -565,29 +628,6 @@ class Compressor(ModelComponent):
         :param b_compr: pyomo compressor block
         :return: pyomo compressor block
         """
-        n_stages = math.ceil(
-            math.log(self.input_pressure / self.output_pressure)
-            / math.log(self.pressure_per_stage)
-        )
-
-        R = 8.314  # kJ/kmol/K
-        T_in = 298.15  # K
-
-        energy_consumption = (
-            self.mean_compressibility_factor
-            / 120
-            / 2
-            * T_in
-            * (R / 1000)
-            * n_stages
-            * (self.heat_coefficient / (self.heat_coefficient - 1))
-            * (1 / self.isentropic_efficiency)
-            * (
-                (self.input_pressure / self.output_pressure)
-                ** ((self.heat_coefficient - 1) / (n_stages * self.heat_coefficient))
-                - 1
-            )
-        )  # MW_el/MW_H2
 
         def init_compr_energy(b, t, car):
             """
@@ -595,7 +635,7 @@ class Compressor(ModelComponent):
             """
             return (
                 b_compr.var_consumption_energy[t, car]
-                == b_compr.var_flow[t] * energy_consumption
+                == b_compr.var_flow[t] * self.energy_consumption
             )  # MW_el
 
         b_compr.const_compress_energy = pyo.Constraint(
@@ -628,6 +668,26 @@ class Compressor(ModelComponent):
         if self.existing == 0:
             b_compr.const_size = pyo.Constraint(
                 self.set_t_global, b_compr.set_consumed_carriers, rule=sizing_rule
+            )
+
+        return b_compr
+
+    def fix_size(self, b_compr, size):
+        """
+        Fixes the size of existing compressor by constrain using component capacity.
+
+        :param b_compr: pyomo block with compressor model
+        :param size: minimum energy capacity siz between input and output component
+        :return: pyomo block with compressor model
+        """
+
+        if self.existing == 1:
+
+            def sizing_existing_compressor(b):
+                return b_compr.var_size == size * self.energy_consumption
+
+            b_compr.const_size_existing = pyo.Constraint(
+                rule=sizing_existing_compressor
             )
 
         return b_compr

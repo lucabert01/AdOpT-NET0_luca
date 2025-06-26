@@ -352,8 +352,6 @@ def check_input_data_consistency(path: Path):
                     f"Data for carrier {carrier} is missing in {check_node_path}",
                 )
 
-            # TODO: Check for compressors if compression is active
-
     # Read config
     with open(path / "ConfigModel.json") as json_file:
         config = json.load(json_file)

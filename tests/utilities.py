@@ -288,6 +288,24 @@ def make_data_handle(nr_timesteps: int, topology=None):
     return dh
 
 
+def update_config(target: dict, update: dict):
+    """ "
+    Update model configuration where is needed
+
+    :param dict target: original model configuration dictionary to be updated
+    :param dict update: dictionary containing the updates to apply
+    :return: updated configuration dictionary
+    """
+
+    for key, value in update.items():
+        if isinstance(value, dict) and key in target and isinstance(target[key], dict):
+            update_config(target[key], value)
+        else:
+            target[key] = value
+
+    return target
+
+
 def run_model(model, solver: str, objective: str = "capex"):
     """
     Runs a model and returns termination condition

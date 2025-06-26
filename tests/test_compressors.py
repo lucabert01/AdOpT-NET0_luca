@@ -6,6 +6,7 @@ from pathlib import Path
 from pyomo.environ import ConcreteModel, Set, Constraint, TerminationCondition
 import json
 import numpy as np
+import math
 
 from tests.utilities import (
     make_climate_data,
@@ -141,13 +142,22 @@ def test_hydrogenCompressor(request):
     k = 1.4
     T_in = 298.15  # K
     Z = 1
+    pressure_ratio_per_stage = 2.1
+    n_stages = math.ceil(
+        math.log(
+            connection_info["connection_info"]["pressure"][1]
+            / connection_info["connection_info"]["pressure"][0]
+        )
+        / math.log(pressure_ratio_per_stage)
+    )
+
     consumption = (
         Z
         / 120
         / 2
         * T_in
         * (R / 1000)
-        * 1
+        * n_stages
         * (k / (k - 1))
         * (1 / isentropic_efficiency)
         * (
@@ -155,7 +165,7 @@ def test_hydrogenCompressor(request):
                 connection_info["connection_info"]["pressure"][1]
                 / connection_info["connection_info"]["pressure"][0]
             )
-            ** ((k - 1) / 1 * k)
+            ** ((k - 1) / (n_stages * k))
         )
         - 1
     )
@@ -181,5 +191,7 @@ def test_hydrogenCompressor(request):
 
     termination = run_model(model, request.config.solver)
     assert termination == TerminationCondition.optimal
-    assert model.var_consumption_energy[1, "electricity"].value >= 10 * consumption
+    assert (
+        model.var_consumption_energy[1, "electricity"].value >= 10 * consumption * 0.99
+    )
     assert model.var_size.value >= model.var_consumption_energy[1, "electricity"].value

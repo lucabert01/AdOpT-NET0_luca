@@ -6,7 +6,7 @@ from pyomo.environ import (
 )
 
 from adopt_net0.model_construction import construct_compressor_constrains
-from tests.utilities import make_data_handle
+from tests.utilities import make_data_handle, update_config
 from adopt_net0.modelhub import ModelHub
 from adopt_net0.model_construction.construct_balances import (
     construct_global_balance,
@@ -19,13 +19,16 @@ from adopt_net0.model_construction.construct_balances import (
 from unittest.mock import MagicMock
 
 
-def construct_model(dh):
+def construct_model(dh, config: dict):
     """
     Constructs a model from DataHandle object
 
     :param dh: DataHandle
+    :param dict config: dictionary for specific test model configuration to be used
     :return: pyomo model
     """
+
+    dh.model_config = update_config(dh.model_config, config)
 
     ehub = ModelHub()
     ehub._perform_preprocessing_checks = MagicMock(return_value=None)
@@ -77,7 +80,7 @@ def test_model_nodal_energy_balance(request):
     # INFEASIBILITY CASE
     dh.time_series["full"].loc[:, (period, node, "CarrierData", carrier, "Demand")] = 1
 
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_nodal_energybalance(m, config)
 
@@ -88,7 +91,7 @@ def test_model_nodal_energy_balance(request):
     # FEASIBILITY CASE
     # Through violation
     config["energybalance"]["violation"]["value"] = 1
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_nodal_energybalance(m, config)
 
@@ -102,7 +105,7 @@ def test_model_nodal_energy_balance(request):
     dh.time_series["full"].loc[
         :, (period, node, "CarrierData", carrier, "Import limit")
     ] = 1
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_nodal_energybalance(m, config)
 
@@ -145,7 +148,7 @@ def test_model_nodal_energy_balance_with_compression(request):
     # INFEASIBILITY CASE
     dh.time_series["full"].loc[:, (period, node, "CarrierData", carrier, "Demand")] = 1
 
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_nodal_energybalance(m, config)
     m = construct_compressor_constrains(m, config)
@@ -157,7 +160,7 @@ def test_model_nodal_energy_balance_with_compression(request):
     # FEASIBILITY CASE
     # Through violation
     config["energybalance"]["violation"]["value"] = 1
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_nodal_energybalance(m, config)
     m = construct_compressor_constrains(m, config)
@@ -172,7 +175,7 @@ def test_model_nodal_energy_balance_with_compression(request):
     dh.time_series["full"].loc[
         :, (period, node, "CarrierData", carrier, "Import limit")
     ] = 1
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_nodal_energybalance(m, config)
     m = construct_compressor_constrains(m, config)
@@ -212,7 +215,7 @@ def test_model_global_energy_balance(request):
     # INFEASIBILITY CASE
     dh.time_series["full"].loc[:, (period, node1, "CarrierData", carrier, "Demand")] = 1
 
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_global_energybalance(m, config)
 
@@ -223,7 +226,7 @@ def test_model_global_energy_balance(request):
     # FEASIBILITY CASE
     # Through violation
     config["energybalance"]["violation"]["value"] = 1
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_global_energybalance(m, config)
 
@@ -237,7 +240,7 @@ def test_model_global_energy_balance(request):
     dh.time_series["full"].loc[
         :, (period, node2, "CarrierData", carrier, "Import limit")
     ] = 1
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_global_energybalance(m, config)
 
@@ -281,7 +284,7 @@ def test_model_emission_balance(request):
         :, (period, node, "CarrierData", carrier, "Import emission factor")
     ] = 1
 
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_nodal_energybalance(m, config)
     m = construct_emission_balance(m, dh)
@@ -298,7 +301,7 @@ def test_model_emission_balance(request):
     assert termination_condition == TerminationCondition.infeasible
 
     # FEASIBILITY CASE
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_nodal_energybalance(m, config)
     m = construct_emission_balance(m, dh)
@@ -345,7 +348,7 @@ def test_model_cost_balance(request):
         :, (period, node, "CarrierData", carrier, "Import price")
     ] = 1
 
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_global_energybalance(m, config)
     m = construct_system_cost(m, dh)
@@ -357,7 +360,7 @@ def test_model_cost_balance(request):
     assert termination_condition == TerminationCondition.infeasible
 
     # FEASIBILITY CASE
-    m = construct_model(dh)
+    m = construct_model(dh, config)
     m = construct_network_constraints(m, config)
     m = construct_global_energybalance(m, config)
     m = construct_system_cost(m, dh)

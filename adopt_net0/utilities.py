@@ -84,3 +84,36 @@ def get_nr_timesteps_averaged(config: dict) -> int:
         nr_timesteps_averaged = 1
 
     return nr_timesteps_averaged
+
+
+def determine_flow_existing_compressors(compr, compressor, b_period, node):
+    component_output_bound = float("inf")
+    component_input_bound = float("inf")
+    type_component = [compr.para_type_output, compr.para_type_input]
+    if type_component[0].value == "Technology":
+        var_output = (
+            b_period.node_blocks[node].tech_blocks_active[compressor[1]].var_output
+        )
+        component_output_bound = max(var_output[idx].ub for idx in var_output)
+    elif type_component[0].value == "Network":
+        component_output_bound = next(
+            iter(b_period.network_block[compressor[1]].para_size_initial.values())
+        )
+    elif type_component[0].value == "Exchange":
+        pass
+
+    if type_component[1].value == "Technology":
+        var_output = (
+            b_period.node_blocks[node].tech_blocks_active[compressor[2]].var_output
+        )
+        component_input_bound = max(var_output[idx].ub for idx in var_output)
+    elif type_component[1].value == "Network":
+        component_input_bound = next(
+            iter(b_period.network_block[compressor[2]].para_size_initial.values())
+        )
+    elif type_component[1].value == "Exchange":
+        pass
+
+    size = min(component_output_bound, component_input_bound)
+
+    return size
