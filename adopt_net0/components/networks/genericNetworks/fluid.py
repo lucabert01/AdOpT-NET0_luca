@@ -85,7 +85,6 @@ class Fluid(Network):
             netw_data["Performance"], "bidirectional_network_precise", 1
         )
         self._calculate_energy_consumption()
-        # self.operating_pressure = {}
 
     def fit_network_performance(self):
         """
@@ -100,7 +99,6 @@ class Fluid(Network):
         self.processed_coeff.time_independent["emissionfactor"] = self.performance_data[
             "emissionfactor"
         ]
-        # self.operating_pressure = self.performance_data["pressure"]
 
     def _define_energyconsumption_parameters(self, b_netw):
         """
@@ -331,12 +329,6 @@ class Fluid(Network):
                 * coeff_ti["loss2emissions"]
             )
             arc_group.create_dataset("total_emissions", data=total_emissions)
-            for car in model_block.set_netw_carrier:
-                if "pressure" in self.performance_data:
-                    arc_group.create_dataset(
-                        "operating_pressure",
-                        data=self.performance_data["pressure"][car]["inlet"],
-                    )
 
     def write_results_netw_operation(self, h5_group, model_block):
         super(Fluid, self).write_results_netw_operation(h5_group, model_block)

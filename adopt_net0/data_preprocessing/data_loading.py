@@ -165,9 +165,9 @@ def fill_carrier_pressure_data(
     :param str folder_path: Path to the folder containing the case study data
     :param float pressure_value_bar: A float value to be applied containing the values of the carrier pressure data
     :param list connection: Name of the connection that need to be changed
-    :param list investment_periods: Name of investment periods to be changed
-    :param list nodes: Name of the nodes that need to be changed
     :param list carriers: Name of the carriers that need to be changed
+    :param list nodes: Name of the nodes that need to be changed
+    :param list investment_periods: Name of investment periods to be changed
     """
 
     # Convert to Path

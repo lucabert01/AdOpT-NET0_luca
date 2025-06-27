@@ -290,7 +290,7 @@ def construct_nodal_energybalance(model, config: dict):
     .. math::
         outputFromTechnologies - inputToTechnologies + \\
         inflowFromNetwork - outflowToNetwork - consumptionNetwork+ \\
-        imports - exports + consumptionCompression + violation = demand - genericProductionProfile
+        imports - exports + inputToCompression + violation = demand - genericProductionProfile
 
     :param model: pyomo model
     :param dict config: dict containing model information
@@ -358,11 +358,9 @@ def construct_nodal_energybalance(model, config: dict):
                 else:
                     violation = 0
 
-                if (  # change number 1
-                    config["performance"]["pressure"]["pressure_on"]["value"] == 1
-                ):  # here it could per performace-pressure-value or optimiziation-pressure-value
+                if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                     node_block = b_period.node_blocks[node]
-                    compress_node = sum(
+                    compression_input = sum(
                         node_block.compressor_blocks_active[
                             compr
                         ].var_consumption_energy[t, car]
@@ -374,10 +372,10 @@ def construct_nodal_energybalance(model, config: dict):
                         if car
                         in node_block.compressor_blocks_active[
                             compr
-                        ].set_consumed_carriers  # Maybe this one goes before
+                        ].set_consumed_carriers
                     )
                 else:
-                    compress_node = 0
+                    compression_input = 0
 
                 return (
                     tec_output
@@ -389,7 +387,7 @@ def construct_nodal_energybalance(model, config: dict):
                     - netw_consumption
                     + import_flow
                     - export_flow
-                    - compress_node  # here to decide if using negative or positive sign
+                    - compression_input
                     + violation
                     == node_block.para_demand[t, car]
                     - node_block.var_generic_production[t, car]

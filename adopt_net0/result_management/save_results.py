@@ -484,7 +484,7 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
                     # if (  # change number 1
                     #     config["performance"]["pressure"]["pressure_on"]["value"] == 1
                     # ):
-                    #     compress_node = [
+                    #     compression_input = [
                     #         sum(
                     #             node_data.compressor_blocks_active[compr]
                     #             .var_consumption_energy[t, car]
@@ -502,7 +502,7 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
                     #         for t in set_t
                     #     ]
                     #
-                    #     car_group.create_dataset("compressor", data=compress_node)
+                    #     car_group.create_dataset("compressor", data=compression_input)
 
                     car_group.create_dataset(
                         "import",

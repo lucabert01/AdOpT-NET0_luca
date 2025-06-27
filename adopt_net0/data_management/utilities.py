@@ -7,7 +7,6 @@ import json
 from ..components.compressors.compressor import Compressor
 from ..components.networks import *
 from ..components.technologies import *
-from ..components.compressors import *
 from ..components.networks.network import Network
 from ..components.technologies.technology import Technology
 
@@ -222,7 +221,14 @@ def get_pressure_info(component, carrier: str, direction: str) -> dict:
     }
 
 
-def collect_possible_connections_at_node(pressure_data_at_node):
+def collect_possible_connections_at_node(pressure_data_at_node: dict):
+    """
+    Generates all possible compression connections between output and input components at a given node.
+
+    :param dict pressure_data_at_node: contains all components that can be inputs or outputs for compression
+
+    :return list: containing all possible connection between input and outputs for each node, with necessary information
+    """
     connection_data_at_node = []
     for output_i in pressure_data_at_node["outputs"]:
         for input_i in pressure_data_at_node["inputs"]:

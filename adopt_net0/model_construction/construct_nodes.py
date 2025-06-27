@@ -133,7 +133,6 @@ def construct_node_block(b_node, data: dict, set_t_full, set_t_clustered):
     b_node.set_technologies = pyo.Set(initialize=list(data["technology_data"].keys()))
     b_node.set_carriers = pyo.Set(initialize=list(set(carriers)))
 
-    # TODO: fixing here the set_compressor
     if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
         target_carriers = config["performance"]["pressure"]["pressure_carriers"][
             "value"
