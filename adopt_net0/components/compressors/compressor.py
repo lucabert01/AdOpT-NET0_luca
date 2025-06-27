@@ -1,5 +1,3 @@
-from blib2to3.pygram import initialize
-
 from ..component import ModelComponent
 from ..utilities import (
     annualize,
@@ -25,41 +23,46 @@ class Compressor(ModelComponent):
     """
     Class to read and manage data for compressors
 
-    **Set declarations:**
-
     **Parameter declarations:**
 
     The following is a list of declared pyomo parameters.
 
-    - para_name: name of the compressor, formatted as type_component1_component2_(existing)
-    - para_active: equals 1 if the compressor is active (a pressure increase is needed); otherwise equals to 0
-    - para_output_component: name of the component that outputs the carrier to the compressor
-    - para_output_pressure: pressure of the carrier at the output of the component that feeds the compressor
-    - para_input_component: name of the component that receives the carrier as input from the compressor
-    - para_input_pressure: pressure of the carrier at the input of the component fed by the compressor
-    - para_carrier: carrier that flows through the compressor
-    - para_unit_capex: investment costs per unit
-    - para_unit_capex_annual: Unit CAPEX annualized (annualized from given data on
+    - ``para_name``: name of the compressor, formatted as type_component1_component2_(existing)
+    - ``para_size_min``: minimal possible size
+    - ``para_size_max``: maximal possible size
+    - ``para_unit_capex``: investment costs per unit
+    - ``para_unit_capex_annual``: Unit CAPEX annualized (annualized from given data on
       up-front CAPEX, lifetime and discount rate)
-    - para_fix_capex: fixed costs independent of size
-    - para_fix_capex_annual: Fixed CAPEX annualized (annualized from given data on
+    - ``para_fix_capex``: fixed costs independent of size
+    - ``para_fix_capex_annual``: Fixed CAPEX annualized (annualized from given data on
       up-front CAPEX, lifetime and discount rate)
-    - para_opex_variable: operational cost EUR/output or input
-    - para_opex_fixed: fixed opex as fraction of up-front capex
+    - ``para_opex_variable``: operational cost EUR/output or input
+    - ``para_opex_fixed``: fixed opex as fraction of up-front capex
 
     **Variable declarations:**
 
-    - var_flow: flow that is processed by the compressor
-    - var_consumption_energy: energy consumption required by the compressor to raise the pressure (only for if active)
-    - var_size: size of the compressor (only if active)
-    - var_capex: annualized investment of the compressor (only if active)
-    - var_opex_variable: variable operation costs, defined for each time slice
-    - var_opex_fixed: fixed operational costs as fraction of up-front CAPEX
-    - var_capex_aux: auxiliary variable to calculate the fixed opex of existing compressor
+    - ``var_flow``: flow that is processed by the compressor
 
-    **Network constraint declarations**
+    Only for active compressors:
 
+    - ``var_consumption_energy``: energy consumption required by the compressor to raise the pressure (only for if active)
+    - ``var_size``: size of the compressor (only if active)
+    - ``var_capex``: annualized investment of the compressor (only if active)
+    - ``var_opex_variable``: variable operation costs, defined for each time slice
+    - ``var_opex_fixed``: fixed operational costs as fraction of up-front CAPEX
+    - ``var_capex_aux``: auxiliary variable to calculate the fixed opex of existing compressor
 
+    **Constraint declarations**
+
+    - For new compressors capex are defined linearly:
+
+        .. math::
+            capex_{aux} = size * capex_{unit_annual}
+
+    - Variable OPEX: variable opex is defined in terms of the flow:
+
+        .. math::
+            opex_var_{t} = Flow{t} * opex_{var}
 
     """
 
@@ -103,12 +106,6 @@ class Compressor(ModelComponent):
         Fits compressor performance (bounds and coefficients).
         """
 
-        # TODO: double check on this
-
-        # what do we need here?
-        # from other classes: there are some parameter time independent that are saved here in self
-
-        # to be fixed (gamma)
         time_independent = {}
 
         # Size
@@ -120,6 +117,8 @@ class Compressor(ModelComponent):
 
         else:
             self.compression_active = 1
+
+            # Energy consumption parameters
 
             time_independent["consumption"] = self.performance_data["energyconsumption"]
             time_independent["pressure_per_stage"] = self.performance_data[
@@ -240,23 +239,13 @@ class Compressor(ModelComponent):
             )
 
         # GENERAL TECHNOLOGY CONSTRAINTS
-        b_compr = self._define_output_component(b_compr)  # can I delete it?
-        b_compr = self._define_input_component(b_compr)  # can I delete it?
-        b_compr = self._define_output_pressure(b_compr)  # can I delete it?
-        b_compr = self._define_input_pressure(b_compr)  # can I delete it?
-        b_compr = self._define_carrier(b_compr)
-        b_compr = self._define_existing(b_compr)
-        b_compr = self._define_type_output(b_compr)
-        b_compr = self._define_type_input(b_compr)
         b_compr = self._define_flow(b_compr)
         b_compr = self._define_compressor_name(b_compr)
-        b_compr = self._define_compressor_active(b_compr)
         if self.compression_active == 1:
             b_compr = self._define_energyconsumption_parameters(b_compr)
             b_compr = self._define_energy_consumption(b_compr, data)
             b_compr = self._define_opex_var(b_compr, data)
             b_compr = self._define_size(b_compr)
-            # if self.existing == 0:
             b_compr = self._define_capex_parameters(b_compr, data)
             b_compr = self._define_capex_variables(b_compr, data)
             b_compr = self._define_capex_constraints(b_compr, data)
@@ -307,112 +296,6 @@ class Compressor(ModelComponent):
         :return: pyomo block with compressor model
         """
         b_compr.para_name = pyo.Param(initialize=[self.name_compressor], within=pyo.Any)
-        return b_compr
-
-    def _define_compressor_active(self, b_compr):
-        """
-        Defines if compressor is active (1 for active, 0 for no active)
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-        b_compr.para_active = pyo.Param(
-            initialize=self.compression_active, within=pyo.Any
-        )
-        return b_compr
-
-    def _define_output_component(self, b_compr):
-        """
-        Defines the component which has the carrier as output
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-        b_compr.para_output_component = pyo.Param(
-            initialize=[self.output_component], within=pyo.Any
-        )
-        return b_compr
-
-    def _define_output_pressure(self, b_compr):
-        """
-        Defines the pressure from output component
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-        b_compr.para_output_pressure = pyo.Param(
-            initialize=self.output_pressure, within=pyo.Any
-        )
-        return b_compr
-
-    def _define_input_component(self, b_compr):
-        """
-        Defines the component which has the carrier as input
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-        b_compr.para_input_component = pyo.Param(
-            initialize=[self.input_component], within=pyo.Any
-        )
-        return b_compr
-
-    def _define_input_pressure(self, b_compr):
-        """
-        Defines the pressure of input component
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-        b_compr.para_input_pressure = pyo.Param(
-            initialize=self.input_pressure, within=pyo.Any
-        )
-        return b_compr
-
-    def _define_carrier(self, b_compr):
-        """
-        Defines the carrier of the compressor
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-
-        b_compr.para_carrier = pyo.Param(initialize=[self.carrier], within=pyo.Any)
-        return b_compr
-
-    def _define_existing(self, b_compr):
-        """
-        Defines if the compressor is existing
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-
-        b_compr.para_existing = pyo.Param(initialize=self.existing, within=pyo.Any)
-        return b_compr
-
-    def _define_type_output(self, b_compr):
-        """
-        Defines type of component as output component
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-
-        b_compr.para_type_output = pyo.Param(
-            initialize=self.output_type, within=pyo.Any
-        )
-        return b_compr
-
-    def _define_type_input(self, b_compr):
-        """
-        Defines type of component as input component
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-
-        b_compr.para_type_input = pyo.Param(initialize=self.input_type, within=pyo.Any)
         return b_compr
 
     def _define_flow(self, b_compr):
@@ -467,12 +350,12 @@ class Compressor(ModelComponent):
             mutable=True,
         )
 
-        if self.existing and not self.decommission == "impossible":
-            b_compr.para_decommissioning_cost_annual = pyo.Param(
-                domain=pyo.Reals,
-                initialize=annualization_factor * economics["decommission_cost"],
-                mutable=True,
-            )
+        # if self.existing and not self.decommission == "impossible":
+        #     b_compr.para_decommissioning_cost_annual = pyo.Param(
+        #         domain=pyo.Reals,
+        #         initialize=annualization_factor * economics["decommission_cost"],
+        #         mutable=True,
+        #     )
         return b_compr
 
     def _define_capex_variables(self, b_compr, data: dict):
@@ -657,7 +540,10 @@ class Compressor(ModelComponent):
             domain=pyo.NonNegativeReals, initialize=coeff_ti["size_max"], mutable=True
         )
 
-        b_compr.var_size = pyo.Var(within=pyo.NonNegativeReals)
+        b_compr.var_size = pyo.Var(
+            within=pyo.NonNegativeReals,
+            bounds=(b_compr.para_size_min, b_compr.para_size_max),
+        )
 
         def sizing_rule(b, t, car):
             return b_compr.var_size >= b_compr.var_consumption_energy[t, car]

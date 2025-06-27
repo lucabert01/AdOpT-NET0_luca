@@ -371,9 +371,11 @@ class ModelHub:
                             compr
                         ]
 
-                        if (b_compr.para_active == 1) and (b_compr.para_existing == 1):
+                        if (compressor.compression_active == 1) and (
+                            compressor.existing == 1
+                        ):
                             size = determine_flow_existing_compressors(
-                                self, b_compr, compr, b_period, node
+                                self, compressor, b_period, node
                             )
                             b_compr = compressor.fix_size(b_compr, size)
 

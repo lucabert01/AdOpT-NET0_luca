@@ -14,6 +14,7 @@ HeatPump_WaterSourced; HeatPump_WaterSourced
 Electrolyzer; CONV1
 FuelCell; CONV2
 Storage_H2_highP; STOR
+Storage_H2_lowP; STOR
 Hydro_Reservoir; Hydro_Open
 PumpedHydro_Closed; STOR
 PumpedHydro_Open; HydroOpen

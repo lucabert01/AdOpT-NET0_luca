@@ -29,7 +29,8 @@
       "hydrogen"
     ],
     "emission_factor": 0,
-    "allow_only_one_direction": 1,
+    "allow_only_one_direction": 0,
+    "allow_only_one_direction_precise": 0,
     "performance": {
       "eta_in": 1,
       "eta_out": 1,

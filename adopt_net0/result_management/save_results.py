@@ -317,13 +317,14 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
                             b_node.compressor_blocks_active[compr_name].para_name.value
                         )
                         b_compr = b_node.compressor_blocks_active[compr_name]
-                        if b_compr.para_active.value == 1:
+                        compressor = data.compressor_data[period][node_name][compr_name]
+                        if compressor.compression_active == 1:
                             compr_group = node_specific_group.create_group(
                                 compressor_name
                             )
-                            data.compressor_data[period][node_name][
-                                compr_name
-                            ].write_results_compressor_design(compr_group, b_compr)
+                            compressor.write_results_compressor_design(
+                                compr_group, b_compr
+                            )
 
         # TIME-DEPENDENT RESULTS (operation) [g]
         operation = f.create_group("operation")
@@ -366,13 +367,14 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
                             b_node.compressor_blocks_active[compr_name].para_name.value
                         )
                         b_compr = b_node.compressor_blocks_active[compr_name]
-                        if b_compr.para_active.value == 1:
+                        compressor = data.compressor_data[period][node_name][compr_name]
+                        if compressor.compression_active == 1:
                             compr_group = node_specific_group.create_group(
                                 compressor_name
                             )
-                            data.compressor_data[period][node_name][
-                                compr_name
-                            ].write_results_compressor_operation(compr_group, b_compr)
+                            compressor.write_results_compressor_operation(
+                                compr_group, b_compr
+                            )
 
         # ENERGY BALANCE [g] > within: node > specific carrier [g]
         ebalance_group = operation.create_group("energy_balance")
