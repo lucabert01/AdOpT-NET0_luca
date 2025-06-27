@@ -40,13 +40,7 @@
     ],
     "T_iso": 15,
     "epsilon": 0.955,
-    "emission_factor": 0.185,
-    "pressure": {
-      "hydrogen": {
-        "inlet": 350,
-        "outlet": 350
-        }
-      }
+    "emission_factor": 0.185
   },
   "Units": {
     "size": "MW",
