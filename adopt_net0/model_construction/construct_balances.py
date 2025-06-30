@@ -875,21 +875,14 @@ def construct_system_cost(model, data):
             if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                 compress_opex_variable = sum(
                     sum(
-                        sum(
-                            b_period.node_blocks[node]
-                            .compressor_blocks_active[compr]
-                            .var_opex_variable[t]
-                            * nr_timesteps_averaged
-                            * hour_factors[t - 1]
-                            for compr in b_period.node_blocks[node].set_compressor
-                            if hasattr(
-                                b_period.node_blocks[node].compressor_blocks_active[
-                                    compr
-                                ],
-                                "var_opex_variable",
-                            )
+                        b_period.node_blocks[node]
+                        .compressor_blocks_active[compr]
+                        .var_opex_variable
+                        for compr in b_period.node_blocks[node].set_compressor
+                        if hasattr(
+                            b_period.node_blocks[node].compressor_blocks_active[compr],
+                            "var_opex_variable",
                         )
-                        for t in set_t
                     )
                     for node in model.set_nodes
                 )

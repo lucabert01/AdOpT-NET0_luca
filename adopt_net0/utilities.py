@@ -80,6 +80,8 @@ def get_data_for_investment_period(
     if data.model_config["optimization"]["typicaldays"]["N"]["value"] != 0:
         data_period["k_means_specs"] = data.k_means_specs[investment_period]
         # data_period["averaged_specs"] = data.averaged_specs[investment_period]
+    if data.model_config["performance"]["pressure"]["pressure_on"]["value"] == 1:
+        data_period["compressor_data"] = data.compressor_data[investment_period]
 
     # Hour multiplication factors
     if data.model_config["optimization"]["typicaldays"]["N"]["value"] == 0:
