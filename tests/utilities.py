@@ -136,6 +136,8 @@ def make_data_for_testing(nr_timesteps: int) -> dict:
     data = {}
     data["topology"] = dh.topology
     data["config"] = initialize_configuration_templates()
+    data["hour_factors"] = nr_timesteps * [1]
+    data["nr_timesteps_averaged"] = 1
 
     return data
 

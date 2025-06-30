@@ -9,7 +9,6 @@ import pandas as pd
 import sys
 import datetime
 
-from .utilities import get_set_t
 from .data_management import DataHandle, create_technology_class
 from .model_construction import *
 from .result_management.read_results import add_values_to_summary
@@ -17,13 +16,10 @@ from .utilities import (
     get_glpk_parameters,
     get_gurobi_parameters,
     determine_flow_existing_compressors,
+    get_data_for_investment_period,
 )
+
 from .result_management import *
-from .components.utilities import (
-    annualize,
-    set_discount_rate,
-    perform_disjunct_relaxation,
-)
 import logging
 
 log = logging.getLogger(__name__)
@@ -44,7 +40,6 @@ class ModelHub:
       pareto point, time stage,...)
     - self.info_pareto: Current pareto point (if used)
     - self.info_solving_algorithms: Information on time aggregation algorithms
-    - self.info_monte_carlo: Information on monte carlo runs
     """
 
     def __init__(self):
@@ -62,8 +57,6 @@ class ModelHub:
         self.info_solving_algorithms["aggregation_model"] = "Full"
         self.info_solving_algorithms["aggregation_data"] = "Full"
         self.info_solving_algorithms["time_stage"] = 1
-        self.info_monte_carlo = {}
-        self.info_monte_carlo["monte_carlo_run"] = -1
 
     def read_data(
         self, data_path: Path | str, start_period: int = None, end_period: int = None
@@ -92,7 +85,6 @@ class ModelHub:
         Checks consistency of input data, before constructing or solving the model
 
         - Save path must exist
-        - monte carlo and pareto cannot be used at the same time
         - dynamics checks
         :return:
         """
@@ -134,12 +126,6 @@ class ModelHub:
                 f"exist. Create the folder or change the folder "
                 f"name in the ModelConfig"
             )
-
-        # Monte carlo and pareto
-        if (config["optimization"]["objective"]["value"] == "pareto") and (
-            config["optimization"]["monte_carlo"]["N"]["value"] > 0
-        ):
-            raise Exception("Monte carlo and pareto is not allowed at the same time")
 
         # Dynamics and time aggregation algorithms
         if config["optimization"]["typicaldays"]["N"]["value"] != 0:
@@ -431,9 +417,7 @@ class ModelHub:
 
         self._define_solver_settings()
 
-        if config["optimization"]["monte_carlo"]["N"]["value"]:
-            self._solve_monte_carlo(objective)
-        elif objective == "pareto":
+        if objective == "pareto":
             self._solve_pareto()
         else:
             self._optimize(objective)
@@ -518,11 +502,15 @@ class ModelHub:
             )
 
         # Read technology data
-        data_node = {
-            "technology_data": {},
-            "config": config,
-            "topology": self.data.topology,
-        }
+        data_node = get_data_for_node(
+            get_data_for_investment_period(
+                self.data,
+                investment_period,
+                self.info_solving_algorithms["aggregation_model"],
+            ),
+            node,
+        )
+
         for technology in technologies:
             # read in technology data
             tec_data = create_technology_class(
@@ -982,12 +970,13 @@ class ModelHub:
         self.solution.write()
 
         self.last_solve_info["pareto_point"] = self.info_pareto["pareto_point"]
-        self.last_solve_info["monte_carlo_run"] = self.info_monte_carlo[
-            "monte_carlo_run"
-        ]
+
         self.last_solve_info["config"] = config
         self.last_solve_info["result_folder_path"] = result_folder_path
         self.last_solve_info["time_stage"] = self.info_solving_algorithms["time_stage"]
+        self.last_solve_info["aggregation_model"] = self.info_solving_algorithms[
+            "aggregation_model"
+        ]
 
         # Write results to path
         if write_results:
@@ -1065,475 +1054,6 @@ class ModelHub:
                 self.solver.add_constraint(model.const_emission_limit)
             self._optimize("costs")
 
-    def _solve_monte_carlo(self, objective: str):
-        """
-        Optimizes multiple runs with monte carlo
-
-        :param str objective: objective to optimize
-        """
-        config = self.data.model_config
-        self.info_monte_carlo["monte_carlo_run"] = 0
-
-        for run in range(0, config["optimization"]["monte_carlo"]["N"]["value"]):
-            self.info_monte_carlo["monte_carlo_run"] = run
-            self._monte_carlo_set_cost_parameters()
-            if run == 0:
-                # in this case we need to set the objective
-                self._optimize(objective)
-            else:
-                # in this case we can call the solver directly
-                self._call_solver()
-
-        summary_path = Path.joinpath(
-            Path(config["reporting"]["save_summary_path"]["value"]), "Summary.xlsx"
-        )
-        if config["optimization"]["monte_carlo"]["type"]["value"] == "normal_dis":
-            component_set = config["optimization"]["monte_carlo"]["on_what"]["value"]
-        elif (
-            config["optimization"]["monte_carlo"]["type"]["value"]
-            == "uniform_dis_from_file"
-        ):
-            component_set = list(set(self.data.monte_carlo_specs["type"]))
-        add_values_to_summary(summary_path, component_set=component_set)
-
-    def _monte_carlo_set_cost_parameters(self):
-        """
-        Changes cost parameters for monte carlo analysis.
-        """
-        config = self.data.model_config
-
-        # use correct resolution
-        model = self.model[self.info_solving_algorithms["aggregation_model"]]
-        monte_carlo_type = config["optimization"]["monte_carlo"]["type"]["value"]
-        monte_carlo_on = config["optimization"]["monte_carlo"]["on_what"]["value"]
-
-        import_constraint_reconstruction = False
-        export_constraint_reconstruction = False
-
-        if monte_carlo_type == "normal_dis":
-            if "Technologies" in monte_carlo_on:
-                for period in model.periods:
-                    for node in model.periods[period].node_blocks:
-                        for tec in (
-                            model.periods[period].node_blocks[node].tech_blocks_active
-                        ):
-                            if not self.data.technology_data[period][node][
-                                tec
-                            ].existing:
-                                self._monte_carlo_technologies(period, node, tec)
-
-            if "Networks" in monte_carlo_on:
-                for period in model.periods:
-                    for netw in model.periods[period].network_block:
-                        if not self.data.network_data[period][netw].existing:
-                            self._monte_carlo_networks(period, netw)
-
-            if "Import" in monte_carlo_on:
-                self._monte_carlo_import_parameters()
-                import_constraint_reconstruction = True
-
-            if "Export" in monte_carlo_on:
-                self._monte_carlo_export_parameters()
-                export_constraint_reconstruction = True
-
-        elif monte_carlo_type == "uniform_dis_from_file":
-            MC_parameters = self.data.monte_carlo_specs
-            processed_names = set()
-
-            for index, row in MC_parameters.iterrows():
-                if row["type"] == "Technologies":
-                    tec = row["name"]
-
-                    # Iterate through periods and nodes in the model
-                    if tec not in processed_names:
-                        for period in model.periods:
-                            for node in model.periods[period].node_blocks:
-                                tech_blocks = (
-                                    model.periods[period]
-                                    .node_blocks[node]
-                                    .tech_blocks_active
-                                )
-
-                                # Check if the technology is active in the current node
-                                if tec in tech_blocks:
-                                    capex_model = self.data.technology_data[period][
-                                        node
-                                    ][tec].economics["capex_model"]
-
-                                    if capex_model == 1:
-                                        if row["parameter"] == "unit_capex":
-                                            self._monte_carlo_technologies(
-                                                period, node, tec, row
-                                            )
-                                        else:
-                                            new_row = MC_parameters[
-                                                (MC_parameters["name"] == tec)
-                                                & (
-                                                    MC_parameters["parameter"]
-                                                    == "unit_capex"
-                                                )
-                                            ]
-                                            if not new_row.empty:
-                                                self._monte_carlo_technologies(
-                                                    period, node, tec, new_row
-                                                )
-                                            else:
-                                                log_msg = f"Parameter unit_CAPEX is not defined for {tec} in MonteCarlo.csv"
-                                                log.warning(log_msg)
-
-                                    else:
-                                        # Find all rows with the same technology name
-                                        MC_technology_rows = MC_parameters[
-                                            (MC_parameters["type"] == "Technologies")
-                                            & (MC_parameters["name"] == tec)
-                                        ]
-                                        self._monte_carlo_technologies(
-                                            period, node, tec, MC_technology_rows
-                                        )
-
-                                    processed_names.add(tec)
-                                    break
-                                else:
-                                    log_msg = f"Technology {tec} in MonteCarlo.csv is not an active component"
-                                    log.warning(log_msg)
-
-                elif row["type"] == "Networks":
-                    netw = row["name"]
-                    if netw not in processed_names:
-                        for period in model.periods:
-                            netw_blocks = model.periods[period].network_block
-                            if netw in netw_blocks:
-                                MC_network_rows = MC_parameters[
-                                    (MC_parameters["type"] == "Networks")
-                                    & (MC_parameters["name"] == netw)
-                                ]
-
-                                self._monte_carlo_networks(
-                                    period, netw, MC_network_rows
-                                )
-
-                                processed_names.add(netw)
-                                break
-                            else:
-                                log_msg = f"Network {netw} in MonteCarlo.csv is not active component"
-                                log.warning(log_msg)
-
-                elif row["type"] == "Import":
-                    import_constraint_reconstruction = True
-                    car = row["name"]
-                    self._monte_carlo_import_parameters(car, row)
-                elif row["type"] == "Export":
-                    export_constraint_reconstruction = True
-                    car = row["name"]
-                    self._monte_carlo_export_parameters(car, row)
-
-        if import_constraint_reconstruction:
-            self._monte_carlo_import_constraints()
-
-        if export_constraint_reconstruction:
-            self._monte_carlo_export_constraints()
-
-    def _monte_carlo_technologies(self, period, node, tec, MC_ranges=None):
-        """
-        Changes the capex of technologies
-        """
-        aggregation_model = self.info_solving_algorithms["aggregation_model"]
-        aggregation_data = self.info_solving_algorithms["aggregation_data"]
-
-        config = self.data.model_config
-        tec_data = self.data.technology_data[period][node][tec]
-        model = self.model[aggregation_model]
-
-        if tec_data.economics["capex_model"] in [1, 3]:
-            # Preprocessing
-            sd = config["optimization"]["monte_carlo"]["sd"]["value"]
-            sd_random = np.random.normal(1, sd)
-
-            economics = tec_data.economics
-            discount_rate = set_discount_rate(config, economics)
-            fraction_of_year_modelled = self.data.topology["fraction_of_year_modelled"]
-
-            b_tec = model.periods[period].node_blocks[node].tech_blocks_active[tec]
-
-            annualization_factor = annualize(
-                discount_rate, economics["lifetime"], fraction_of_year_modelled
-            )
-
-            # Change parameters
-            if tec_data.economics["capex_model"] == 1:
-                # UNIT CAPEX
-                # Update parameter
-                if MC_ranges is not None:
-                    if isinstance(MC_ranges, pd.Series):
-                        unit_capex = random.uniform(MC_ranges["min"], MC_ranges["max"])
-                    elif isinstance(MC_ranges, pd.DataFrame):
-                        unit_capex = random.uniform(
-                            MC_ranges["min"].iloc[0], MC_ranges["max"].iloc[0]
-                        )
-                else:
-                    unit_capex = tec_data.economics["unit_capex"] * sd_random
-
-                b_tec.para_unit_capex = unit_capex
-                b_tec.para_unit_capex_annual = unit_capex * annualization_factor
-
-            elif tec_data.economics["capex_model"] == 3:
-                if MC_ranges is not None:
-                    for _, row in MC_ranges.iterrows():
-                        if row["parameter"] == "unit_capex":
-                            unit_capex = random.uniform(row["min"], row["max"])
-                        elif row["parameter"] == "fix_capex":
-                            fix_capex = random.uniform(row["min"], row["max"])
-                else:
-                    unit_capex = tec_data.economics["unit_capex"] * sd_random
-                    fix_capex = tec_data.economics["fix_capex"] * sd_random
-
-                b_tec.para_unit_capex = unit_capex
-                b_tec.para_unit_capex_annual = unit_capex * annualization_factor
-                b_tec.para_fix_capex = fix_capex
-                b_tec.para_fix_capex_annual = fix_capex * annualization_factor
-
-            # Change variable bounds
-            def calculate_max_capex():
-                if economics["capex_model"] == 1:
-                    max_capex = b_tec.para_size_max * b_tec.para_unit_capex_annual
-                    bounds = (0, max_capex)
-                elif economics["capex_model"] == 3:
-                    max_capex = (
-                        b_tec.para_size_max * b_tec.para_unit_capex_annual
-                        + b_tec.para_fix_capex_annual
-                    )
-                    bounds = (0, max_capex)
-                else:
-                    bounds = None
-                return bounds
-
-            bounds = calculate_max_capex()
-            b_tec.var_capex_aux.setlb(bounds[0])
-            b_tec.var_capex_aux.setub(bounds[1])
-
-            # Delete constraints/conjunctions/relaxations
-            if economics["capex_model"] == 1:
-                big_m_transformation_required = 0
-                b_tec.del_component(b_tec.const_capex_aux)
-                b_tec.del_component(b_tec.const_capex)
-            elif economics["capex_model"] == 3:
-                big_m_transformation_required = 1
-                b_tec.del_component(b_tec.dis_installation)
-                b_tec.del_component(b_tec.disjunction_installation)
-                b_tec.del_component(b_tec._pyomo_gdp_bigm_reformulation)
-
-            # Reconstruct technology constraints
-            data_period = get_data_for_investment_period(
-                self.data, period, aggregation_data
-            )
-            data_node = get_data_for_node(data_period, node)
-
-            b_tec = tec_data._define_capex_constraints(b_tec, data_node)
-            if big_m_transformation_required:
-                b_tec = perform_disjunct_relaxation(b_tec)
-
-        else:
-            log_msg = (
-                "monte carlo for capex models other than 1 and 3 is not implemented"
-            )
-            log.warning(log_msg)
-
-    def _monte_carlo_networks(self, period, netw, MC_ranges=None):
-        """
-        Changes the capex of networks
-        """
-        aggregation_model = self.info_solving_algorithms["aggregation_model"]
-
-        config = self.data.model_config
-        model = self.model[aggregation_model]
-
-        sd = config["optimization"]["monte_carlo"]["sd"]["value"]
-        sd_random = np.random.normal(1, sd)
-
-        netw_data = self.data.network_data[period][netw]
-        economics = netw_data.economics
-        discount_rate = set_discount_rate(config, economics)
-        fraction_of_year_modelled = self.data.topology["fraction_of_year_modelled"]
-
-        annualization_factor = annualize(
-            discount_rate, economics["lifetime"], fraction_of_year_modelled
-        )
-
-        b_netw = model.periods[period].network_block[netw]
-
-        if MC_ranges is not None:
-            for _, row in MC_ranges.iterrows():
-                if row["parameter"] == "gamma1":
-                    b_netw.para_capex_gamma1 = random.uniform(row["min"], row["max"])
-                elif row["parameter"] == "gamma2":
-                    b_netw.para_capex_gamma2 = random.uniform(row["min"], row["max"])
-                elif row["parameter"] == "gamma3":
-                    b_netw.para_capex_gamma3 = random.uniform(row["min"], row["max"])
-                elif row["parameter"] == "gamma4":
-                    b_netw.para_capex_gamma4 = random.uniform(row["min"], row["max"])
-        else:
-            # Update cost parameters
-            b_netw.para_capex_gamma1 = (
-                economics["gamma1"] * annualization_factor * sd_random
-            )
-            b_netw.para_capex_gamma2 = (
-                economics["gamma2"] * annualization_factor * sd_random
-            )
-            b_netw.para_capex_gamma3 = (
-                economics["gamma3"] * annualization_factor * sd_random
-            )
-            b_netw.para_capex_gamma4 = (
-                economics["gamma4"] * annualization_factor * sd_random
-            )
-
-        for arc in b_netw.set_arcs:
-            b_arc = b_netw.arc_block[arc]
-
-            def calculate_max_capex():
-                max_capex = (
-                    b_netw.para_capex_gamma1
-                    + b_netw.para_capex_gamma2 * b_arc.para_size_max
-                    + b_netw.para_capex_gamma3 * b_arc.distance
-                    + b_netw.para_capex_gamma4 * b_arc.para_size_max * b_arc.distance
-                )
-                return (0, max_capex)
-
-            bounds = calculate_max_capex()
-            b_arc.var_capex_aux.setlb(bounds[0])
-            b_arc.var_capex_aux.setub(bounds[1])
-            b_arc.var_capex.setlb(bounds[0])
-            b_arc.var_capex.setub(bounds[1])
-
-            # Remove constraint (from persistent solver and from model)
-            if b_arc.find_component("dis_installation"):
-                b_arc.del_component(b_arc._pyomo_gdp_bigm_reformulation)
-                b_arc.del_component(b_arc.dis_installation)
-                b_arc.del_component(b_arc.disjunction_installation)
-            if b_arc.find_component("const_capex_aux"):
-                b_arc.del_component(b_arc.const_capex_aux)
-            b_arc.del_component(b_arc.const_capex)
-
-            b_arc = netw_data._define_capex_constraints_arc(
-                b_arc, b_netw, arc[0], arc[1]
-            )
-
-            if b_arc.big_m_transformation_required:
-                b_arc = perform_disjunct_relaxation(b_arc)
-
-    def _monte_carlo_import_parameters(self, on_car=None, MC_ranges=None):
-        """
-        Changes the import prices
-        """
-        aggregation_model = self.info_solving_algorithms["aggregation_model"]
-        aggregation_data = self.info_solving_algorithms["aggregation_data"]
-
-        config = self.data.model_config
-        model = self.model[aggregation_model]
-
-        for period in model.periods:
-            b_period = model.periods[period]
-            set_t = get_set_t(config, b_period)
-
-            for node in b_period.node_blocks:
-                if on_car is None:
-                    # change for all carriers at node
-                    on_car = model.periods[period].node_blocks[node].set_carriers
-
-                for car in model.periods[period].node_blocks[node].set_carriers:
-                    if car in on_car:
-                        import_prices = self.data.time_series[aggregation_data][
-                            period, node, "CarrierData", car, "Import price"
-                        ]
-
-                        for t in set_t:
-                            if MC_ranges is None:
-                                sd = config["optimization"]["monte_carlo"]["sd"][
-                                    "value"
-                                ]
-                                random_factor = np.random.normal(1, sd)
-                            else:
-                                random_factor = random.uniform(
-                                    MC_ranges["min"], MC_ranges["max"]
-                                )
-
-                            # Update parameter
-                            model.periods[period].node_blocks[node].para_import_price[
-                                t, car
-                            ] = (import_prices.iloc[t - 1] * random_factor)
-
-    def _monte_carlo_import_constraints(self):
-        """
-        Reconstructs the import cost constraint
-        """
-        model = self.model[self.info_solving_algorithms["aggregation_model"]]
-
-        # reconstruct constraint
-        for period in model.periods:
-            b_period = model.periods[period]
-            b_period_cost = model.block_costbalance[period]
-
-            b_period_cost.del_component(b_period_cost.const_cost_import)
-            b_period_cost.const_cost_import = construct_import_costs(
-                b_period, self.data, period
-            )
-
-    def _monte_carlo_export_parameters(self, on_car=None, MC_ranges=None):
-        """
-        Changes the import prices
-        """
-        aggregation_model = self.info_solving_algorithms["aggregation_model"]
-        aggregation_data = self.info_solving_algorithms["aggregation_data"]
-
-        config = self.data.model_config
-        model = self.model[aggregation_model]
-
-        for period in model.periods:
-            b_period = model.periods[period]
-            set_t = get_set_t(config, b_period)
-
-            for node in b_period.node_blocks:
-                if on_car is None:
-                    # change for all carriers at node
-                    on_car = model.periods[period].node_blocks[node].set_carriers
-
-                for car in model.periods[period].node_blocks[node].set_carriers:
-                    if car in on_car:
-                        export_prices = self.data.time_series[aggregation_data][
-                            period, node, "CarrierData", car, "Export price"
-                        ]
-
-                        for t in set_t:
-                            if MC_ranges is None:
-                                sd = config["optimization"]["monte_carlo"]["sd"][
-                                    "value"
-                                ]
-                                random_factor = np.random.normal(1, sd)
-                            else:
-                                random_factor = random.uniform(
-                                    MC_ranges["min"], MC_ranges["max"]
-                                )
-
-                            # Update parameter
-                            model.periods[period].node_blocks[node].para_export_price[
-                                t, car
-                            ] = (export_prices.iloc[t - 1] * random_factor)
-
-    def _monte_carlo_export_constraints(self):
-        """
-        Reconstructs the import cost constraint
-        """
-        model = self.model[self.info_solving_algorithms["aggregation_model"]]
-
-        # reconstruct constraint
-        for period in model.periods:
-            b_period = model.periods[period]
-            b_period_cost = model.block_costbalance[period]
-
-            b_period_cost.del_component(b_period_cost.const_cost_export)
-            b_period_cost.const_cost_export = construct_export_costs(
-                b_period, self.data, period
-            )
-
     def _delete_objective(self):
         """
         Delete the objective function
@@ -1541,11 +1061,10 @@ class ModelHub:
         config = self.data.model_config
         model = self.model[self.info_solving_algorithms["aggregation_model"]]
 
-        if not config["optimization"]["monte_carlo"]["N"]["value"]:
-            try:
-                model.del_component(model.objective)
-            except:
-                pass
+        try:
+            model.del_component(model.objective)
+        except:
+            pass
 
     def _optimize_time_averaging_second_stage(self):
         """

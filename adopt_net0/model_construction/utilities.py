@@ -50,4 +50,7 @@ def get_data_for_node(data: dict, node: str) -> dict:
         data_node["k_means_specs"] = data["k_means_specs"]
         # data_node["averaged_specs"] = data["averaged_specs"]
 
+    data_node["hour_factors"] = data["hour_factors"]
+    data_node["nr_timesteps_averaged"] = data["nr_timesteps_averaged"]
+
     return data_node

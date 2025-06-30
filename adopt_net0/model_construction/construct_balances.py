@@ -1,7 +1,7 @@
 import pyomo.environ as pyo
 from networkx.classes import nodes
 
-from ..utilities import get_set_t, get_hour_factors, get_nr_timesteps_averaged
+from ..utilities import get_set_t, get_data_for_investment_period
 
 
 def delete_all_balances(model):
@@ -380,8 +380,8 @@ def construct_nodal_energybalance(model, config: dict):
                 return (
                     tec_output
                     - tec_input
-                    + ccs_input
-                    - ccs_output
+                    - ccs_input
+                    + ccs_output
                     + netw_inflow
                     - netw_outflow
                     - netw_consumption
@@ -550,8 +550,10 @@ def construct_emission_balance(model, data):
     def init_emissionbalance(b_emissionbalance, period):
         b_period = model.periods[period]
         set_t = get_set_t(config, b_period)
-        hour_factors = get_hour_factors(config, data, period)
-        nr_timesteps_averaged = get_nr_timesteps_averaged(config)
+
+        data_period = get_data_for_investment_period(data, period, "full")
+        hour_factors = data_period["hour_factors"]
+        nr_timesteps_averaged = data_period["nr_timesteps_averaged"]
 
         # calculate total emissions from technologies, networks and importing/exporting carriers
         def init_emissions_pos(const):
@@ -657,8 +659,10 @@ def construct_import_costs(b_period, data, period: str):
     config = data.model_config
 
     set_t = get_set_t(config, b_period)
-    hour_factors = get_hour_factors(config, data, period)
-    nr_timesteps_averaged = get_nr_timesteps_averaged(config)
+
+    data_period = get_data_for_investment_period(data, period, "full")
+    hour_factors = data_period["hour_factors"]
+    nr_timesteps_averaged = data_period["nr_timesteps_averaged"]
 
     def init_cost_import(const):
         return b_period.var_cost_imports == sum(
@@ -693,8 +697,10 @@ def construct_export_costs(b_period, data, period):
     config = data.model_config
 
     set_t = get_set_t(config, b_period)
-    hour_factors = get_hour_factors(config, data, period)
-    nr_timesteps_averaged = get_nr_timesteps_averaged(config)
+
+    data_period = get_data_for_investment_period(data, period, "full")
+    hour_factors = data_period["hour_factors"]
+    nr_timesteps_averaged = data_period["nr_timesteps_averaged"]
 
     def init_cost_export(const):
         return b_period.var_cost_exports == -sum(
@@ -743,8 +749,10 @@ def construct_system_cost(model, data):
     def init_period_cost(b_period_cost, period):
         b_period = model.periods[period]
         set_t = get_set_t(config, b_period)
-        hour_factors = get_hour_factors(config, data, period)
-        nr_timesteps_averaged = get_nr_timesteps_averaged(config)
+
+        data_period = get_data_for_investment_period(data, period, "full")
+        hour_factors = data_period["hour_factors"]
+        nr_timesteps_averaged = data_period["nr_timesteps_averaged"]
 
         # Capex Tecs
         def init_cost_capex_tecs(const):
@@ -782,27 +790,18 @@ def construct_system_cost(model, data):
         def init_cost_opex_tecs(const):
             tec_opex_variable = sum(
                 sum(
-                    sum(
-                        b_period.node_blocks[node]
-                        .tech_blocks_active[tec]
-                        .var_opex_variable[t]
-                        * nr_timesteps_averaged
-                        * hour_factors[t - 1]
-                        for tec in b_period.node_blocks[node].set_technologies
+                    b_period.node_blocks[node].tech_blocks_active[tec].var_opex_variable
+                    for tec in b_period.node_blocks[node].set_technologies
+                )
+                + sum(
+                    b_period.node_blocks[node]
+                    .tech_blocks_active[tec]
+                    .var_opex_variable_ccs
+                    for tec in b_period.node_blocks[node].set_technologies
+                    if hasattr(
+                        b_period.node_blocks[node].tech_blocks_active[tec],
+                        "var_opex_variable_ccs",
                     )
-                    + sum(
-                        b_period.node_blocks[node]
-                        .tech_blocks_active[tec]
-                        .var_opex_variable_ccs[t]
-                        * nr_timesteps_averaged
-                        * hour_factors[t - 1]
-                        for tec in b_period.node_blocks[node].set_technologies
-                        if hasattr(
-                            b_period.node_blocks[node].tech_blocks_active[tec],
-                            "var_opex_variable_ccs",
-                        )
-                    )
-                    for t in set_t
                 )
                 for node in model.set_nodes
             )
@@ -833,13 +832,8 @@ def construct_system_cost(model, data):
         def init_cost_opex_netws(const):
             if not config["energybalance"]["copperplate"]["value"]:
                 netw_opex_variable = sum(
-                    sum(
-                        b_period.network_block[netw].var_opex_variable[t]
-                        * nr_timesteps_averaged
-                        * hour_factors[t - 1]
-                        for netw in b_period.set_networks
-                    )
-                    for t in set_t
+                    b_period.network_block[netw].var_opex_variable
+                    for netw in b_period.set_networks
                 )
                 netw_opex_fixed = sum(
                     b_period.network_block[netw].var_opex_fixed

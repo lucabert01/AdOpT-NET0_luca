@@ -9,7 +9,6 @@ path = "specify path to input data"
 
 # Create template files (comment these lines if already defined)
 dp.create_optimization_templates(path)
-dp.create_montecarlo_template_csv(path)
 
 # Create folder structure (comment these lines if already defined)
 dp.create_input_data_folder_template(path)
