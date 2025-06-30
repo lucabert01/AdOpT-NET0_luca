@@ -1,4 +1,3 @@
-import random
 import warnings
 from pathlib import Path
 import pyomo.environ as pyo
@@ -9,17 +8,14 @@ import pandas as pd
 import sys
 import datetime
 
-from .utilities import get_set_t
 from .data_management import DataHandle, create_technology_class
 from .model_construction import *
-from .result_management.read_results import add_values_to_summary
-from .utilities import get_glpk_parameters, get_gurobi_parameters
-from .result_management import *
-from .components.utilities import (
-    annualize,
-    set_discount_rate,
-    perform_disjunct_relaxation,
+from .utilities import (
+    get_glpk_parameters,
+    get_gurobi_parameters,
+    get_data_for_investment_period,
 )
+from .result_management import *
 import logging
 
 log = logging.getLogger(__name__)
@@ -464,11 +460,15 @@ class ModelHub:
             )
 
         # Read technology data
-        data_node = {
-            "technology_data": {},
-            "config": config,
-            "topology": self.data.topology,
-        }
+        data_node = get_data_for_node(
+            get_data_for_investment_period(
+                self.data,
+                investment_period,
+                self.info_solving_algorithms["aggregation_model"],
+            ),
+            node,
+        )
+
         for technology in technologies:
             # read in technology data
             tec_data = create_technology_class(
@@ -932,6 +932,9 @@ class ModelHub:
         self.last_solve_info["config"] = config
         self.last_solve_info["result_folder_path"] = result_folder_path
         self.last_solve_info["time_stage"] = self.info_solving_algorithms["time_stage"]
+        self.last_solve_info["aggregation_model"] = self.info_solving_algorithms[
+            "aggregation_model"
+        ]
 
         # Write results to path
         if write_results:

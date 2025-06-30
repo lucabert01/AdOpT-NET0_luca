@@ -55,32 +55,50 @@ def get_set_t(config: dict, model_block):
         return model_block.set_t_full
 
 
-def get_hour_factors(config: dict, data, period: str) -> list:
+def get_data_for_investment_period(
+    data, investment_period: str, aggregation_model: str
+) -> dict:
     """
-    Returns the correct hour factors to use for global balances
+    Gets data from DataHandle for specific investement_period. Writes it to a dict.
 
-    :param dict config: config dict
-    :param data: DataHandle
-    :return: hour factors
+    :param data: data to use
+    :param str investment_period: investment period
+    :param str aggregation_model: aggregation type
+    :return: data of respective investment period
+    :rtype: dict
     """
-    if config["optimization"]["typicaldays"]["N"]["value"] == 0:
-        return [1] * len(data.topology["time_index"]["full"])
-    elif config["optimization"]["typicaldays"]["method"]["value"] == 1:
-        return data.k_means_specs[period]["factors"]
-    elif config["optimization"]["typicaldays"]["method"]["value"] == 2:
-        return [1] * len(data.topology["time_index"]["full"])
+    data_period = {}
+    data_period["period_name"] = investment_period
+    data_period["topology"] = data.topology
+    data_period["technology_data"] = data.technology_data[investment_period]
+    data_period["time_series"] = data.time_series[aggregation_model].loc[
+        :, investment_period
+    ]
+    data_period["network_data"] = data.network_data[investment_period]
+    data_period["energybalance_options"] = data.energybalance_options[investment_period]
+    data_period["config"] = data.model_config
+    if data.model_config["optimization"]["typicaldays"]["N"]["value"] != 0:
+        data_period["k_means_specs"] = data.k_means_specs[investment_period]
+        # data_period["averaged_specs"] = data.averaged_specs[investment_period]
 
+    # Hour multiplication factors
+    if data.model_config["optimization"]["typicaldays"]["N"]["value"] == 0:
+        data_period["hour_factors"] = [1] * len(
+            data_period["topology"]["time_index"]["full"]
+        )
+    elif data.model_config["optimization"]["typicaldays"]["method"]["value"] == 1:
+        data_period["hour_factors"] = data_period["k_means_specs"]["factors"]
+    elif data.model_config["optimization"]["typicaldays"]["method"]["value"] == 2:
+        data_period["hour_factors"] = [1] * len(
+            data_period["topology"]["time_index"]["full"]
+        )
 
-def get_nr_timesteps_averaged(config: dict) -> int:
-    """
-    Returns the correct number of timesteps averaged
-
-    :param dict config: config dict
-    :return: nr_timesteps_averaged
-    """
-    if config["optimization"]["timestaging"]["value"] != 0:
-        nr_timesteps_averaged = config["optimization"]["timestaging"]["value"]
+    # Nr timesteps averaged
+    if data.model_config["optimization"]["timestaging"]["value"] != 0:
+        data_period["nr_timesteps_averaged"] = data.model_config["optimization"][
+            "timestaging"
+        ]["value"]
     else:
-        nr_timesteps_averaged = 1
+        data_period["nr_timesteps_averaged"] = 1
 
-    return nr_timesteps_averaged
+    return data_period
