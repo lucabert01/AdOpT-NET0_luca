@@ -98,7 +98,7 @@ class Technology(ModelComponent):
     - var_output: output of the technology, defined for each output carrier and time
       slice
     - var_capex: annualized investment of the technology
-    - var_opex_variable: variable operation costs, defined for each time slice
+    - var_opex_variable: variable operation costs
     - var_opex_fixed: fixed operational costs as fraction of up-front CAPEX
     - var_capex_aux: auxiliary variable to calculate the fixed opex of existing technologies
     - var_tec_emissions_pos: positive emissions, defined per time slice
@@ -113,7 +113,7 @@ class Technology(ModelComponent):
       and time slice
     - var_capex_ccs: annualized investment of CCS
     - var_capex_aux_ccs: auxiliary variable to calculate the fixed opex of existing CCS
-    - var_opex_variable_ccs: variable operation costs, defined for each time slice
+    - var_opex_variable_ccs: variable operation costs
     - var_opex_fixed_ccs: fixed operational costs
 
     **Constraint declarations**
@@ -876,7 +876,7 @@ class Technology(ModelComponent):
         b_tec.para_opex_variable = pyo.Param(
             domain=pyo.Reals, initialize=economics["opex_variable"], mutable=True
         )
-        b_tec.var_opex_variable = pyo.Var(self.set_t_global)
+        b_tec.var_opex_variable = pyo.Var()
 
         if (
             (self.technology_model == "RES")
@@ -889,16 +889,25 @@ class Technology(ModelComponent):
             opex_variable_based_on = b_tec.var_input
             opex_car = self.main_input_carrier
 
-        def init_opex_variable(const, t):
-            """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
+        hour_factors = data["hour_factors"]
+        nr_timesteps_averaged = data["nr_timesteps_averaged"]
+
+        def init_opex_variable(const):
+            """opexvar = sum(Input_{t, maincarrier}) * opex_{var}"""
             return (
-                opex_variable_based_on[t, opex_car] * b_tec.para_opex_variable
-                == b_tec.var_opex_variable[t]
+                sum(
+                    (
+                        opex_variable_based_on[t, opex_car]
+                        * nr_timesteps_averaged
+                        * hour_factors[t - 1]
+                    )
+                    * b_tec.para_opex_variable
+                    for t in self.set_t_global
+                )
+                == b_tec.var_opex_variable
             )
 
-        b_tec.const_opex_variable = pyo.Constraint(
-            self.set_t_global, rule=init_opex_variable
-        )
+        b_tec.const_opex_variable = pyo.Constraint(rule=init_opex_variable)
 
         # FIXED OPEX
         b_tec.para_opex_fixed = pyo.Param(
@@ -1122,8 +1131,9 @@ class Technology(ModelComponent):
         h5_group.create_dataset(
             "capex_tot",
             data=[
-                (
-                    model_block.var_capex.value + model_block.var_capex_ccs.value
+                model_block.var_capex.value
+                + (
+                    model_block.var_capex_ccs.value
                     if hasattr(model_block, "var_capex_ccs")
                     else 0
                 )
@@ -1132,23 +1142,20 @@ class Technology(ModelComponent):
         h5_group.create_dataset(
             "opex_variable",
             data=[
-                sum(
-                    (
-                        model_block.var_opex_variable[t].value
-                        + model_block.var_opex_variable_ccs.value
-                        if hasattr(model_block, "var_opex_variable_ccs")
-                        else 0
-                    )
-                    for t in self.set_t_global
+                model_block.var_opex_variable.value
+                + (
+                    model_block.var_opex_variable_ccs.value
+                    if hasattr(model_block, "var_opex_variable_ccs")
+                    else 0
                 )
             ],
         )
         h5_group.create_dataset(
             "opex_fixed",
             data=[
-                (
-                    model_block.var_opex_fixed.value
-                    + model_block.var_opex_fixed_ccs.value
+                model_block.var_opex_fixed.value
+                + (
+                    model_block.var_opex_fixed_ccs.value
                     if hasattr(model_block, "var_opex_fixed_ccs")
                     else 0
                 )
@@ -1550,18 +1557,26 @@ class Technology(ModelComponent):
         b_tec.para_opex_variable_ccs = pyo.Param(
             domain=pyo.Reals, initialize=economics["opex_variable"], mutable=True
         )
-        b_tec.var_opex_variable_ccs = pyo.Var(self.set_t_global)
+        b_tec.var_opex_variable_ccs = pyo.Var()
 
-        def init_opex_variable_ccs(const, t):
+        hour_factors = data["hour_factors"]
+        nr_timesteps_averaged = data["nr_timesteps_averaged"]
+
+        def init_opex_variable_ccs(const):
             return (
-                b_tec.var_output_ccs[t, b_tec.set_output_carriers_ccs.at(1)]
-                * b_tec.para_opex_variable_ccs
-                == b_tec.var_opex_variable_ccs[t]
+                sum(
+                    (
+                        b_tec.var_output_ccs[t, b_tec.set_output_carriers_ccs.at(1)]
+                        * nr_timesteps_averaged
+                        * hour_factors[t - 1]
+                    )
+                    * b_tec.para_opex_variable_ccs
+                    for t in self.set_t_global
+                )
+                == b_tec.var_opex_variable_ccs
             )
 
-        b_tec.const_opex_variable_ccs = pyo.Constraint(
-            self.set_t_global, rule=init_opex_variable_ccs
-        )
+        b_tec.const_opex_variable_ccs = pyo.Constraint(rule=init_opex_variable_ccs)
 
         return b_tec
 

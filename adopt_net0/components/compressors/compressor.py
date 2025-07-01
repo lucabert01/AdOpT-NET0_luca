@@ -48,7 +48,7 @@ class Compressor(ModelComponent):
     - ``var_consumption_energy``: energy consumption required by the compressor to raise the pressure (only for if active)
     - ``var_size``: size of the compressor (only if active)
     - ``var_capex``: annualized investment of the compressor (only if active)
-    - ``var_opex_variable``: variable operation costs, defined for each time slice
+    - ``var_opex_variable``: variable operation costs
     - ``var_opex_fixed``: fixed operational costs as fraction of up-front CAPEX
     - ``var_capex_aux``: auxiliary variable to calculate the fixed opex of existing compressor
 
@@ -599,18 +599,24 @@ class Compressor(ModelComponent):
         b_compr.para_opex_variable = pyo.Param(
             domain=pyo.Reals, initialize=economics["opex_variable"], mutable=True
         )
-        b_compr.var_opex_variable = pyo.Var(self.set_t_global)
+        b_compr.var_opex_variable = pyo.Var()
 
-        def init_opex_variable(const, t):
-            """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
+        hour_factors = data["hour_factors"]
+        nr_timesteps_averaged = data["nr_timesteps_averaged"]
+
+        def init_opex_variable(const):
+            """opexvar = sum(Input_{t, maincarrier}) * opex_{var}"""
+
             return (
-                b_compr.var_opex_variable[t]
-                == b_compr.para_opex_variable * b_compr.var_flow[t]
+                sum(
+                    (b_compr.var_flow[t] * nr_timesteps_averaged * hour_factors[t - 1])
+                    * b_compr.para_opex_variable
+                    for t in self.set_t_global
+                )
+                == b_compr.var_opex_variable
             )
 
-        b_compr.const_opex_variable = pyo.Constraint(
-            self.set_t_global, rule=init_opex_variable
-        )
+        b_compr.const_opex_variable = pyo.Constraint(rule=init_opex_variable)
 
         return b_compr
 
