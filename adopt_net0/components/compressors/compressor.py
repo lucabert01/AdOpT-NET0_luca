@@ -45,7 +45,7 @@ class Compressor(ModelComponent):
 
     Only for active compressors:
 
-    - ``var_consumption_energy``: energy consumption required by the compressor to raise the pressure (only for if active)
+    - ``var_consumption_energy``: energy consumption required by the compressor to raise the pressure (only if active)
     - ``var_size``: size of the compressor (only if active)
     - ``var_capex``: annualized investment of the compressor (only if active)
     - ``var_opex_variable``: variable operation costs
@@ -62,7 +62,12 @@ class Compressor(ModelComponent):
     - Variable OPEX: variable opex is defined in terms of the flow:
 
         .. math::
-            opex_var_{t} = Flow{t} * opex_{var}
+            opexvar_{t} = Flow_{t} * opex_{var}
+
+    - Energy consumption calculation based on pressure ratio, type of compressor, flow:
+
+        .. math::
+             energyconsumption_{t} = Flow_{t} * energyconsumption(MW_{el}/MW_{H2})
 
     """
 
