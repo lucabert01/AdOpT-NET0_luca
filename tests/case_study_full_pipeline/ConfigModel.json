@@ -256,7 +256,7 @@
                     0,
                     1
                 ],
-                "value": 0
+                "value": 1
             },
             "pressure_carriers": {
                 "description": "Determines which carriers are considered for pressure calculations. Should be a list of carrier strings",

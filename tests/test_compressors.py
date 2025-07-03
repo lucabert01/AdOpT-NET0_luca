@@ -9,7 +9,6 @@ import numpy as np
 import math
 
 from tests.utilities import (
-    make_climate_data,
     make_data_for_testing,
     run_model,
 )
