@@ -362,6 +362,19 @@ def check_input_data_consistency(path: Path):
     with open(path / "ConfigModel.json") as json_file:
         config = json.load(json_file)
 
+    if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
+        target_carrier = config["performance"]["pressure"]["pressure_carriers"]["value"]
+        for investment_period in topology["investment_periods"]:
+            for compressor in target_carrier:
+                # Check compressor_data
+                check_compressor_data_path = (
+                    path / investment_period / "compressor_data"
+                )
+                check_path_existance(
+                    check_compressor_data_path / (compressor + ".json"),
+                    f"A json file for {compressor} is missing in {check_compressor_data_path}",
+                )
+
     # Check that averaging and k-means is not used at same time
     if (config["optimization"]["typicaldays"]["N"]["value"] != 0) and (
         config["optimization"]["timestaging"]["value"] != 0
