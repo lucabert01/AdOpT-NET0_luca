@@ -19,7 +19,7 @@ def test_full_model_flow(request):
     - Technologies:
         - node1: existing gas power plant
         - node2: new electric boiler
-        - node2: new electrolyzer
+        - node2: existing electrolyzer
     - Networks:
         - new electricity
     - Timeframe: 1 timestep
