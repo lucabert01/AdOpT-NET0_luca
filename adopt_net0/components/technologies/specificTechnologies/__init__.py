@@ -4,3 +4,4 @@ from .heat_pump import HeatPump
 from .hydro_open import HydroOpen
 from .combined_cycle import CCPP
 from .cement_hybrid_ccs import CementHybridCCS
+from .wasteToEnergy import WasteToEnergy

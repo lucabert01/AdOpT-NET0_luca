@@ -8,7 +8,7 @@ import numpy as np
 
 # Specify the path to your input data
 path = Path("./CaseStudy_WtE")
-json_files_path = Path("dataCaseStudy_WtE/technologies_json")
+json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
 
 # General input data
 # TODO add the correct WtE plants' profiles
@@ -32,7 +32,6 @@ topology["carriers"] = [
     "wasteFuel",
     "wasteProcessed",
     "gas",
-    "hydrogen"
 ]
 # Investment periods:
 topology["investment_periods"] = ["period1"]
@@ -67,7 +66,7 @@ with open(
     path / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
 ) as json_file:
     technologies = json.load(json_file)
-technologies["new"] = ["WasteCHP"]
+technologies["new"] = ["WasteCHP", "Boiler_Industrial_NG"]
 
 with open(
     path / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "w"
@@ -79,12 +78,21 @@ adopt.copy_technology_data(path, json_files_path)
 
 
 # Import hourly profiles
-# TODO: correct names and profiles
-# path_processed_data = Path("./dataCaseStudy_Cement/data_processed.xlsx")
-# clinker_data = pd.read_excel(path_processed_data, sheet_name="clinker_production")
-# electricity_price_data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
-# wasteProcessed_demand = clinker_data[f"clinker_{plant_analyzed}"]
-# electricity_price = electricity_price_data["ITNORD_2024"]
+plant_name = "silla2"
+path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestudy.xlsx")
+data = pd.read_excel(path_processed_data)
+electricity_price = data["el_price_itNord"]
+emissions = data[f"emission_{plant_name}"]
+norm_heat_demand = data["normalized_heat_demand_milan"]
+json_wasteCHP = Path("./dataCaseStudy_WtE/technologies_json/WasteCHP.json")
+info_wasteCHP = json.loads(json_wasteCHP.read_text())
+lhv = info_wasteCHP["Performance"]["LHV"]
+emission_factor = info_wasteCHP["Performance"]["emission_factor"]
+wasteProcessed_demand = emissions/emission_factor
+max_heat_output = max(wasteProcessed_demand)*lhv
+fraction_peak_heat_demand = 0.5
+peak_heat_demand = fraction_peak_heat_demand*max_heat_output
+heat_demand = norm_heat_demand * peak_heat_demand
 
 # Set import limits/cost
 adopt.fill_carrier_data(
@@ -104,7 +112,7 @@ adopt.fill_carrier_data(
 
 adopt.fill_carrier_data(
     path,
-    value_or_data=150,
+    value_or_data=electricity_price,
     columns=["Export price"],
     carriers=["electricity"],
     nodes=["industrial_cluster"],
@@ -112,22 +120,29 @@ adopt.fill_carrier_data(
 
 adopt.fill_carrier_data(
     path,
-    value_or_data=100,
+    value_or_data=1000,
     columns=["Import limit"],
     carriers=["wasteFuel"],
+    nodes=["industrial_cluster"],
+)
+adopt.fill_carrier_data(
+    path,
+    value_or_data=1000,
+    columns=["Import limit"],
+    carriers=["gas"],
     nodes=["industrial_cluster"],
 )
 
 adopt.fill_carrier_data(
     path,
-    value_or_data=50,
+    value_or_data=wasteProcessed_demand,
     columns=["Demand"],
     carriers=["wasteProcessed"],
     nodes=["industrial_cluster"],
 )
 adopt.fill_carrier_data(
     path,
-    value_or_data=15,
+    value_or_data=heat_demand,
     columns=["Demand"],
     carriers=["heat"],
     nodes=["industrial_cluster"],
