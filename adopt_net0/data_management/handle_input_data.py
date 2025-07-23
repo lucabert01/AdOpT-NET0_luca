@@ -320,7 +320,7 @@ class DataHandle:
                 ) as json_file:
                     connection_pressure_options = json.load(json_file)
 
-                    # CHeck for correct data
+                    # Check for correct data
                     for carrier, connections in connection_pressure_options.items():
                         for connection_type, value in connections.items():
                             if not isinstance(value["value"], (int, float)):
@@ -930,6 +930,23 @@ class DataHandle:
                     "name": "Import",
                     "pressure": (info_node_exchange_pressure["Import"]["value"]),
                     "type": "Import",
+                    "existing": 1,
+                }
+            )
+
+        if (
+            self.time_series["full"][investment_period][node_i]["CarrierData"][
+                carrier_i
+            ]["Generic production"].any()
+            != 0
+        ):
+            pressure_data_at_node["outputs"].append(
+                {
+                    "name": "Generic production",
+                    "pressure": (
+                        info_node_exchange_pressure["Generic production"]["value"]
+                    ),
+                    "type": "Generic production",
                     "existing": 1,
                 }
             )

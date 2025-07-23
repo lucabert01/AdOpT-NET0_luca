@@ -120,6 +120,7 @@ def create_input_data_folder_template(base_path: Path | str):
                 "Demand": {"value": "", "unit": "bar"},
                 "Export": {"value": "", "unit": "bar"},
                 "Import": {"value": "", "unit": "bar"},
+                "Generic production": {"value": "", "unit": "bar"},
             }
             for carrier in configuration["performance"]["pressure"][
                 "pressure_carriers"

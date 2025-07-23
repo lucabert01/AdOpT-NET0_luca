@@ -143,6 +143,13 @@ def determine_flow_existing_compressors(self, compressor, b_period, node):
             ]["Import limit"]
         )
 
+    elif type_component[0] == "Generic production":
+        component_output_bound = max(
+            self.data.time_series["full"][period_name][node]["CarrierData"][
+                compressor.carrier
+            ]["Generic production"]
+        )
+
     if type_component[1] == "Technology":
         var_output = (
             b_period.node_blocks[node]

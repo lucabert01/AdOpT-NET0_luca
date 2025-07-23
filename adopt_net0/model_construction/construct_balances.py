@@ -128,7 +128,10 @@ def construct_compressor_constrains(model, config: dict):
       outflowToExport = \\sum(flow \for all compressor that as the export as outflow)\\
 
     .. math::
-      inflowToImport = \\sum(flow \for all compressor that as the import as inflow)\\
+      inflowFromImport = \\sum(flow \for all compressor that as the import as inflow)\\
+
+    .. math::
+      inflowFromGenProduction = \\sum(flow \for all compressor that as the generic production as inflow)\\
 
     :param model: pyomo model
     :param dict config: dict containing model information
@@ -268,6 +271,25 @@ def construct_compressor_constrains(model, config: dict):
 
             b_compr_const.const_compr_inflow_import = pyo.Constraint(
                 set_t, rule=init_compr_inflow_import
+            )
+
+            def init_compr_generic_production(const, t):
+                """Define constrain for the flow input to compressor from generic production"""
+                if any(
+                    compressor[0] == car and compressor[2] == "Generic production"
+                    for compressor in b_node.set_compressor
+                ):
+                    return b_node.var_generic_production[t, car] == sum(
+                        b_node.compressor_blocks_active[compressor].var_flow[t]
+                        for compressor in b_node.set_compressor
+                        if (compressor[0] == car)
+                        and (compressor[1] == "Generic production")
+                    )
+                else:
+                    return pyo.Constraint.Skip
+
+            b_compr_const.const_compr_inflow_generic_production = pyo.Constraint(
+                set_t, rule=init_compr_generic_production
             )
 
         else:
