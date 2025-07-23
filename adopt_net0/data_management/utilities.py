@@ -89,6 +89,8 @@ def technology_factory(tec_data: dict):
         return CCPP(tec_data)
     elif tec_data["tec_type"] == "CementHybridCCS":
         return CementHybridCCS(tec_data)
+    elif tec_data["tec_type"] == "WasteToEnergy":
+        return WasteToEnergy(tec_data)
 
 
 def create_technology_class(tec_name: str, load_path: Path):
