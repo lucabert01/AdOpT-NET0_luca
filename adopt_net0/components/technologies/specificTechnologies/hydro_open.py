@@ -210,12 +210,12 @@ class HydroOpen(Technology):
             self.set_t_performance,
             b_tec.set_input_carriers,
             domain=pyo.NonNegativeReals,
-            bounds=(b_tec.para_size_min, b_tec.para_size_max),
+            bounds=(0, b_tec.para_size_max),
         )
         b_tec.var_spilling = pyo.Var(
             self.set_t_performance,
             domain=pyo.NonNegativeReals,
-            bounds=(b_tec.para_size_min, b_tec.para_size_max),
+            bounds=(0, b_tec.para_size_max),
         )
 
         # Abdditional parameters
