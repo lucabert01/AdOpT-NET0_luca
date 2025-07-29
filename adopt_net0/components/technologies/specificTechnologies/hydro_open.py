@@ -218,7 +218,7 @@ class HydroOpen(Technology):
             bounds=(0, b_tec.para_size_max),
         )
 
-        # Abdditional parameters
+        # Additional parameters
 
         # Size constraint
         def init_size_constraint(const, t, car):
