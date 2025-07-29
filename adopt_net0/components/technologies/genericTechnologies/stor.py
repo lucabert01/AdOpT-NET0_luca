@@ -282,7 +282,7 @@ class Stor(Technology):
         b_tec.var_storage_level = pyo.Var(
             self.set_t_full,
             domain=pyo.NonNegativeReals,
-            bounds=(b_tec.para_size_min, b_tec.para_size_max),
+            bounds=(0, b_tec.para_size_max),
         )
 
         # Size constraint
