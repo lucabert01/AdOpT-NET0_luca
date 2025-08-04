@@ -8,8 +8,8 @@
   "Economics": {
     "comment": "CAPEX in EUR/MW or as a piecewise function, OPEX_variable in EUR/MWh total output, OPEX_fixed in % of up-front CAPEX",
     "CAPEX_model": 1,
-    "unit_CAPEX": 18000,
-    "OPEX_variable": 0.1,
+    "unit_CAPEX": 0,
+    "OPEX_variable": 0,
     "OPEX_fixed": 0.09,
     "discount_rate": 0.1,
     "lifetime": 15,
@@ -30,8 +30,13 @@
     "LHV": 2.45,
     "emission_factor": 0.57,
     "min_part_load": 0,
-    "el_efficiency": 0.25,
-    "th_efficiency": 0.95,
+    "el_efficiency": 0.264,
+    "th_efficiency": 0.865,
+    "ccs": {
+      "possible": 1,
+      "co2_concentration" : 0.08,
+      "ccs_type": "MEA_medium"
+    },
     "ramping_time": -1,
     "ref_size": -1,
     "ramping_const_int": -1,
