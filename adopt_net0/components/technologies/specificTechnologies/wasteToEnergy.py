@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 class WasteToEnergy(Technology):
     """
-    Cement plant with hybrid CCS
+    Waste to Energy with combined heat and power
 
     The plant has an oxyfuel combustion in the calciner and post-combustion capture with MEA afterward. The size
     of the oxyfuel correspond to the size of the cement plant, as it is built-in in the calciner. This size is
