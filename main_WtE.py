@@ -4,6 +4,7 @@ import json
 import pandas as pd
 from pathlib import Path
 import numpy as np
+from adopt_net0.data_preprocessing import load_climate_data_from_api
 
 
 # Specify the path to your input data
@@ -12,9 +13,10 @@ json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
 
 # General input data
 # TODO add the correct WtE plants' profiles
-possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
-plant_analyzed = "Vernasca"
-carbon_tax = 100
+possible_plants = ["silla2", "gerbido", "PAIP", "piacenza"]
+plant_analyzed = possible_plants[0]
+carbon_tax = 200
+fraction_peak_heat_demand = 0.5 # fraction of peak heat demand to supply compared to peak heat prod. from WtE
 
 # Create template files (comment these lines if already defined)
 adopt.create_optimization_templates(path)
@@ -78,11 +80,10 @@ adopt.copy_technology_data(path, json_files_path)
 
 
 # Import hourly profiles
-plant_name = "silla2"
 path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestudy.xlsx")
 data = pd.read_excel(path_processed_data)
 electricity_price = data["el_price_itNord"]
-emissions = data[f"emission_{plant_name}"]
+emissions = data[f"emission_{plant_analyzed}"]
 norm_heat_demand = data["normalized_heat_demand_milan"]
 json_wasteCHP = Path("./dataCaseStudy_WtE/technologies_json/WasteCHP.json")
 info_wasteCHP = json.loads(json_wasteCHP.read_text())
@@ -90,7 +91,6 @@ lhv = info_wasteCHP["Performance"]["LHV"]
 emission_factor = info_wasteCHP["Performance"]["emission_factor"]
 wasteProcessed_demand = emissions/emission_factor
 max_heat_output = max(wasteProcessed_demand)*lhv
-fraction_peak_heat_demand = 0.5
 peak_heat_demand = fraction_peak_heat_demand*max_heat_output
 heat_demand = norm_heat_demand * peak_heat_demand
 
@@ -157,6 +157,8 @@ carbon_cost_template = pd.read_csv(carbon_cost_path, sep=";", index_col=0, heade
 carbon_cost_template["price"] = carbon_price
 carbon_cost_template = carbon_cost_template.reset_index()
 carbon_cost_template.to_csv(carbon_cost_path, sep=";", index=False)
+
+load_climate_data_from_api(folder_path=path)
 
 # Construct and solve the model
 m = adopt.ModelHub()

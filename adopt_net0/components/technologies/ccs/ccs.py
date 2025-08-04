@@ -3,7 +3,7 @@ import pandas as pd
 from ...component import ModelComponent
 
 
-def fit_ccs_coeff(co2_concentration: float, ccs_data: dict, climate_data: pd.DataFrame):
+def fit_ccs_coeff(co2_concentration: float, ccs_data: dict):
     """
     Obtain bounds and input ratios for CCS
 
