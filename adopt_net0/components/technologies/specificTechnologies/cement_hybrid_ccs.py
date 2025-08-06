@@ -30,9 +30,9 @@ class CementHybridCCS(Technology):
         """
         super().__init__(tec_data)
 
-        self.component_options.emissions_based_on = "output"
-        self.component_options.size_based_on = "output"
-        self.component_options.main_output_carrier = tec_data["Performance"][
+        self.emissions_based_on = "output"
+        self.size_based_on = "output"
+        self.main_output_carrier = tec_data["Performance"][
             "main_output_carrier"
         ]
 
@@ -352,7 +352,7 @@ class CementHybridCCS(Technology):
         :return: pyomo block with technology model
         """
         c = self.processed_coeff.time_independent
-        technology_model = self.component_options.technology_model
+        technology_model = self.technology_model
         emissions_clinker = self.input_parameters.performance_data["performance"][
             "tCO2_tclinker"
         ]
@@ -479,7 +479,7 @@ class CementHybridCCS(Technology):
             mutable=True,
         )
 
-        if self.existing and not self.component_options.decommission == "impossible":
+        if self.existing and not self.decommission == "impossible":
             b_tec.para_decommissioning_cost_annual = pyo.Param(
                 domain=pyo.Reals,
                 initialize=annualization_factor * economics.decommission_cost,
@@ -550,7 +550,7 @@ class CementHybridCCS(Technology):
 
         # CAPEX
         if self.existing:
-            if self.component_options.decommission == "impossible":
+            if self.decommission == "impossible":
                 # technology cannot be decommissioned
                 b_tec.const_capex = pyo.Constraint(expr=b_tec.var_capex == 0)
             else:
@@ -592,7 +592,7 @@ class CementHybridCCS(Technology):
             """opexvar_{t} = Input_{t, maincarrier} * opex_{var}"""
 
             return (
-                b_tec.var_output[t, self.component_options.main_output_carrier]
+                b_tec.var_output[t, self.main_output_carrier]
                 * b_tec.para_opex_variable
                 == b_tec.var_opex_variable[t]
             )
