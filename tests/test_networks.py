@@ -48,8 +48,8 @@ def define_network(
 
     if existing:
         netw_data.existing = existing
-        netw_data.input_parameters.size_initial = size_initial
-        netw_data.component_options.decommission = decommission
+        netw_data.size_initial = size_initial
+        netw_data.decommission = decommission
 
     return netw_data
 
@@ -132,6 +132,17 @@ def test_network_unidirectional(request):
         m.arc_block["node1", "node2"].var_size.value, 3
     )
     assert m.var_capex.value > 0
+
+    # Size_min =! 0 CASE
+    netw.size_min = 100
+    m = construct_netw_model(netw, nr_timesteps)
+    m.test_const_outflow1 = pyo.Constraint(
+        expr=m.var_inflow[1, "hydrogen", "node1"] == 0
+    )
+
+    termination = run_model(m, request.config.solver, objective="capex")
+    assert termination == pyo.TerminationCondition.optimal
+    assert m.arc_block["node2", "node1"].var_flow[1].value <= netw.size_min
 
 
 def test_network_bidirectional(request):
