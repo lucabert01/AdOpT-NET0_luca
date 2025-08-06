@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 
 from pyomo.environ import ConcreteModel
-from ..utilities import get_set_t, get_hour_factors, get_nr_timesteps_averaged
+from ..utilities import get_set_t, get_data_for_investment_period
 
 import logging
 
@@ -88,8 +88,13 @@ def get_summary(model, solution, folder_path: Path, model_info: dict, data) -> d
     for period in model.set_periods:
         b_period = model.periods[period]
         set_t = get_set_t(config, b_period)
-        hour_factors = get_hour_factors(config, data, period)
-        nr_timesteps_averaged = get_nr_timesteps_averaged(config)
+
+        data_period = get_data_for_investment_period(
+            data, period, model_info["aggregation_model"]
+        )
+
+        hour_factors = data_period["hour_factors"]
+        nr_timesteps_averaged = data_period["nr_timesteps_averaged"]
 
         from_technologies[period] = sum(
             sum(
@@ -196,7 +201,6 @@ def get_summary(model, solution, folder_path: Path, model_info: dict, data) -> d
         "value"
     ]
     summary_dict["pareto_point"] = model_info["pareto_point"]
-    summary_dict["monte_carlo_run"] = model_info["monte_carlo_run"]
     summary_dict["time_stage"] = model_info["time_stage"]
 
     summary_dict["case"] = model_info["config"]["reporting"]["case_name"]["value"]
@@ -240,6 +244,7 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
 
     # LOG
     log_msg = f"Writing results to {folder_path}"
+    print(log_msg)
     log.info(log_msg)
 
     # create the results h5 file in the results folder
@@ -383,6 +388,41 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
                     car_group.create_dataset(
                         "technology_outputs", data=technology_outputs
                     )
+
+                    ccs_output = [
+                        sum(
+                            node_data.tech_blocks_active[tec]
+                            .var_output_ccs[t, car]
+                            .value
+                            for tec in node_data.set_technologies
+                            if hasattr(
+                                node_data.tech_blocks_active[tec], "var_output_ccs"
+                            )
+                            if car
+                            in node_data.tech_blocks_active[tec].set_output_carriers_ccs
+                        )
+                        for t in set_t
+                    ]
+
+                    car_group.create_dataset("technology_outputs_ccs", data=ccs_output)
+
+                    ccs_input = [
+                        sum(
+                            node_data.tech_blocks_active[tec]
+                            .var_input_ccs[t, car]
+                            .value
+                            for tec in node_data.set_technologies
+                            if hasattr(
+                                node_data.tech_blocks_active[tec], "var_input_ccs"
+                            )
+                            if car
+                            in node_data.tech_blocks_active[tec].set_input_carriers_ccs
+                        )
+                        for t in set_t
+                    ]
+
+                    car_group.create_dataset("technology_inputs_ccs", data=ccs_input)
+
                     car_group.create_dataset(
                         "generic_production",
                         data=[
