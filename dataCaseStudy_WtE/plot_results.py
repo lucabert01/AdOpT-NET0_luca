@@ -47,6 +47,9 @@ json_wasteCHP = Path("./technologies_json/WasteCHP.json")
 info_wasteCHP = json.loads(json_wasteCHP.read_text())
 lhv = info_wasteCHP["Performance"]["LHV"]
 emission_factor = info_wasteCHP["Performance"]["emission_factor"]
+json_mea = Path("./technologies_json/MEA_medium.json")
+info_mea = json.loads(json_wasteCHP.read_text())
+ccr = info_wasteCHP["Performance"]["capture_rate"]
 
 print_h5_tree(file_path)
 
@@ -120,5 +123,73 @@ ax2.grid(True, linestyle='--', alpha=0.6)
 plt.tight_layout(rect=[0, 0, 1, 0.96]) # Adjust rect to make space for suptitle
 plt.show()
 
+## -----------------  DH ratio --------------------------
 
 
+
+def plot_results_dh_ratio(explored_dh_ratio):
+    num_cases = len(explored_dh_ratio)
+    raw_results_path = Path("./raw_results")
+    # Get all directories that contain 'dh_ratio' in the name
+    dh_ratio_dirs = [d for d in raw_results_path.iterdir()
+                     if d.is_dir() and "dh_ratio" in d.name]
+
+    # Sort directories by name (or modify to sort by timestamp if needed)
+    dir_results_sorted = sorted(dh_ratio_dirs)
+
+    # Get the most recent ones
+    file_names = [d.name for d in dir_results_sorted[-num_cases:]]
+    explored_dh_ratio_str = [str(r) for r in explored_dh_ratio]
+
+    results_summary = {}
+    for i in len(file_names):
+        file_path = Path(__file__).parent.parent / f"userData/{file_names[i]}/optimization_results.h5"
+        # Check if each explored_dh_ratio[i] is in file_names[i]
+        dh_ratio_str = explored_dh_ratio_str[i]
+        if str(dh_ratio_str) in file_names[i]:
+            print(f"{dh_ratio_str} found in {file_names[i]}")
+        else:
+            print(f"{dh_ratio_str} NOT found in {file_names[i]}")
+
+        with h5py.File(file_path, 'r') as hdf_file:
+            df_operation = pd.DataFrame(extract_datasets_from_h5group(hdf_file["operation"]))
+            df_design = pd.DataFrame(extract_datasets_from_h5group(hdf_file["design/nodes/period1"]))
+
+        print(df_operation)
+
+        w2e_design = df_design.loc[:, ('industrial_cluster', 'WasteCHP')]
+        boiler_design = df_design.loc[:, ('industrial_cluster', 'Boiler_Industrial_NG')]
+        w2e_output = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'WasteCHP')]
+        boiler_output = df_operation.loc[:,
+                        ('technology_operation', 'period1', 'industrial_cluster', 'Boiler_Industrial_NG')]
+
+        heat_out = w2e_output['heat_output']
+        el_out = w2e_output['electricity_output']
+        waste_out = w2e_output['wasteProcessed_output']
+        waste_in = w2e_output['wasteFuel_input']
+        co2_captured_w2e = w2e_output['CO2captured_var_output_ccs']
+        emissions_total = waste_in * emission_factor
+        fraction_co2_captured = co2_captured_w2e / emissions_total
+        size_ccs = w2e_design["size_ccs"]
+        fraction_size_ccs = size_ccs/ccr/ (max(waste_in)*emission_factor)
+        ccs_utilization_rate = fraction_co2_captured/(fraction_size_ccs*ccr)
+        heat_supplied_by_boiler = sum(boiler_output['heat_output'])/ (sum(heat_out) + sum(boiler_output['heat_output']))
+
+        results_summary[dh_ratio_str]['size_ccs'] = size_ccs
+        results_summary[dh_ratio_str]['fraction_size_ccs'] = fraction_size_ccs
+        results_summary[dh_ratio_str]['ccs_utilization_rate'] = ccs_utilization_rate
+        results_summary[dh_ratio_str]['heat_supplied_by_boiler'] = heat_supplied_by_boiler
+
+
+    # Plot
+    fraction_size_ccs = [results_summary[dh]['fraction_size_ccs'] for dh in explored_dh_ratio_str]
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.plot(fraction_size_ccs*100, color=batlow_colors[4], linewidth=2, label='CCS Size')
+    ax.set_xlabel('time [h]')
+    ax.set_ylabel('fraction CCS size [%]')  # Adjust if units are known
+    ax.legend(loc='upper right')
+    ax.grid(True, linestyle='--', alpha=0.6)
+
+    plt.tight_layout()
+    plt.show()
