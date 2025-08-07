@@ -763,7 +763,7 @@ class Network(ModelComponent):
             self.set_t,
             domain=pyo.NonNegativeReals,
             bounds=(
-                b_netw.para_size_min * rated_capacity,
+                0,
                 b_arc.para_size_max * rated_capacity,
             ),
         )
@@ -771,7 +771,7 @@ class Network(ModelComponent):
             self.set_t,
             domain=pyo.NonNegativeReals,
             bounds=(
-                b_netw.para_size_min * rated_capacity,
+                0,
                 b_arc.para_size_max * rated_capacity,
             ),
         )

@@ -402,9 +402,7 @@ def test_conv_perf(request):
                             2,
                         )
                 if conv_type == 3:
-                    main_car_input = model.var_input[
-                        1, tec.main_input_carrier
-                    ].value
+                    main_car_input = model.var_input[1, tec.main_input_carrier].value
                     for car in model.var_input:
                         car_input = model.var_input[car].value
                         assert (
@@ -482,9 +480,7 @@ def test_conv_perf(request):
                             2,
                         )
                 if conv_type == 3:
-                    main_car_input = model.var_input[
-                        1, tec.main_input_carrier
-                    ].value
+                    main_car_input = model.var_input[1, tec.main_input_carrier].value
                     for car in model.var_input:
                         car_input = model.var_input[car].value
                         assert round(car_input, 2) == round(
@@ -527,7 +523,7 @@ def test_conv_CAPEX(request):
         model = construct_tec_model(tec, nr_timesteps=time_steps)
         f = time_steps / 8760
         t = tec.economics["lifetime"]
-        r = tec.economics["discount_rate"] 
+        r = tec.economics["discount_rate"]
         a = annualize(r, t, f)
 
         # Check CAPEX
@@ -827,12 +823,10 @@ def test_dynamics_slow(request):
 
         if conv_type < 3:
             input_at_SD1 = (
-                model.var_input[3, "gas"].value
-                + model.var_input[3, "hydrogen"].value
+                model.var_input[3, "gas"].value + model.var_input[3, "hydrogen"].value
             )
             input_at_SD2 = (
-                model.var_input[4, "gas"].value
-                + model.var_input[4, "hydrogen"].value
+                model.var_input[4, "gas"].value + model.var_input[4, "hydrogen"].value
             )
         else:
             input_at_SD1 = model.var_input[3, main_car].value
@@ -890,12 +884,10 @@ def test_dynamics_slow(request):
 
         if conv_type < 3:
             input_at_SU1 = (
-                model.var_input[2, "gas"].value
-                + model.var_input[2, "hydrogen"].value
+                model.var_input[2, "gas"].value + model.var_input[2, "hydrogen"].value
             )
             input_at_SU2 = (
-                model.var_input[3, "gas"].value
-                + model.var_input[3, "hydrogen"].value
+                model.var_input[3, "gas"].value + model.var_input[3, "hydrogen"].value
             )
         else:
             input_at_SU1 = model.var_input[2, main_car].value
@@ -1017,6 +1009,20 @@ def test_hydro_open(request):
     assert termination == TerminationCondition.optimal
     assert model.var_size.value == 2
 
+    # Size min =! 0, feasibility CASES
+    tec.size_min = 10
+    model = construct_tec_model(tec, nr_timesteps=time_steps)
+    model = generate_output_constraint(model, [0, 0, 0])
+
+    def init_test_input(const, t):
+        return model.var_input[t, "electricity"] == 0
+
+    model.test_const_input = Constraint(model.set_t, rule=init_test_input)
+
+    termination = run_model(model, request.config.solver)
+    assert termination == TerminationCondition.optimal
+    assert model.var_storage_level[1, "electricity"].value <= tec.size_min
+
 
 def test_heat_pump(request):
     """
@@ -1036,9 +1042,7 @@ def test_heat_pump(request):
         # INFEASIBILITY CASES
         model = construct_tec_model(tec, nr_timesteps=time_steps)
         model = generate_output_constraint(model, [1])
-        model.test_const_input = Constraint(
-            expr=model.var_input[1, "electricity"] == 0
-        )
+        model.test_const_input = Constraint(expr=model.var_input[1, "electricity"] == 0)
 
         termination = run_model(model, request.config.solver)
         assert termination in [
@@ -1081,9 +1085,7 @@ def test_gasturbine(request):
 
     # FEASIBILITY CASES
     model = construct_tec_model(tec, nr_timesteps=time_steps)
-    model.test_const_output = Constraint(
-        expr=model.var_output[1, "electricity"] == 10
-    )
+    model.test_const_output = Constraint(expr=model.var_output[1, "electricity"] == 10)
     model.test_const_input = Constraint(expr=model.var_input[1, "hydrogen"] == 0)
 
     termination = run_model(model, request.config.solver)
@@ -1105,9 +1107,7 @@ def test_ccs(request):
 
     # INFEASIBILITY CASE
     model = construct_tec_model(tec, nr_timesteps=time_steps)
-    model.test_const_output = Constraint(
-        expr=model.var_output[1, "electricity"] == 1
-    )
+    model.test_const_output = Constraint(expr=model.var_output[1, "electricity"] == 1)
     model.test_const_emissions = Constraint(
         expr=model.var_output[1, "electricity"] == 1
     )
@@ -1121,9 +1121,7 @@ def test_ccs(request):
 
     # FEASBILITY CASES
     model = construct_tec_model(tec, nr_timesteps=time_steps)
-    model.test_const_output = Constraint(
-        expr=model.var_output[1, "electricity"] == 1
-    )
+    model.test_const_output = Constraint(expr=model.var_output[1, "electricity"] == 1)
     termination = run_model(model, request.config.solver, "capex_tot")
     cost_no_ccs = model.var_capex.value
     emissions_no_ccs = sum([model.var_tec_emissions_pos[t].value for t in model.set_t])
@@ -1135,9 +1133,7 @@ def test_ccs(request):
     assert round(model.var_input_ccs[1, "electricity"].value, 3) == 0
 
     model = construct_tec_model(tec, nr_timesteps=time_steps)
-    model.test_const_output = Constraint(
-        expr=model.var_output[1, "electricity"] == 1
-    )
+    model.test_const_output = Constraint(expr=model.var_output[1, "electricity"] == 1)
     termination = run_model(model, request.config.solver, objective="emissions")
     assert termination == TerminationCondition.optimal
 

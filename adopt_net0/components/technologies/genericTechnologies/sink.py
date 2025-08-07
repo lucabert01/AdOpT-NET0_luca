@@ -160,11 +160,11 @@ class Sink(Technology):
         elif config["optimization"]["typicaldays"]["method"]["value"] == 2:
             sequence_storage = self.sequence
 
-        # Sotrage level and injection capacity decision variables
+        # Storage level and injection capacity decision variables
         b_tec.var_storage_level = pyo.Var(
             set_t_full,
             domain=pyo.NonNegativeReals,
-            bounds=(b_tec.para_size_min, b_tec.para_size_max),
+            bounds=(0, b_tec.para_size_max),
         )
         b_tec.var_injection_capacity = pyo.Var(
             domain=pyo.NonNegativeReals,

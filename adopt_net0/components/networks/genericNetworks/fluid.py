@@ -194,7 +194,7 @@ class Fluid(Network):
             b_netw.set_consumed_carriers,
             domain=pyo.NonNegativeReals,
             bounds=(
-                b_netw.para_size_min * rated_capacity,
+                0,
                 b_arc.para_size_max * rated_capacity,
             ),
         )
@@ -203,7 +203,7 @@ class Fluid(Network):
             b_netw.set_consumed_carriers,
             domain=pyo.NonNegativeReals,
             bounds=(
-                b_netw.para_size_min * rated_capacity,
+                0,
                 b_arc.para_size_max * rated_capacity,
             ),
         )
