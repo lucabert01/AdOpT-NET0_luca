@@ -111,7 +111,7 @@ def show_available_networks():
     Prints all available networks
     """
     tec_data_path = Path(
-        os.path.join(os.path.dirname(__file__) + "/../database/network_data")
+        os.path.join(os.path.dirname(__file__) + "/../database/templates/network_data")
     )
 
     for root, dirs, files in os.walk(tec_data_path.resolve()):
@@ -124,7 +124,9 @@ def show_available_technologies():
     Prints all available technologies
     """
     tec_data_path = Path(
-        os.path.join(os.path.dirname(__file__) + "/../database/templates")
+        os.path.join(
+            os.path.dirname(__file__) + "/../database/templates/technology_data"
+        )
     )
 
     for root, dirs, files in os.walk(tec_data_path.resolve()):
