@@ -578,3 +578,40 @@ class Compressor(ModelComponent):
         b_compr.disjunction_decommission_full = gdp.Disjunction(rule=bind_disjunctions)
 
         return b_compr
+
+    def write_results_compressor_design(self, h5_group, model_block):
+        """
+        Function to report compressor design
+
+        :param model_block: pyomo network block
+        :param h5_group: h5 group to write to
+        """
+        if self.compression_active == 1:
+            h5_group.create_dataset("size", data=[model_block.var_size.value])
+            if self.existing == 0:
+                h5_group.create_dataset("capex_tot", data=[model_block.var_capex.value])
+            else:
+                return
+        else:
+            return
+
+    def write_results_compressor_operation(self, h5_group, model_block):
+        """
+        Function to report compressor operation
+
+        :param model_block: pyomo network block
+        :param h5_group: h5 group to write to
+        """
+
+        h5_group.create_dataset(
+            "flow", data=[model_block.var_flow[t].value for t in self.set_t_global]
+        )
+
+        for car in model_block.set_consumed_carriers:
+            h5_group.create_dataset(
+                "energy consumption",
+                data=[
+                    model_block.var_consumption_energy[t, car].value
+                    for t in self.set_t_global
+                ],
+            )
