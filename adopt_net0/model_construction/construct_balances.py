@@ -1,5 +1,4 @@
 import pyomo.environ as pyo
-from networkx.classes import nodes
 
 from ..utilities import get_set_t, get_data_for_investment_period
 
