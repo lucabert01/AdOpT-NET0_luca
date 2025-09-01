@@ -245,7 +245,6 @@ class Compressor(ModelComponent):
 
         # GENERAL TECHNOLOGY CONSTRAINTS
         b_compr = self._define_flow(b_compr)
-        b_compr = self._define_compressor_name(b_compr)
         if self.compression_active == 1:
             b_compr = self._define_energyconsumption_parameters(b_compr)
             b_compr = self._define_energy_consumption(b_compr, data)
@@ -256,16 +255,6 @@ class Compressor(ModelComponent):
             b_compr = self._define_capex_constraints(b_compr, data)
             b_compr = self._define_opex_fixed(b_compr, data)
 
-        return b_compr
-
-    def _define_compressor_name(self, b_compr):
-        """
-        Defines the name of the component as carrier_component1_component2(_existing)
-
-        :param b_compr: pyomo block with compressor model
-        :return: pyomo block with compressor model
-        """
-        b_compr.para_name = pyo.Param(initialize=[self.name_compressor], within=pyo.Any)
         return b_compr
 
     def _define_flow(self, b_compr):

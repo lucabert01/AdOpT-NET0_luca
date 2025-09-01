@@ -317,14 +317,11 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
 
                 if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                     for compr_name in b_node.set_compressor:
-                        compressor_name = str(
-                            b_node.compressor_blocks_active[compr_name].para_name.value
-                        )
                         b_compr = b_node.compressor_blocks_active[compr_name]
                         compressor = data.compressor_data[period][node_name][compr_name]
                         if compressor.compression_active == 1:
                             compr_group = node_specific_group.create_group(
-                                compressor_name
+                                compressor.name_compressor
                             )
                             compressor.write_results_compressor_design(
                                 compr_group, b_compr
@@ -367,14 +364,11 @@ def write_optimization_results_to_h5(model, solution, model_info: dict, data) ->
 
                 if config["performance"]["pressure"]["pressure_on"]["value"] == 1:
                     for compr_name in b_node.set_compressor:
-                        compressor_name = str(
-                            b_node.compressor_blocks_active[compr_name].para_name.value
-                        )
                         b_compr = b_node.compressor_blocks_active[compr_name]
                         compressor = data.compressor_data[period][node_name][compr_name]
                         if compressor.compression_active == 1:
                             compr_group = node_specific_group.create_group(
-                                compressor_name
+                                compressor.name_compressor
                             )
                             compressor.write_results_compressor_operation(
                                 compr_group, b_compr
