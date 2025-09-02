@@ -1,4 +1,4 @@
-..  _compressor:
+.. _compressor:
 
 Compressors
 =====================================

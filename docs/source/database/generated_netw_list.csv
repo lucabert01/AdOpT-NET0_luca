@@ -9,6 +9,8 @@ electricitySimple; electricity
 heat; fluid 
 hydrogenPipelineOffshore; fluid 
 hydrogenPipelineOnshore; fluid 
+hydrogenPipelineOnshore_highP; fluid 
+hydrogenPipelineOnshore_lowP; fluid 
 hydrogenRailway; fluid 
 hydrogenShip; fluid 
 hydrogenSimple; fluid 
