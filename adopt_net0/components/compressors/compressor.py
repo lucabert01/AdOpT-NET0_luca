@@ -21,7 +21,14 @@ log = logging.getLogger(__name__)
 
 class Compressor(ModelComponent):
     """
-    Class to read and manage data for compressors
+    Class to read and manage data for compressors.
+
+    Important
+    ---------
+    - The component that has the gas as **output** is defined as ``output_component``
+      (with respective output pressure, type, existing).
+    - The component that has the gas as **input** is defined as ``input_component``
+      (with respective input pressure, type, existing).
 
     **Parameter declarations:**
 
@@ -83,17 +90,14 @@ class Compressor(ModelComponent):
         self.input = None
         self.output = None
         self.set_t_full = None
-        self.set_t_performance = None
         self.set_t_global = None
-        self.sequence = None
         self.compression_active = None
 
-        # TODO: definition of input/output
         self.output_component = compr_data["connection_info"]["components"][0]
         self.input_component = compr_data["connection_info"]["components"][1]
         self.output_pressure = compr_data["connection_info"]["pressure"][0]
         self.input_pressure = compr_data["connection_info"]["pressure"][1]
-        # to be fixed
+
         self.carrier = compr_data["carrier"]
         self.output_type = compr_data["connection_info"]["type"][0]
         self.input_type = compr_data["connection_info"]["type"][1]
@@ -203,45 +207,7 @@ class Compressor(ModelComponent):
 
         # SET T
         self.set_t_full = set_t_full
-
-        # MODELING TYPICAL DAYS
-        technologies_modelled_with_full_res = config["optimization"]["typicaldays"][
-            "technologies_with_full_res"
-        ]["value"]
-
-        if config["optimization"]["typicaldays"]["N"]["value"] == 0:
-            # everything with full resolution
-            self.modelled_with_full_res = True
-            self.set_t_performance = set_t_full
-            self.set_t_global = set_t_full
-            self.sequence = list(self.set_t_performance)
-
-        elif config["optimization"]["typicaldays"]["method"]["value"] == 1:
-            # everything with reduced resolution
-            self.modelled_with_full_res = False
-            self.set_t_performance = set_t_clustered
-            self.set_t_global = set_t_clustered
-            self.sequence = list(self.set_t_performance)
-
-        elif config["optimization"]["typicaldays"]["method"]["value"] == 2:
-            # resolution of balances is full, so interactions with them also need to
-            # be full resolution
-            self.set_t_global = set_t_full
-
-        # Coefficients
-        if self.modelled_with_full_res:
-            if config["optimization"]["timestaging"]["value"] == 0:
-                self.processed_coeff.time_dependent_used = (
-                    self.processed_coeff.time_dependent_full
-                )
-            else:
-                self.processed_coeff.time_dependent_used = (
-                    self.processed_coeff.time_dependent_averaged
-                )
-        else:
-            self.processed_coeff.time_dependent_used = (
-                self.processed_coeff.time_dependent_clustered
-            )
+        self.set_t_global = set_t_full
 
         # GENERAL TECHNOLOGY CONSTRAINTS
         b_compr = self._define_flow(b_compr)
@@ -532,41 +498,41 @@ class Compressor(ModelComponent):
 
         return b_compr
 
-    def _define_decommissioning_at_once_constraints(self, b_compr):
-        """
-        Defines constraints to ensure that a technology can only be decommissioned as a whole.
-
-        This function creates a disjunction formulation that enforces
-        full-plant decommissioning decisions, meaning that either the technology is fully installed
-        or fully decommissioned, with no partial decommissioning allowed.
-
-        :param b_tec: The block representing the technology.
-
-        :return: The modified technology block with added decommissioning constraints.
-        """
-
-        # Full plant decommissioned only
-        self.big_m_transformation_required = 1
-        s_indicators = range(0, 2)
-
-        def init_decommission_full(dis, ind):
-            if ind == 0:  # tech not installed
-                dis.const_decommissioned = pyo.Constraint(expr=b_compr.var_size == 0)
-            else:  # tech installed
-                dis.const_installed = pyo.Constraint(
-                    expr=b_compr.var_size == b_compr.para_size_initial
-                )
-
-        b_compr.dis_decommission_full = gdp.Disjunct(
-            s_indicators, rule=init_decommission_full
-        )
-
-        def bind_disjunctions(dis):
-            return [b_compr.dis_decommission_full[i] for i in s_indicators]
-
-        b_compr.disjunction_decommission_full = gdp.Disjunction(rule=bind_disjunctions)
-
-        return b_compr
+    # def _define_decommissioning_at_once_constraints(self, b_compr):
+    #     """
+    #     Defines constraints to ensure that a technology can only be decommissioned as a whole.
+    #
+    #     This function creates a disjunction formulation that enforces
+    #     full-plant decommissioning decisions, meaning that either the technology is fully installed
+    #     or fully decommissioned, with no partial decommissioning allowed.
+    #
+    #     :param b_tec: The block representing the technology.
+    #
+    #     :return: The modified technology block with added decommissioning constraints.
+    #     """
+    #
+    #     # Full plant decommissioned only
+    #     self.big_m_transformation_required = 1
+    #     s_indicators = range(0, 2)
+    #
+    #     def init_decommission_full(dis, ind):
+    #         if ind == 0:  # compressor not installed
+    #             dis.const_decommissioned = pyo.Constraint(expr=b_compr.var_size == 0)
+    #         else:  # tech installed
+    #             dis.const_installed = pyo.Constraint(
+    #                 expr=b_compr.var_size == b_compr.para_size_initial
+    #             )
+    #
+    #     b_compr.dis_decommission_full = gdp.Disjunct(
+    #         s_indicators, rule=init_decommission_full
+    #     )
+    #
+    #     def bind_disjunctions(dis):
+    #         return [b_compr.dis_decommission_full[i] for i in s_indicators]
+    #
+    #     b_compr.disjunction_decommission_full = gdp.Disjunction(rule=bind_disjunctions)
+    #
+    #     return b_compr
 
     def write_results_compressor_design(self, h5_group, model_block):
         """
