@@ -90,7 +90,9 @@ class Compressor(ModelComponent):
         self.input = None
         self.output = None
         self.set_t_full = None
+        self.set_t_performance = None
         self.set_t_global = None
+        self.sequence = None
         self.compression_active = None
 
         self.output_component = compr_data["connection_info"]["components"][0]
