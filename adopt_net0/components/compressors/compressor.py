@@ -207,7 +207,25 @@ class Compressor(ModelComponent):
 
         # SET T
         self.set_t_full = set_t_full
-        self.set_t_global = set_t_full
+
+        if config["optimization"]["typicaldays"]["N"]["value"] == 0:
+            # everything with full resolution
+            self.modelled_with_full_res = True
+            self.set_t_performance = set_t_full
+            self.set_t_global = set_t_full
+            self.sequence = list(self.set_t_performance)
+
+        elif config["optimization"]["typicaldays"]["method"]["value"] == 1:
+            # everything with reduced resolution
+            self.modelled_with_full_res = False
+            self.set_t_performance = set_t_clustered
+            self.set_t_global = set_t_clustered
+            self.sequence = list(self.set_t_performance)
+
+        elif config["optimization"]["typicaldays"]["method"]["value"] == 2:
+            # resolution of balances is full, so interactions with them also need to
+            # be full resolution
+            self.set_t_global = set_t_full
 
         # GENERAL TECHNOLOGY CONSTRAINTS
         b_compr = self._define_flow(b_compr)
