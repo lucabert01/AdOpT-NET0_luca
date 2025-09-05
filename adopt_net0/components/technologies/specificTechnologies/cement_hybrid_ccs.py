@@ -96,8 +96,8 @@ class CementHybridCCS(Technology):
 
         valid_phases_compression = {"gas", "liquid", "supercritical"}
 
-        if self.input_parameters.performance_data["co2_out_is_compressed"]:
-            phase = self.input_parameters.performance_data["phase_of_co2_out"]
+        if self.performance_data["co2_out_is_compressed"]:
+            phase = self.performance_data["phase_of_co2_out"]
             if phase not in valid_phases_compression:
                 raise ValueError(
                     f"Invalid value for 'phase_of_co2_out': '{phase}'. Must be one of {valid_phases_compression}."
@@ -115,9 +115,9 @@ class CementHybridCCS(Technology):
 
         self.processed_coeff.time_independent["size_max_mea"] = (
             self.processed_coeff.time_independent["size_max"]
-            * self.input_parameters.performance_data["performance"]["tCO2_tclinker"]
-            * (1 - self.input_parameters.performance_data["performance"]["CCR_oxy"])
-            * self.input_parameters.performance_data["performance"]["CCR_mea"]
+            * self.performance_data["performance"]["tCO2_tclinker"]
+            * (1 - self.performance_data["performance"]["CCR_oxy"])
+            * self.performance_data["performance"]["CCR_mea"]
         )
 
     def _calculate_bounds(self):
@@ -127,11 +127,11 @@ class CementHybridCCS(Technology):
         super(CementHybridCCS, self)._calculate_bounds()
 
         time_steps = len(self.set_t_performance)
-        emissions_clinker = self.input_parameters.performance_data["performance"][
+        emissions_clinker = self.performance_data["performance"][
             "tCO2_tclinker"
         ]
-        CCR_oxy = self.input_parameters.performance_data["performance"]["CCR_oxy"]
-        CCR_mea = self.input_parameters.performance_data["performance"]["CCR_mea"]
+        CCR_oxy = self.performance_data["performance"]["CCR_oxy"]
+        CCR_mea = self.performance_data["performance"]["CCR_mea"]
 
         # Output Bounds
         self.bounds["output"]["CO2captured"] = np.column_stack(
@@ -193,17 +193,17 @@ class CementHybridCCS(Technology):
         )
 
         # Size constraint
-        prod_capacity_clinker = self.input_parameters.performance_data[
+        prod_capacity_clinker = self.performance_data[
             "prod_capacity_clinker"
         ]
-        emissions_clinker = self.input_parameters.performance_data["performance"][
+        emissions_clinker = self.performance_data["performance"][
             "tCO2_tclinker"
         ]
         alpha_oxy = self.processed_coeff.time_independent["alpha_oxy"]
         beta_oxy = self.processed_coeff.time_independent["beta_oxy"]
         alpha_mea = self.processed_coeff.time_independent["alpha_mea"]
-        CCR_oxy = self.input_parameters.performance_data["performance"]["CCR_oxy"]
-        CCR_mea = self.input_parameters.performance_data["performance"]["CCR_mea"]
+        CCR_oxy = self.performance_data["performance"]["CCR_oxy"]
+        CCR_mea = self.performance_data["performance"]["CCR_mea"]
 
         b_tec.var_co2_captured_mea = pyo.Var(
             self.set_t_performance,
@@ -211,7 +211,7 @@ class CementHybridCCS(Technology):
             bounds=[0, self.processed_coeff.time_independent["size_max_mea"]],
         )
 
-        if self.input_parameters.performance_data["clinker_capacity_is_fixed"]:
+        if self.performance_data["clinker_capacity_is_fixed"]:
 
             def init_size_clinker(const):
                 return b_tec.var_size == prod_capacity_clinker
@@ -353,7 +353,7 @@ class CementHybridCCS(Technology):
         """
         c = self.processed_coeff.time_independent
         technology_model = self.technology_model
-        emissions_clinker = self.input_parameters.performance_data["performance"][
+        emissions_clinker = self.performance_data["performance"][
             "tCO2_tclinker"
         ]
 
@@ -415,7 +415,7 @@ class CementHybridCCS(Technology):
             capex_data_path, sheet_name="capex_compressor_mea", index_col=0
         )
 
-        phase = self.input_parameters.performance_data["phase_of_co2_out"]
+        phase = self.performance_data["phase_of_co2_out"]
         self.economics.other_economics["bp_y_capex_cpu_oxy"] = capex_cpu_oxy_data[
             phase
         ].tolist()
@@ -501,7 +501,7 @@ class CementHybridCCS(Technology):
         )
 
         # Add capex of CPU and compressor if required
-        if self.input_parameters.performance_data["co2_out_is_compressed"]:
+        if self.performance_data["co2_out_is_compressed"]:
             economics.capex_data["piecewise_capex"]["bp_y"] = np.add(
                 economics.capex_data["piecewise_capex"]["bp_y"],
                 economics.other_economics["bp_y_capex_cpu_oxy"],

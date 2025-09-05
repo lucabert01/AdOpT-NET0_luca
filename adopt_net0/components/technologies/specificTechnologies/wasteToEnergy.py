@@ -30,9 +30,9 @@ class WasteToEnergy(Technology):
         """
         super().__init__(tec_data)
 
-        self.component_options.emissions_based_on = "input"
-        self.component_options.size_based_on = "input"
-        self.component_options.main_input_carrier = tec_data["Performance"][
+        self.size_based_on = "input"
+        self.emissions_based_on = "input"
+        self.main_input_carrier = tec_data["Performance"][
             "main_input_carrier"
         ]
 
@@ -46,9 +46,9 @@ class WasteToEnergy(Technology):
         super(WasteToEnergy, self)._calculate_bounds()
 
         time_steps = len(self.set_t_performance)
-        th_efficiency = self.input_parameters.performance_data["th_efficiency"]
-        el_efficiency = self.input_parameters.performance_data["el_efficiency"]
-        lhv = self.input_parameters.performance_data["LHV"]
+        th_efficiency = self.performance_data["th_efficiency"]
+        el_efficiency = self.performance_data["el_efficiency"]
+        lhv = self.performance_data["LHV"]
 
         # Output Bounds
         self.bounds["output"]["heat"] = np.column_stack(
@@ -75,7 +75,7 @@ class WasteToEnergy(Technology):
         )
 
         # Input Bounds
-        self.bounds["input"]["wasteFuel"] = np.column_stack(
+        self.bounds["input"]["wasteIn"] = np.column_stack(
             (
                 np.zeros(shape=(time_steps)),
                 np.ones(shape=time_steps)
@@ -99,13 +99,13 @@ class WasteToEnergy(Technology):
         )
 
 
-        th_efficiency = self.input_parameters.performance_data["th_efficiency"]
-        el_efficiency = self.input_parameters.performance_data["el_efficiency"]
-        lhv = self.input_parameters.performance_data["LHV"]
+        th_efficiency = self.performance_data["th_efficiency"]
+        el_efficiency = self.performance_data["el_efficiency"]
+        lhv = self.performance_data["LHV"]
 
 
         def init_size_waste_max(const, t):
-            return self.input[t, "wasteFuel"] <= b_tec.var_size
+            return self.input[t, "wasteIn"] <= b_tec.var_size
 
         b_tec.const_size_max = pyo.Constraint(
             self.set_t_performance, rule=init_size_waste_max
@@ -117,17 +117,17 @@ class WasteToEnergy(Technology):
             if car == "wasteProcessed":
                 return (
                         self.output[t, car]
-                        == self.input[t, "wasteFuel"]
+                        == self.input[t, "wasteIn"]
                 )
             if car == "heat":
                 return (
                     self.output[t, car]
-                    <= self.input[t, "wasteFuel"] * lhv * th_efficiency
+                    <= self.input[t, "wasteIn"] * lhv * th_efficiency
                 )
             if car == "electricity":
                 return (
                     self.output[t, car]
-                    <= self.input[t, "wasteFuel"] * lhv * el_efficiency
+                    <= self.input[t, "wasteIn"] * lhv * el_efficiency
                 )
 
         b_tec.const_input_output = pyo.Constraint(
@@ -137,7 +137,7 @@ class WasteToEnergy(Technology):
         def init_total_output(const, t):
             return (
                 self.output[t, "heat"]/th_efficiency + self.output[t, "electricity"]/el_efficiency
-                == self.input[t, "wasteFuel"]*lhv
+                == self.input[t, "wasteIn"]*lhv
             )
 
 

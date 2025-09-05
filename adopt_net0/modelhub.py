@@ -48,7 +48,7 @@ class ModelHub:
         self.solver = None
         self.last_solve_info = {}
         self.info_pareto = {}
-        self.info_pareto["pareto_point"] = -1
+        self.info_pareto["pareto_point"] = 0
         self.info_solving_algorithms = {}
         self.info_solving_algorithms["aggregation_model"] = "Full"
         self.info_solving_algorithms["aggregation_data"] = "Full"
