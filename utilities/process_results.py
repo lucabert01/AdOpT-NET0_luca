@@ -41,14 +41,20 @@ def save_figure_for_paper(fig, filename, file_path_results):
 
 
 
-def print_h5_structure(h5file, indent=0):
-    """Recursively prints the structure of an HDF5 file."""
-    for key in h5file.keys():
-        item = h5file[key]
-        if isinstance(item, h5py.Group):
-            print("  " * indent + f"[Group] {key}")
-            print_h5_structure(item, indent + 1)
-        elif isinstance(item, h5py.Dataset):
-            print("  " * indent + f"[Dataset] {key}, shape={item.shape}, dtype={item.dtype}")
-        else:
-            print("  " * indent + f"[Unknown] {key}")
+def print_h5_structure(file_path, indent=0):
+    """
+        Print the structure of the h5file for results
+
+        Parameters:
+                Directory of the h5file
+        """
+    with h5py.File(file_path, "r") as hdf_file:
+        for key in hdf_file.keys():
+            item = hdf_file[key]
+            if isinstance(item, h5py.Group):
+                print("  " * indent + f"[Group] {key}")
+                print_h5_structure(item, indent + 1)
+            elif isinstance(item, h5py.Dataset):
+                print("  " * indent + f"[Dataset] {key}, shape={item.shape}, dtype={item.dtype}")
+            else:
+                print("  " * indent + f"[Unknown] {key}")

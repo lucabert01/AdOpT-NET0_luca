@@ -600,3 +600,21 @@ class WasteToEnergyCaLCCS(Technology):
         h5_group.create_dataset(
             "size_cal", data=[model_block.var_size_cal.value]
         )
+
+    def write_results_tec_operation(self, h5_group, model_block):
+        """
+        Function to report technology operation
+
+        :param model_block: pyomo network block
+        :param h5_group: h5 group to write to
+        """
+        super(WasteToEnergyCaLCCS, self).write_results_tec_operation(h5_group, model_block)
+
+        h5_group.create_dataset(
+            "el_cal",
+            data=[model_block.var_el_cal[t].value for t in self.set_t_full],
+        )
+        h5_group.create_dataset(
+            "el_wte_only",
+            data=[model_block.var_el_wte[t].value for t in self.set_t_full],
+        )
