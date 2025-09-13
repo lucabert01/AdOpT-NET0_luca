@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 import json
 import numpy as np
 import warnings
-from utilities.process_results import save_figure_for_paper, print_h5_structure
 
+from utilities.process_results import save_figure_for_paper, print_h5_structure
 
 
 
@@ -21,6 +21,13 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8
 ## -----------------  DH ratio --------------------------
 
 explored_dh_ratio = [0, 0.25, 0.5, 0.75,1] # ratio of peak DH demand to supply compared to peak heat prod. from WtE
+gas_price = 40
+carbon_tax = 100
+
+
+path_processed_data = Path("./dataSources/hourly_data_casestudy.xlsx")
+data = pd.read_excel(path_processed_data)
+el_price = data["el_price_itNord"]
 
 json_wasteCHP = Path("./technologies_json/WasteCHP.json")
 info_wasteCHP = json.loads(json_wasteCHP.read_text())
@@ -31,6 +38,10 @@ emission_factor = info_wasteCHP["Performance"]["emission_factor"]
 json_mea = Path("./technologies_json/MEA_medium.json")
 info_mea = json.loads(json_mea.read_text())
 ccr = info_mea["Performance"]["capture_rate"]
+json_boiler = Path("./technologies_json/Boiler_Industrial_NG.json")
+info_boiler = json.loads(json_boiler.read_text())
+th_efficiency_boiler = info_boiler["Performance"]["performance"]["out"]["heat"][1]
+emission_factor_boiler = info_boiler["Performance"]["emission_factor"]
 num_cases = len(explored_dh_ratio)
 raw_results_path = Path("./raw_results/MEA")
 # Get all directories that contain 'dh_ratio' in the name
@@ -76,7 +87,7 @@ for i in range(0,len(file_names)):
     heat_out = w2e_output['heat_output']
     el_out = w2e_output['electricity_output']
     waste_out = w2e_output['wasteProcessed_output']
-    waste_in = w2e_output['wasteFuel_input']
+    waste_in = w2e_output['wasteIn_input']
     co2_captured_w2e = w2e_output['CO2captured_var_output_ccs']
     emissions_w2e = waste_in * emission_factor
     fraction_co2_captured = sum(co2_captured_w2e) / sum(emissions_w2e)
@@ -104,6 +115,9 @@ for i in range(0,len(file_names)):
     residual_heat_demand  = [hd - bo for hd, bo in zip(heat_demand, boiler_output['heat_output'])]
     results_summary[dh_ratio_str]['hourly_wte_heat_to_demand'] = []
     results_summary[dh_ratio_str]['hourly_wte_heat_for_heat_ccs'] = []
+    # El. production if CCS didn't exist
+    baseline_el_prod = ((waste_in * lhv - heat_demand / th_efficiency) * el_efficiency).where((waste_in * lhv - heat_demand / th_efficiency) > 0, 0)
+    baseline_boiler_prod = (heat_demand - waste_in * lhv * th_efficiency).where((heat_demand - waste_in * lhv * th_efficiency) > 0, 0)
     if all(d >= 0 for d in residual_heat_demand):
         results_summary[dh_ratio_str]['hourly_wte_heat_to_demand'] = (heat_demand - boiler_output['heat_output'])/th_efficiency
         results_summary[dh_ratio_str]['hourly_wte_heat_for_heat_ccs'] = w2e_output['heat_var_input_ccs'] / th_efficiency
@@ -127,6 +141,12 @@ for i in range(0,len(file_names)):
         )
     results_summary[dh_ratio_str]['hourly_wte_heat_for_el'] = el_out/el_efficiency
     results_summary[dh_ratio_str]['hourly_wte_heat_for_el_ccs'] =  w2e_output['electricity_var_input_ccs']/el_efficiency
+    results_summary[dh_ratio_str]['capex_tot'] = w2e_design["capex_ccs"]
+    results_summary[dh_ratio_str]['opex_fixed'] = w2e_design["opex_fixed"]
+    results_summary[dh_ratio_str]['opex_variable'] = w2e_design["opex_variable"]
+    results_summary[dh_ratio_str]['loss_el_revenues'] = sum((baseline_el_prod-el_out)*el_price)
+    results_summary[dh_ratio_str]['extra_cost_boiler'] = sum(boiler_output['heat_output']-baseline_boiler_prod)/th_efficiency_boiler*(emission_factor_boiler*carbon_tax + gas_price)
+    results_summary[dh_ratio_str]['tot_co2_captured'] = sum(co2_captured_w2e)
     results_summary['hourly_emissions'] = emissions_w2e
     results_summary['hourly_wasteProcessed'] = waste_processed_out
 
@@ -322,13 +342,91 @@ plt.show()
 
 
 
-##
-dh_ratio_str = '0.5'
-tot_heat = (results_summary[dh_ratio_str]['hourly_wte_heat_for_heat_ccs'] +
-            results_summary[dh_ratio_str]['hourly_wte_heat_to_demand'] +
-            results_summary[dh_ratio_str]['hourly_wte_heat_for_el'] +
-            results_summary[dh_ratio_str]['hourly_wte_heat_for_el_ccs'])
+## Plot the economics
 
-plt.plot(time, pd.Series(results_summary[dh_ratio_str]['hourly_boiler_heat_out']).rolling(window=rolling_av_hours).mean())
-plt.plot(time, pd.Series(heat_demand).rolling(window=rolling_av_hours).mean(), label='Heat demand')
+capex_tot = []
+opex_fixed = []
+opex_variable = []
+loss_el_revenues = []
+extra_cost_boiler = []
+tot_co2_captured = []
+capture_cost = []
+
+
+economics = {
+    "capex_tot": capex_tot,
+    "opex_fixed": opex_fixed,
+    "opex_variable": opex_variable,
+    "loss_el_revenues": loss_el_revenues,
+    "extra_cost_boiler": extra_cost_boiler,
+    "tot_co2_captured": tot_co2_captured,
+}
+
+for dh_ratio in explored_dh_ratio_str:
+    values = {}
+    # Collect each parameter first
+    for economic_param, storage_list in economics.items():
+        val = results_summary[dh_ratio][economic_param]
+        storage_list.append(val)
+        values[economic_param] = val
+
+    # Compute abatement cost
+    if results_summary[dh_ratio_str]['tot_co2_captured'] > 0:
+        capture = (
+            values["capex_tot"]
+            + values["opex_fixed"]
+            + values["opex_variable"]
+            + values["loss_el_revenues"]
+            + values["extra_cost_boiler"]
+        ) / values["tot_co2_captured"]
+
+    else:
+        capture_cost = 0
+
+    capture_cost.append(capture)
+
+
+# Scatter points for capture cost
+for i, (x, y) in enumerate(zip(explored_dh_ratio, capture_cost)):
+    plt.scatter(x, y, color=batlow_colors[i], marker="s", s=100, edgecolor=batlow_colors[i], zorder=3, label="Capture Cost" if i == 0 else "")
+
+# Connect points with a dashed line
+plt.plot(explored_dh_ratio, capture_cost, linestyle="--", color="black", alpha=0.6, zorder=2)
+
+# Labels
+plt.xlabel("Peak district heating demand [-]")
+plt.ylabel("Capture cost [€/tCO₂]")
+
+# Legend
+plt.legend()
+
+plt.show()
+
+
+## Cost breakdown
+tot_co2_captured = (np.array(tot_co2_captured).reshape(-1, 1))
+capex_norm = (np.array(capex_tot) / tot_co2_captured).flatten()
+opex_fixed_norm = (np.array(opex_fixed) / tot_co2_captured).flatten()
+opex_variable_norm = (np.array(opex_variable) / tot_co2_captured).flatten()
+loss_el_revenues_norm = (np.array(loss_el_revenues).reshape(-1, 1) / tot_co2_captured).flatten()
+extra_cost_boiler_norm = (np.array(extra_cost_boiler).reshape(-1, 1) / tot_co2_captured).flatten()
+
+plt.figure(figsize=(9, 6))
+bar_width = 0.1
+
+plt.bar(explored_dh_ratio, capex_norm, width=bar_width, label="CAPEX", color=batlow_colors[0])
+plt.bar(explored_dh_ratio, opex_fixed_norm, width=bar_width, bottom=capex_norm, label="OPEX", color=batlow_colors[1])
+plt.bar(explored_dh_ratio, loss_el_revenues_norm, width=bar_width,
+        bottom=capex_norm + opex_fixed_norm,
+        label="Lost electricity revenues", color=batlow_colors[3])
+plt.bar(explored_dh_ratio, extra_cost_boiler_norm, width=bar_width,
+        bottom=capex_norm + opex_fixed_norm + loss_el_revenues_norm,
+        label="Extra cost boiler", color=batlow_colors[4])
+
+plt.xticks(explored_dh_ratio, explored_dh_ratio_str, rotation=45)
+plt.xlabel("Peak district heating demand [-]")
+plt.ylabel("Cost breakdown [€/tCO₂]")
+plt.ylim([0, 80])
+plt.legend()
+plt.tight_layout()
 plt.show()

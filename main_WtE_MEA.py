@@ -6,17 +6,10 @@ from pathlib import Path
 import numpy as np
 from adopt_net0.data_preprocessing import load_climate_data_from_api
 
-# Specify the path to your input data
-casepath= Path("CaseStudies_WtE/MEA")
-json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
-result_path = "./dataCaseStudy_WtE/raw_results/MEA"
-
-adopt.create_optimization_templates(casepath)
-
 
 # General input data
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
-plant_analyzed = "piacenza" # one between: "silla2", "gerbido", "PAIP", "piacenza"
+plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
 carbon_tax = 100
 gas_price = 40
 explored_dh_ratio = [0, 0.25, 0.5, 0.75,1] # ratio of peak DH demand to supply compared to peak heat prod. from WtE
@@ -25,6 +18,16 @@ wte_demand_is_averaged = 0
 heat_demand_is_averaged = 0
 rolling_av_hours = 24*7
 pyhub = {}
+
+# Specify the path to your input data
+casepath= Path("CaseStudies_WtE/MEA")
+json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
+result_path = "./dataCaseStudy_WtE/raw_results/MEA"
+
+adopt.create_optimization_templates(casepath)
+
+
+
 
 for dh_ratio in explored_dh_ratio:
     pyhub_dh_ratio = f"dh_ratio_{dh_ratio}"
@@ -79,7 +82,7 @@ for dh_ratio in explored_dh_ratio:
         casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
     ) as json_file:
         technologies = json.load(json_file)
-    technologies["new"] = [ "WasteCaL_CCS"] # ,"WasteCHP"
+    technologies["new"] = [ "WasteCHP"] # ,"WasteCHP"
     technologies["existing"] = {"Boiler_Industrial_NG": existing_boiler_size}
 
     with open(
