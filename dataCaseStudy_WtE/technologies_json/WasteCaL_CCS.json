@@ -32,11 +32,11 @@
     "LHV": 2.45,
     "LHV_RDF": 4.92,
     "emission_factor": 1.124,
-    "emission_factor_RDF": 1.458,
+    "emission_factor_RDF": 1.649,
     "min_part_load": 0,
     "el_efficiency": 0.264,
     "th_efficiency": 0.865,
-    "el_efficiency_CaL": 0.138,
+    "el_efficiency_CaL": 0.226,
     "th_input_CaL": 1.65,
     "capture_rate": 0.925,
     "co2_concentration": 0.08

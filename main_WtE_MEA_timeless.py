@@ -6,33 +6,31 @@ from pathlib import Path
 import numpy as np
 from adopt_net0.data_preprocessing import load_climate_data_from_api
 
-# Specify the path to your input data
-casepath= Path("CaseStudies_WtE/CaL")
-json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
-result_path = "./dataCaseStudy_WtE/raw_results/CaL"
-
-adopt.create_optimization_templates(casepath)
-
 
 # General input data
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
-carbon_tax = 200
+carbon_tax = 100
 gas_price = 40
-explored_el_price = [25, 50, 75, 100,125] # average el prices explored in the analysis
+explored_dh_ratio = [0, 0.25, 0.5, 0.75,1] # ratio of peak DH demand to supply compared to peak heat prod. from WtE
 existing_boiler_size = 250
-dh_ratio = 0.5
 wte_demand_is_averaged = 0
 heat_demand_is_averaged = 0
 rolling_av_hours = 24*7
-path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestudy.xlsx")
-data = pd.read_excel(path_processed_data)
-av_el_price = data["el_price_itNord"].mean()
-electricity_price_norm = data["el_price_itNord"]/av_el_price
 pyhub = {}
 
-for av_el_price in explored_el_price:
-    pyhub_el_price = f"el_price_{av_el_price}"
+# Specify the path to your input data
+casepath= Path("CaseStudies_WtE/MEA")
+json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
+result_path = "./dataCaseStudy_WtE/raw_results/MEA"
+
+adopt.create_optimization_templates(casepath)
+
+
+
+
+for dh_ratio in explored_dh_ratio:
+    pyhub_dh_ratio = f"dh_ratio_{dh_ratio}"
     # Load json template
     with open(casepath / "Topology.json", "r") as json_file:
         topology = json.load(json_file)
@@ -44,7 +42,6 @@ for av_el_price in explored_el_price:
         "CO2captured",
         "heat",
         "wasteIn",
-        "wasteInRDF",
         "wasteProcessed",
         "gas",
     ]
@@ -85,7 +82,7 @@ for av_el_price in explored_el_price:
         casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
     ) as json_file:
         technologies = json.load(json_file)
-    technologies["new"] = [ "WasteCaL_CCS"]
+    technologies["new"] = [ "WasteCHP"] # ,"WasteCHP"
     technologies["existing"] = {"Boiler_Industrial_NG": existing_boiler_size}
 
     with open(
@@ -98,18 +95,20 @@ for av_el_price in explored_el_price:
     
     
     # Import hourly profiles
-    electricity_price = electricity_price_norm*av_el_price
+    path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestudy.xlsx")
+    data = pd.read_excel(path_processed_data)
+    electricity_price = data["el_price_itNord"]
     if wte_demand_is_averaged:
         emissions = data[f"emission_{plant_analyzed}"].rolling(window=rolling_av_hours, min_periods=1).mean()
     else:
         emissions = data[f"emission_{plant_analyzed}"]
     # emissions  = emissions.to_numpy()
     norm_heat_demand = data["normalized_heat_demand_milan"]
-    json_WasteCaL_CCS = Path("./dataCaseStudy_WtE/technologies_json/WasteCaL_CCS.json")
-    info_WasteCaL_CCS = json.loads(json_WasteCaL_CCS.read_text())
-    lhv = info_WasteCaL_CCS["Performance"]["LHV"]
-    th_efficiency = info_WasteCaL_CCS["Performance"]["th_efficiency"]
-    emission_factor = info_WasteCaL_CCS["Performance"]["emission_factor"]
+    json_wasteCHP = Path("./dataCaseStudy_WtE/technologies_json/WasteCHP.json")
+    info_wasteCHP = json.loads(json_wasteCHP.read_text())
+    lhv = info_wasteCHP["Performance"]["LHV"]
+    th_efficiency = info_wasteCHP["Performance"]["th_efficiency"]
+    emission_factor = info_wasteCHP["Performance"]["emission_factor"]
     wasteProcessed_demand = emissions/emission_factor
     max_useful_heat_output = max(wasteProcessed_demand)*lhv*th_efficiency
     peak_heat_demand = dh_ratio*max_useful_heat_output
@@ -118,7 +117,11 @@ for av_el_price in explored_el_price:
         heat_demand = (norm_heat_demand * peak_heat_demand).rolling(window=rolling_av_hours, min_periods=1).mean()
     else:
         heat_demand = (norm_heat_demand * peak_heat_demand)
-
+    i = 0
+    for t in range(len(heat_demand)):
+        if (wasteProcessed_demand[t]*lhv*th_efficiency-heat_demand[t])<0:
+            i = i+1
+            print(f"Demand is greater than prod. in timestep {t}")
 
     # Set import limits/cost
     adopt.fill_carrier_data(
@@ -146,7 +149,7 @@ for av_el_price in explored_el_price:
 
     adopt.fill_carrier_data(
         casepath,
-        value_or_data=electricity_price,
+        value_or_data=electricity_price.mean(),
         columns=["Export price"],
         carriers=["electricity"],
         nodes=["industrial_cluster"],
@@ -158,14 +161,6 @@ for av_el_price in explored_el_price:
         value_or_data=1000,
         columns=["Import limit"],
         carriers=["wasteIn"],
-        nodes=["industrial_cluster"],
-    )
-
-    adopt.fill_carrier_data(
-        casepath,
-        value_or_data=1000,
-        columns=["Import limit"],
-        carriers=["wasteInRDF"],
         nodes=["industrial_cluster"],
     )
 
@@ -190,14 +185,14 @@ for av_el_price in explored_el_price:
     
     adopt.fill_carrier_data(
         casepath,
-        value_or_data=wasteProcessed_demand,
+        value_or_data=wasteProcessed_demand.mean(),
         columns=["Demand"],
         carriers=["wasteProcessed"],
         nodes=["industrial_cluster"],
     )
     adopt.fill_carrier_data(
         casepath,
-        value_or_data=heat_demand,
+        value_or_data=heat_demand.mean(),
         columns=["Demand"],
         carriers=["heat"],
         nodes=["industrial_cluster"],
@@ -216,16 +211,16 @@ for av_el_price in explored_el_price:
     load_climate_data_from_api(folder_path=casepath)
     
     # Construct and solve the model
-    pyhub[pyhub_el_price] = adopt.ModelHub()
-    pyhub[pyhub_el_price].read_data(casepath, start_period=0, end_period=end_period)
+    pyhub[pyhub_dh_ratio] = adopt.ModelHub()
+    pyhub[pyhub_dh_ratio].read_data(casepath, start_period=0, end_period=end_period)
 
-    pyhub[pyhub_el_price].data.model_config['reporting']['case_name'][
-        'value'] = f"{pyhub_el_price}_{objective_function}"
-    # pyhub[pyhub_el_price].data.time_series['full']['period1', 'industrial_cluster', 'CarrierData', 'heat', 'Demand'] = heat_demand
+    pyhub[pyhub_dh_ratio].data.model_config['reporting']['case_name'][
+        'value'] = f"{pyhub_dh_ratio}_{objective_function}"
+    # pyhub[pyhub_dh_ratio].data.time_series['full']['period1', 'industrial_cluster', 'CarrierData', 'heat', 'Demand'] = heat_demand
     
     
-    pyhub[pyhub_el_price].construct_model()
-    pyhub[pyhub_el_price].construct_balances()
-    pyhub[pyhub_el_price].solve()
+    pyhub[pyhub_dh_ratio].construct_model()
+    pyhub[pyhub_dh_ratio].construct_balances()
+    pyhub[pyhub_dh_ratio].solve()
     a=1
 

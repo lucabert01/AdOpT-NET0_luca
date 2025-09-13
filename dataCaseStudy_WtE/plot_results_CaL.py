@@ -22,6 +22,10 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8
 explored_el_price = [25, 50, 75, 100,125]
 rolling_av_hours = 1
 
+path_processed_data = Path("./dataSources/hourly_data_casestudy.xlsx")
+data = pd.read_excel(path_processed_data)
+av_el_price = data["el_price_itNord"].mean()
+electricity_price_norm = data["el_price_itNord"]/av_el_price
 
 json_WasteCaL_CCS = Path("./technologies_json/WasteCaL_CCS.json")
 info_WasteCaL_CCS = json.loads(json_WasteCaL_CCS.read_text())
@@ -31,10 +35,9 @@ th_efficiency = info_WasteCaL_CCS["Performance"]["th_efficiency"]
 el_efficiency = info_WasteCaL_CCS["Performance"]["el_efficiency"]
 emission_factor = info_WasteCaL_CCS["Performance"]["emission_factor"]
 emission_factor_rdf = info_WasteCaL_CCS["Performance"]["emission_factor_RDF"]
+ccr = info_WasteCaL_CCS["Performance"]["capture_rate"]
 
-json_mea = Path("./technologies_json/MEA_medium.json")
-info_mea = json.loads(json_mea.read_text())
-ccr = info_mea["Performance"]["capture_rate"]
+
 num_cases = len(explored_el_price)
 raw_results_path = Path("./raw_results/CaL")
 # Get all directories that contain 'el_price' in the name
@@ -87,11 +90,11 @@ for i in range(0,len(file_names)):
     boiler_load_factor = sum(boiler_operation['heat_output'])/ sum(heat_demand)
 
     # economics
+    el_price = electricity_price_norm * explored_el_price[i]
     capex_cal = w2e_design["capex_tot"]
     opex_fixed = w2e_design["opex_fixed"]
     opex_variable = w2e_design["opex_variable"]
-    #TODO import right el prices
-    revenue_el_cal = sum(w2e_operation['el_cal']*100)
+    revenue_el_cal = sum(w2e_operation['el_cal']*el_price)
 
 
     results_summary[el_price_str]['size_cal'] = size_cal
@@ -149,7 +152,37 @@ plt.plot(el_prices, fraction_size_cal_values, linestyle="--", color="gray", alph
 plt.xlabel("Electricity Price [€/MWh]")
 plt.ylabel("Fraction CO2 treated")
 plt.title("Fraction CaL Size vs Electricity Price")
-plt.grid(True, linestyle="--", alpha=0.5, zorder=1)
+
+plt.show()
+
+
+el_prices = []
+capacity_factor_cal_values = []
+
+for el_price in explored_el_price_str:
+    size_series = results_summary[el_price]['ccs_capacity_factor']
+    if hasattr(size_series, "iloc"):  # ensure it's a scalar
+        size_val = float(size_series.iloc[0])
+    else:
+        size_val = float(size_series)
+    el_prices.append(float(el_price))
+    capacity_factor_cal_values.append(size_val)
+
+# Use exactly your defined colors
+colors = batlow_colors[:len(el_prices)]
+
+plt.figure(figsize=(7,5))
+
+# Scatter plot with batlow colors
+for i, (x, y) in enumerate(zip(el_prices, capacity_factor_cal_values)):
+    plt.scatter(x, y, color=colors[i], s=100, edgecolor=colors[i], zorder=3)
+
+# Connect points with a neutral line
+plt.plot(el_prices, capacity_factor_cal_values, linestyle="--", color="gray", alpha=0.6, zorder=2)
+
+plt.xlabel("Electricity Price [€/MWh]")
+plt.ylabel("CaL load factor [-]")
+plt.title("Load factor CaL vs Electricity Price")
 
 plt.show()
 
@@ -176,40 +209,28 @@ economics = {
 
 for el_price in explored_el_price_str:
     values = {}
+    tot_co2_captured = results_summary[el_price]["tot_co2_captured"]
     # Collect each parameter first
     for economic_param, storage_list in economics.items():
-        val = results_summary[el_price][economic_param]
+        val = results_summary[el_price][economic_param]/tot_co2_captured
         storage_list.append(val)
         values[economic_param] = val
 
     # Compute abatement cost
     if results_summary[el_price_str]['tot_co2_avoided'] > 0:
-        abatement = (
-            values["capex_tot"]
-            + values["opex_fixed"]
-            + values["opex_variable"]
-            - values["revenue_el_cal"]
-        ) / values["tot_co2_avoided"]
         capture = (
             values["capex_tot"]
             + values["opex_fixed"]
             + values["opex_variable"]
             - values["revenue_el_cal"]
-        ) / values["tot_co2_captured"]
+        )
 
     else:
-        abatement = 0
         capture_cost = 0
 
-    abatement_cost.append(abatement)
     capture_cost.append(capture)
 
-# Scatter points for abatement cost
-for i, (x, y) in enumerate(zip(el_prices, abatement_cost)):
-    plt.scatter(x, y, color=colors[i], s=100, edgecolor=colors[i], zorder=3, label="Abatement Cost" if i == 0 else "")
 
-# Connect points with a dashed line
-plt.plot(el_prices, abatement_cost, linestyle="--", color="gray", alpha=0.6, zorder=2)
 
 # Scatter points for capture cost
 for i, (x, y) in enumerate(zip(el_prices, capture_cost)):
@@ -224,5 +245,7 @@ plt.ylabel("Cost [€/tCO₂]")
 
 # Legend
 plt.legend()
-
 plt.show()
+
+
+
