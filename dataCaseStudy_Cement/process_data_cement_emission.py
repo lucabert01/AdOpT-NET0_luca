@@ -42,7 +42,7 @@ def convert_emissions_to_clinker():
         clinker_hourly = emissions_hourly / 0.833
         clinker_df[f"clinker_{name_plant}"] = clinker_hourly
 
-    path_processed_data = Path("../dataCaseStudy_Cement/data_processed.xlsx")
+    path_processed_data = Path("./dataSources/data_processed.xlsx")
     clinker_df.to_excel(path_processed_data, index=False)
 
 
