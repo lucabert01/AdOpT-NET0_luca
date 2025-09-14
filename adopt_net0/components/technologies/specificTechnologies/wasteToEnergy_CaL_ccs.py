@@ -89,56 +89,56 @@ class WasteToEnergyCaLCCS(Technology):
         lhv_RDF = self.performance_data["LHV_RDF"]
         bound_factor_size_max_cal = emission_factor * ccr * (
                 1 + th_input_CaL / lhv_RDF * emission_factor_RDF * ccr)
-        #
-        # # Input Bounds
-        # self.bounds["input"]["wasteIn"] = np.column_stack(
-        #     (
-        #         np.zeros(shape=(time_steps)),
-        #         np.ones(shape=time_steps)
-        #         ,
-        #     )
-        # )
-        #
-        # self.bounds["input"]["wasteInRDF"] = np.column_stack(
-        #     (
-        #         np.zeros(shape=(time_steps)),
-        #         np.ones(shape=time_steps)
-        #         * emission_factor * ccr * th_input_CaL / lhv_RDF
-        #         ,
-        #     )
-        # )
-        # # Output Bounds
-        # self.bounds["output"]["heat"] = np.column_stack(
-        #     (
-        #         np.zeros(shape=(time_steps)),
-        #         np.ones(shape=time_steps)
-        #         * th_efficiency * lhv,
-        #     )
-        # )
-        #
-        # self.bounds["output"]["electricity"] = np.column_stack(
-        #     (
-        #         np.zeros(shape=(time_steps)),
-        #         np.ones(shape=time_steps)
-        #         * (el_efficiency * lhv
-        #         + bound_factor_size_max_cal*lhv_RDF*el_efficiency_CaL),
-        #     )
-        # )
-        # self.bounds["output"]["wasteProcessed"] = np.column_stack(
-        #     (
-        #         np.zeros(shape=(time_steps)),
-        #         np.ones(shape=time_steps)
-        #         ,
-        #     )
-        # )
-        # self.bounds["output"]["CO2captured"] = np.column_stack(
-        #     (
-        #         np.zeros(shape=(time_steps)),
-        #         np.ones(shape=time_steps)* (emission_factor * ccr
-        #         + emission_factor * ccr * th_input_CaL / lhv_RDF * emission_factor_RDF * ccr)
-        #         ,
-        #     )
-        # )
+
+        # Input Bounds
+        self.bounds["input"]["wasteIn"] = np.column_stack(
+            (
+                np.zeros(shape=(time_steps)),
+                np.ones(shape=time_steps)
+                ,
+            )
+        )
+
+        self.bounds["input"]["wasteInRDF"] = np.column_stack(
+            (
+                np.zeros(shape=(time_steps)),
+                np.ones(shape=time_steps)
+                * emission_factor * ccr * th_input_CaL / lhv_RDF
+                ,
+            )
+        )
+        # Output Bounds
+        self.bounds["output"]["heat"] = np.column_stack(
+            (
+                np.zeros(shape=(time_steps)),
+                np.ones(shape=time_steps)
+                * th_efficiency * lhv,
+            )
+        )
+
+        self.bounds["output"]["electricity"] = np.column_stack(
+            (
+                np.zeros(shape=(time_steps)),
+                np.ones(shape=time_steps)
+                * (el_efficiency * lhv
+                + bound_factor_size_max_cal*lhv_RDF*el_efficiency_CaL),
+            )
+        )
+        self.bounds["output"]["wasteProcessed"] = np.column_stack(
+            (
+                np.zeros(shape=(time_steps)),
+                np.ones(shape=time_steps)
+                ,
+            )
+        )
+        self.bounds["output"]["CO2captured"] = np.column_stack(
+            (
+                np.zeros(shape=(time_steps)),
+                np.ones(shape=time_steps)* (emission_factor * ccr
+                + emission_factor * ccr * th_input_CaL / lhv_RDF * emission_factor_RDF * ccr)
+                ,
+            )
+        )
 
 
         # Input Bounds
