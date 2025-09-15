@@ -1,0 +1,42 @@
+
+Gurobi 11.0.3 (win64) logging started Mon Sep 15 10:24:42 2025
+
+Set parameter LogFile to value "dataCaseStudy_Cement\raw_results\20250915102400_carbon_tax_50_el_price_125\solver_log.txt"
+Set parameter TimeLimit to value 36000
+Set parameter MIPGap to value 0.02
+Set parameter NodefileStart to value 60
+Set parameter LPWarmStart to value 0
+Gurobi Optimizer version 11.0.3 build v11.0.3rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Gold 5120 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 8 physical cores, 8 logical processors, using up to 8 threads
+
+Optimize a model with 578208 rows, 604489 columns and 1349150 nonzeros
+Model fingerprint: 0x32a96ab7
+Model has 2 SOS constraints
+Variable types: 604487 continuous, 2 integer (2 binary)
+Coefficient statistics:
+  Matrix range     [5e-03, 2e+07]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [7e-01, 9e+07]
+  RHS range        [1e+00, 2e+07]
+Presolve removed 535038 rows and 581630 columns
+Presolve time: 0.66s
+Presolved: 43170 rows, 22859 columns, 93238 nonzeros
+Variable types: 22853 continuous, 6 integer (6 binary)
+
+Root relaxation: objective 3.531932e+07, 8663 iterations, 0.07 seconds (0.12 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+*    0     0               0    3.531932e+07 3.5319e+07  0.00%     -    1s
+
+Explored 1 nodes (8663 simplex iterations) in 1.28 seconds (0.65 work units)
+Thread count was 8 (of 8 available processors)
+
+Solution count 1: 3.53193e+07 
+
+Optimal solution found (tolerance 2.00e-02)
+Warning: max constraint violation (3.4523e-06) exceeds tolerance
+Best objective 3.531932005766e+07, best bound 3.531932005766e+07, gap 0.0000%
