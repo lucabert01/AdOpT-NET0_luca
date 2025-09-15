@@ -166,7 +166,7 @@ class CementHybridCCS(Technology):
                 ),
             )
         )
-        self.bounds["input"]["heat"] = np.column_stack(
+        self.bounds["input"]["extra_fuel"] = np.column_stack(
             (
                 np.zeros(shape=(time_steps)),
                 np.ones(shape=time_steps)
@@ -258,7 +258,7 @@ class CementHybridCCS(Technology):
 
         # input-output correlations
         def init_input_output(const, t, car_input):
-            if car_input == "heat":
+            if car_input == "extra_fuel":
                 return (
                     self.input[t, car_input]
                     == self.output[t, "clinker"]

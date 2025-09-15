@@ -56,7 +56,7 @@
     "co2_out_is_compressed": 1,
     "phase_of_co2_out": "gas",
     "input_carrier": [
-      "heat",
+      "extra_fuel",
       "electricity"
     ],
     "main_output_carrier": "clinker",

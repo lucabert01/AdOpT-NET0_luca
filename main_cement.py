@@ -19,6 +19,8 @@ possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
 explored_carbon_tax = [50, 75, 100,125, 150]
 explored_el_price = [25, 50, 75, 100,125] # average el prices explored in the analysis
+
+cost_extra_fuel = 15
 path_processed_data = Path("dataCaseStudy_Cement/dataSources/data_processed.xlsx")
 electricity_price_data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
 av_el_price = electricity_price_data["el_price_itNord"].mean()
@@ -31,6 +33,8 @@ pyhub = {}
 
 for carbon_tax in explored_carbon_tax:
     pyhub_carbon_tax = f"carbon_tax_{carbon_tax}"
+    pyhub[pyhub_carbon_tax] = {}
+
     for av_el_price in explored_el_price:
         pyhub_el_price = f"el_price_{av_el_price}"
         # Load json template
@@ -43,10 +47,9 @@ for carbon_tax in explored_carbon_tax:
             "electricity",
             "CO2captured",
             "heat",
-            "hydrogen",
+            "extra_fuel",
             "gas",
             "clinker",
-            "hydrogen",
         ]
         # Investment periods:
         topology["investment_periods"] = ["period1"]
@@ -64,6 +67,9 @@ for carbon_tax in explored_carbon_tax:
         configuration["optimization"]["objective"]["value"] = "costs"
         # Set MILP gap
         configuration["solveroptions"]["mipgap"]["value"] = 0.02
+        # change save options
+        configuration['reporting']['save_summary_path']['value'] = result_path
+        configuration['reporting']['save_path']['value'] = result_path
         # Save json template
         with open(casepath / "ConfigModel.json", "w") as json_file:
             json.dump(configuration, json_file, indent=4)
@@ -81,7 +87,7 @@ for carbon_tax in explored_carbon_tax:
             casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
         ) as json_file:
             technologies = json.load(json_file)
-        technologies["new"] = ["CementHybridCCS"]
+        technologies["new"] = ["CementHybridCCS", "CementEmitter", "HeatPump"]
 
         with open(
             casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "w"
@@ -103,20 +109,29 @@ for carbon_tax in explored_carbon_tax:
             carriers=["electricity"],
             nodes=["industrial_cluster"],
         )
+
         adopt.fill_carrier_data(
             casepath,
             value_or_data=5000,
+            columns=["Import limit"],
+            carriers=["extra_fuel"],
+            nodes=["industrial_cluster"],
+        )
+        adopt.fill_carrier_data(
+            casepath,
+            value_or_data=cost_extra_fuel,
+            columns=["Import price"],
+            carriers=["extra_fuel"],
+            nodes=["industrial_cluster"],
+        )
+        adopt.fill_carrier_data(
+            casepath,
+            value_or_data=500,
             columns=["Export limit"],
             carriers=["CO2captured"],
             nodes=["industrial_cluster"],
         )
-        adopt.fill_carrier_data(
-            casepath,
-            value_or_data=20000,
-            columns=["Import limit"],
-            carriers=["heat"],
-            nodes=["industrial_cluster"],
-        )
+
         adopt.fill_carrier_data(
             casepath,
             value_or_data=electricity_price,
@@ -124,13 +139,7 @@ for carbon_tax in explored_carbon_tax:
             carriers=["electricity"],
             nodes=["industrial_cluster"],
         )
-        adopt.fill_carrier_data(
-            casepath,
-            value_or_data=30,
-            columns=["Import price"],
-            carriers=["heat"],
-            nodes=["industrial_cluster"],
-        )
+
         adopt.fill_carrier_data(
             casepath,
             value_or_data=clinker_demand,
@@ -154,7 +163,7 @@ for carbon_tax in explored_carbon_tax:
         pyhub[pyhub_carbon_tax][pyhub_el_price].read_data(casepath, start_period=0, end_period=end_period)
 
         pyhub[pyhub_carbon_tax][pyhub_el_price].data.model_config['reporting']['case_name'][
-            'value'] = f"tax_{pyhub_carbon_tax}_elprice_{pyhub_el_price}"
+            'value'] = f"{pyhub_carbon_tax}_{pyhub_el_price}"
         # pyhub[pyhub_el_price].data.time_series['full']['period1', 'industrial_cluster', 'CarrierData', 'heat', 'Demand'] = heat_demand
 
         pyhub[pyhub_carbon_tax][pyhub_el_price].construct_model()

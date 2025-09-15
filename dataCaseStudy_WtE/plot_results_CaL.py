@@ -180,7 +180,7 @@ for i, (x, y) in enumerate(zip(el_prices, capacity_factor_cal_values)):
 # Connect points with a neutral line
 plt.plot(el_prices, capacity_factor_cal_values, linestyle="--", color="gray", alpha=0.6, zorder=2)
 
-plt.xlabel("Electricity Price [€/MWh]")
+plt.xlabel("Electricity price [€/MWh]")
 plt.ylabel("CaL load factor [-]")
 plt.title("Load factor CaL vs Electricity Price")
 
