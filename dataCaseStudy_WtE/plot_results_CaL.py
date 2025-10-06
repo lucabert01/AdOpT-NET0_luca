@@ -11,6 +11,7 @@ import numpy as np
 from matplotlib import rcParams
 import warnings
 from utilities.process_results import save_figure_for_paper, print_h5_structure
+from matplotlib.lines import Line2D
 
 
 colors = []
@@ -185,6 +186,45 @@ plt.ylabel("CaL load factor [-]")
 plt.title("Load factor CaL vs Electricity Price")
 
 plt.show()
+
+# Plot fraction CaL and load factor at the same time
+
+# Create figure
+fig, ax1 = plt.subplots(figsize=(7,5))
+
+# Plot Fraction CO2 treated (circle marker)
+for i, (x, y) in enumerate(zip(el_prices, fraction_size_cal_values)):
+    ax1.scatter(x, y, color=colors[i], marker="o", s=100, edgecolor=colors[i], zorder=3)
+ax1.plot(el_prices, fraction_size_cal_values, linestyle="--", color="gray", alpha=0.6, zorder=2)
+
+# Axis styling (black labels/ticks)
+ax1.set_xlabel("Electricity Price [€/MWh]", color="black")
+ax1.set_ylabel("Fraction CO₂ treated", color="black")
+ax1.tick_params(axis="x", labelcolor="black")
+ax1.tick_params(axis="y", labelcolor="black")
+
+# Twin axis for CaL load factor
+ax2 = ax1.twinx()
+
+for i, (x, y) in enumerate(zip(el_prices, capacity_factor_cal_values)):
+    ax2.scatter(x, y, color=colors[i], marker="^", s=100, edgecolor=colors[i], zorder=3)
+ax2.plot(el_prices, capacity_factor_cal_values, linestyle="--", color="black", alpha=0.6, zorder=2)
+
+ax2.set_ylabel("CaL load factor [-]", color="black")
+ax2.tick_params(axis="y", labelcolor="black")
+
+# Custom legend (middle left)
+legend_elements = [
+    Line2D([0], [0], marker="o", color="gray", label="Fraction CO₂ treated",
+           markerfacecolor="gray", markersize=10, linestyle="None"),
+    Line2D([0], [0], marker="^", color="black", label="CaL load factor",
+           markerfacecolor="black", markersize=10, linestyle="None")
+]
+ax1.legend(handles=legend_elements, loc="center left")
+
+fig.tight_layout()
+plt.show()
+
 
 ## Plot the economics
 

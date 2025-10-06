@@ -111,16 +111,18 @@ for j in range(0,num_carbon_tax):
 
         else:
             type_installed = "none"
-
-
+            opex_fixed = 0
+            opex_variable = 0
+            co2_captured = 0
+            energy_cost = 0
 
         results_summary[carbon_tax_str][el_price_str]['hourly_co2_captured'] = co2_captured
         results_summary[carbon_tax_str][el_price_str]['capex_tot'] = capex
         results_summary[carbon_tax_str][el_price_str]['opex_fixed'] = opex_fixed
         results_summary[carbon_tax_str][el_price_str]['opex_variable'] = opex_variable
         results_summary[carbon_tax_str][el_price_str]['energy_cost'] = energy_cost
-        results_summary[carbon_tax_str][el_price_str]['tot_co2_captured'] = sum(co2_captured)
-        results_summary[carbon_tax_str][el_price_str]['cost_of_capture'] = (capex + opex_fixed + opex_variable + energy_cost)/sum(co2_captured)
+        results_summary[carbon_tax_str][el_price_str]['tot_co2_captured'] = (sum(co2_captured) if not isinstance(co2_captured, int) else pd.Series([0]))
+        results_summary[carbon_tax_str][el_price_str]['cost_of_capture'] = ((capex + opex_fixed + opex_variable + energy_cost)/sum(co2_captured) if not isinstance(co2_captured, int) else pd.Series([0]))
         results_summary[carbon_tax_str][el_price_str]['type_installed'] = type_installed
 
 
@@ -138,11 +140,14 @@ for ct in explored_carbon_tax_str:
         })
 
 df = pd.DataFrame(data)
+df["carbon_tax"] = pd.to_numeric(df["carbon_tax"])
+df["el_price"]   = pd.to_numeric(df["el_price"])
 
 # Pivot to matrices
 cost_matrix = df.pivot(index="el_price", columns="carbon_tax", values="cost_of_capture")
 type_matrix = df.pivot(index="el_price", columns="carbon_tax", values="type_installed")
-
+cost_matrix = cost_matrix.sort_index(ascending=False).sort_index(axis=1)
+type_matrix = type_matrix.sort_index(ascending=False).sort_index(axis=1)
 
 
 
@@ -164,9 +169,9 @@ for i in range(cost_matrix.shape[0]):
 
 plt.xticks(range(len(cost_matrix.columns)), cost_matrix.columns)
 plt.yticks(range(len(cost_matrix.index)), cost_matrix.index)
-plt.xlabel("Carbon tax [€/tCO_2]")
+plt.xlabel("Carbon tax [€/tCO$_2$]")
 plt.ylabel("Electricity price [€/MWh]")
-plt.colorbar(im, label="LCOC [€/tCO_2]")
+plt.colorbar(im, label="LCOC [€/tCO$_2$]")
 plt.show()
 
 # --- Plot 2: Grid of installed type (categorical) ---
@@ -181,9 +186,7 @@ for i, ep in enumerate(type_matrix.index):
         ax.add_patch(
             plt.Rectangle((j, i), 1, 1, color=type_to_color[t])
         )
-        # # add text label
-        # ax.text(j+0.5, i+0.5, t,
-        #         ha="center", va="center", color="white", fontsize=8)
+
 
 ax.set_xlim(0, len(type_matrix.columns))
 ax.set_ylim(0, len(type_matrix.index))
@@ -192,12 +195,50 @@ ax.set_yticks([y+0.5 for y in range(len(type_matrix.index))])
 ax.set_xticklabels(type_matrix.columns)
 ax.set_yticklabels(type_matrix.index)
 ax.invert_yaxis()
-plt.xlabel("Carbon Tax")
-plt.ylabel("Electricity Price")
-plt.title("Installed Type")
+plt.xlabel("Carbon tax [€/tCO$_2$]")
+plt.ylabel("Electricity price [€/MWh]")
 
-# Legend
+# Legend outside at the top, horizontal
 patches = [mpatches.Patch(color=type_to_color[t], label=t) for t in types]
-plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc="upper left")
+ax.legend(handles=patches, loc="lower center",
+          bbox_to_anchor=(0.5, 1.05), ncol=len(types))
 
+plt.tight_layout()
+plt.show()
+
+
+
+# --- Plot 2: Grid of installed type (categorical) ---
+types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + MEA"]
+type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
+
+plt.figure(figsize=(7,5))
+ax = plt.gca()
+for i, ep in enumerate(type_matrix.index):
+    for j, ct in enumerate(type_matrix.columns):
+        t = type_matrix.loc[ep, ct]
+        c = cost_matrix.loc[ep, ct]  # cost at same position
+        ax.add_patch(
+            plt.Rectangle((j, i), 1, 1, color=type_to_color[t])
+        )
+        # add cost value as label
+        ax.text(j+0.5, i+0.5, f"{c:.1f}",
+                ha="center", va="center", color="white", fontsize=12, fontweight="bold")
+
+ax.set_xlim(0, len(type_matrix.columns))
+ax.set_ylim(0, len(type_matrix.index))
+ax.set_xticks([x+0.5 for x in range(len(type_matrix.columns))])
+ax.set_yticks([y+0.5 for y in range(len(type_matrix.index))])
+ax.set_xticklabels(type_matrix.columns)
+ax.set_yticklabels(type_matrix.index)
+ax.invert_yaxis()
+plt.xlabel("Carbon tax [€/tCO$_2$]")
+plt.ylabel("Electricity price [€/MWh]")
+
+# Legend outside at the top, horizontal
+patches = [mpatches.Patch(color=type_to_color[t], label=t) for t in types]
+ax.legend(handles=patches, loc="lower center",
+          bbox_to_anchor=(0.5, 1.05), ncol=len(types))
+
+plt.tight_layout()
 plt.show()
