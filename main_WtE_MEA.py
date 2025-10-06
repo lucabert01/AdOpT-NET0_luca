@@ -6,6 +6,16 @@ from pathlib import Path
 import numpy as np
 from adopt_net0.data_preprocessing import load_climate_data_from_api
 
+# Import data from the json file
+json_wasteCHP = Path("./dataCaseStudy_WtE/technologies_json/WasteCHP.json")
+info_wasteCHP = json.loads(json_wasteCHP.read_text())
+lhv = info_wasteCHP["Performance"]["LHV"]
+th_efficiency = info_wasteCHP["Performance"]["th_efficiency"]
+el_efficiency = info_wasteCHP["Performance"]["el_efficiency"]
+emission_factor = info_wasteCHP["Performance"]["emission_factor"]
+path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestudy.xlsx")
+data = pd.read_excel(path_processed_data)
+
 
 # General input data
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
@@ -13,7 +23,7 @@ plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
 carbon_tax = 100
 gas_price = 40
 explored_dh_ratio = [0, 0.25, 0.5, 0.75,1] # ratio of peak DH demand to supply compared to peak heat prod. from WtE
-existing_boiler_size = 250
+existing_boiler_size = max(data[f"emission_{plant_analyzed}"])/emission_factor*lhv*th_efficiency
 wte_demand_is_averaged = 0
 heat_demand_is_averaged = 0
 rolling_av_hours = 24*7
@@ -95,8 +105,7 @@ for dh_ratio in explored_dh_ratio:
     
     
     # Import hourly profiles
-    path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestudy.xlsx")
-    data = pd.read_excel(path_processed_data)
+
     electricity_price = data["el_price_itNord"]
     if wte_demand_is_averaged:
         emissions = data[f"emission_{plant_analyzed}"].rolling(window=rolling_av_hours, min_periods=1).mean()

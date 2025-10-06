@@ -256,7 +256,6 @@ fig, axes = plt.subplots(nrows=nrows, ncols=ncols,
 
 axes = axes.flatten()
 
-
 for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
     ax = axes[i]
     print(f"{dh_ratio_str} -> fraction_size_ccs = {results_summary[dh_ratio_str]['fraction_size_ccs']}")
@@ -328,6 +327,10 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
     # ax.set_xlabel("Time [h]")
     # ax.set_ylabel("Fraction of total heat [-]")
     # ax.set_ylim(0, 1)
+
+    ax.set_xlabel("Time [h]")
+    ax.set_ylabel("Fraction of heat [-]")
+    ax.set_ylim(0, 1.5)
 
 # Remove unused axes
 for j in range(i + 1, len(axes)):
