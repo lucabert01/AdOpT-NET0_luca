@@ -1,54 +1,49 @@
 {
-  "tec_type": "CONV3",
+  "tec_type": "CONV2",
   "size_min": 0,
-  "size_max": 1000,
+  "size_max": 194,
   "size_is_int": 0,
   "decommission": "impossible",
   "Economics": {
-    "comment": "CAPEX in EUR/tonne/hr or as a piecewise function, OPEX_variable in EUR/tonne total output, OPEX_fixed in % of CAPEX_annual",
+    "comment": "CAPEX in EUR/unit or as a piecewise function, OPEX_variable in EUR/unit total output, OPEX_fixed in % of CAPEX_annual",
     "CAPEX_model": 3,
-    "unit_CAPEX": 265160,
-    "fix_CAPEX": 6.92E+07,
+    "unit_CAPEX": 4224325,
+    "fix_CAPEX": 25246480,
     "piecewise_CAPEX": {
       "bp_x": "not defined",
       "bp_y": "not defined"
     },
     "OPEX_variable": 0,
-    "OPEX_fixed": 0.01,
-    "discount_rate": 0.1,
+    "OPEX_fixed": 0.042,
+    "discount_rate": 0.08,
     "lifetime": 25,
     "decommission_cost": 0
   },
   "Performance": {
     "comment": "contains fitting data on unit of input, technology types and input/output carriers",
-    "performance_function_type": 1,
+    "performance_function_type": 2,
     "input_carrier": [
-      "crackedgas",
-      "steam"
+      "electricity"
     ],
-    "main_input_carrier": "crackedgas",
+    "main_input_carrier": "electricity",
     "output_carrier": [
-      "crackedgas"
+      "nitrogen"
     ],
     "emission_factor": 0,
-    "min_part_load": 0,
+    "min_part_load": 0.4,
     "performance": {
       "in": [
         0,
         1
       ],
       "out": {
-        "crackedgas": [
+        "nitrogen": [
           0,
-          1
+          4
         ]
       }
     },
-    "input_ratios": {
-      "crackedgas": 1,
-      "steam": 0.431
-    },
-    "ramping_time": -1,
+    "ramping_time": 5,
     "ref_size": -1,
     "ramping_const_int": -1,
     "standby_power": -1,
@@ -60,15 +55,11 @@
     "SD_load": -1,
     "max_startups": -1
   },
-  "DOI": "Data is published in: https://doi.org/10.1021/acs.iecr.3c02226",
-  "Units": {
-    "size": "tonne/hr",
-    "input_carrier": {
-      "crackedgas": "tonne/hr",
-      "steam": "MW"
-    },
-    "output_carrier": {
-      "crackedgas": "tonne/hr"
-    }
+  "ScalingFactors": {
+    "const_capex_aux": 1e-3,
+    "const_input_output": 1,
+    "const_max_input": 1,
+    "const_opex_variable": 1,
+    "const_opex_fixed": 1
   }
 }
