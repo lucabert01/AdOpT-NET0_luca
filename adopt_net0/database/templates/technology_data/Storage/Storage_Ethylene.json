@@ -49,10 +49,10 @@
   "Units": {
     "size": "tonne",
     "input_carrier": {
-      "CO2": "tonne/hr"
+      "ethylene": "tonne/hr"
     },
     "output_carrier": {
-      "CO2": "tonne/hr"
+      "ethylene": "tonne/hr"
     }
   }
 }
