@@ -55,10 +55,10 @@
   "Units": {
     "size": "tonne",
     "input_carrier": {
-      "CO2": "tonne/hr"
+      "ammonia": "tonne/hr"
     },
     "output_carrier": {
-      "CO2": "tonne/hr"
+      "ammonia": "tonne/hr"
     }
   }
 }
