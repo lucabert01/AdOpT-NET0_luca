@@ -958,7 +958,7 @@ class Network(ModelComponent):
 
         def init_opex_fixed(const):
             return (
-                b_netw.para_opex_fixed
+                b_netw.para_opex_fixed * fraction_of_year_modelled
                 * (
                     sum(b_netw.arc_block[arc].var_capex_aux for arc in arc_set)
                     / annualization_factor
