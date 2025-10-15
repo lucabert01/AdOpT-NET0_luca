@@ -915,7 +915,7 @@ class Technology(ModelComponent):
         )
         b_tec.var_opex_fixed = pyo.Var()
         b_tec.const_opex_fixed = pyo.Constraint(
-            expr=(b_tec.var_capex_aux / annualization_factor) * b_tec.para_opex_fixed
+            expr=(b_tec.var_capex_aux / annualization_factor) * b_tec.para_opex_fixed * fraction_of_year_modelled
             == b_tec.var_opex_fixed
         )
         return b_tec
