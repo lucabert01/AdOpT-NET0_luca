@@ -573,8 +573,8 @@ class Technology(ModelComponent):
 
         if self.existing and self.decommission == "impossible":
             # Decommissioning is not possible, size fixed
-            b_tec.var_size = pyo.Param(
-                within=size_domain, initialize=coeff_ti["size_initial"]
+            b_tec.var_size = pyo.Var(
+                within=size_domain, bounds=(coeff_ti["size_initial"], b_tec.para_size_max),
             )
         else:
             # Size is variable
