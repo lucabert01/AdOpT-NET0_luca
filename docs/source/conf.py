@@ -254,9 +254,48 @@ def generate_components_database_link():
     return github_excel_url
 
 
-# Generate the link and write it to a file that can be included in documentation
-excel_github_url = generate_components_database_link()
-with open("database/components_database_link.rst", "w") as f:
-    f.write(
-        f"All data used in the model can be found as flat data in the `Components database <{excel_github_url}>`_.\n"
+def setup_components_database_download():
+    """Setup direct download for Components database Excel file"""
+    # Source Excel file path
+    source_excel = (
+        Path(__file__).parent.parent.parent
+        / "adopt_net0"
+        / "database"
+        / "data"
+        / "Components database.xlsx"
     )
+
+    # Create _static directory if it doesn't exist
+    static_dir = Path(__file__).parent / "_static"
+    static_dir.mkdir(exist_ok=True)
+
+    # Destination path in _static directory
+    dest_excel = static_dir / "Components_database.xlsx"
+
+    # Copy Excel file to _static directory for direct download
+    import shutil
+
+    if source_excel.exists():
+        shutil.copy2(source_excel, dest_excel)
+        print(f"Copied Components database to: {dest_excel}")
+        return True
+    else:
+        print(f"Warning: Source Excel file not found at {source_excel}")
+        return False
+
+
+# Setup direct download and generate both GitHub and download links
+excel_copied = setup_components_database_download()
+excel_github_url = generate_components_database_link()
+
+with open("database/components_database_link.rst", "w") as f:
+    if excel_copied:
+        # Provide both download and GitHub links - use correct path for Sphinx static files
+        f.write("All data used in the model can be downloaded as flat data in\n")
+        f.write(":download:`Components database </_static/Components_database.xlsx>` ")
+        f.write(f"or `view on GitHub <{excel_github_url}>`_.\n")
+    else:
+        # Fallback to GitHub link only
+        f.write(
+            f"All data used in the model can be found as flat data in the `Components database <{excel_github_url}>`_.\n"
+        )
