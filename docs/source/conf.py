@@ -288,6 +288,27 @@ def setup_components_database_download():
 excel_copied = setup_components_database_download()
 excel_github_url = generate_components_database_link()
 
+# Auto-regenerate Components database Excel file during documentation build
+print("Regenerating Components database Excel file...")
+try:
+    # Import and call the function to create/update the Excel database
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from adopt_net0.utilities import create_csv_database_from_json
+
+    # Generate the latest Excel database
+    excel_path = create_csv_database_from_json()
+    if excel_path:
+        print(f"Components database updated successfully: {excel_path}")
+        # Re-copy the updated Excel file to _static directory
+        excel_copied = setup_components_database_download()
+    else:
+        print("Warning: Failed to update Components database")
+
+except Exception as e:
+    print(f"Warning: Could not auto-regenerate Components database: {e}")
+
 with open("database/components_database_link.rst", "w") as f:
     if excel_copied:
         # Provide both download and GitHub links - use correct path for Sphinx static files
