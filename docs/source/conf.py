@@ -1,4 +1,5 @@
 import os, sys, json, csv
+import subprocess
 from pathlib import Path
 
 sys.path.insert(0, os.path.abspath("../.."))
@@ -109,8 +110,70 @@ with open("advanced_topics/config.csv", "w", newline="", encoding="utf-8") as cs
 
 
 # -- create list of technologies and networks for documentation ---------------------
-def generate_component_list(directory):
+def get_git_info(repo_path):
+    """
+    Get Git repository information (remote URL and current branch/commit)
+    """
+    try:
+        # Change to the repository directory
+        original_cwd = os.getcwd()
+        os.chdir(repo_path)
+
+        # Get the remote origin URL
+        remote_url = (
+            subprocess.check_output(
+                ["git", "remote", "get-url", "origin"], stderr=subprocess.DEVNULL
+            )
+            .decode()
+            .strip()
+        )
+
+        # Convert SSH URL to HTTPS if needed
+        if remote_url.startswith("git@github.com:"):
+            remote_url = remote_url.replace("git@github.com:", "https://github.com/")
+        if remote_url.endswith(".git"):
+            remote_url = remote_url[:-4]
+
+        # Get current branch name
+        try:
+            current_branch = (
+                subprocess.check_output(
+                    ["git", "branch", "--show-current"], stderr=subprocess.DEVNULL
+                )
+                .decode()
+                .strip()
+            )
+        except:
+            # If detached HEAD, get the commit hash
+            current_branch = (
+                subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+                )
+                .decode()
+                .strip()
+            )
+
+        # Restore original directory
+        os.chdir(original_cwd)
+
+        return remote_url, current_branch
+
+    except Exception as e:
+        print(f"Warning: Could not get Git info: {e}")
+        # Fallback to default values
+        return "https://github.com/UU-ER/AdOpT-NET0", "main"
+
+
+def generate_component_list(directory, base_github_url=None):
     component_ls = []
+
+    # Get Git repository information if not provided
+    if base_github_url is None:
+        repo_path = Path(__file__).parent.parent.parent
+        remote_url, current_branch = get_git_info(repo_path)
+        base_github_url = f"{remote_url}/blob/{current_branch}"
+        print(f"Using Git repository: {remote_url}")
+        print(f"Using branch/commit: {current_branch}")
 
     # Walk through the directory and its subfolders
     for root, dirs, files in os.walk(directory):
@@ -125,6 +188,14 @@ def generate_component_list(directory):
             print(f"Processing file: {file_path}")
             name = os.path.splitext(os.path.basename(json_file))[0]
 
+            # Get the technology group (folder name)
+            component_group = os.path.basename(root)
+
+            # Create GitHub URL for the JSON file
+            # Get relative path from the adopt-net0 root
+            rel_path = os.path.relpath(file_path, Path(__file__).parent.parent.parent)
+            github_url = f"{base_github_url}/{rel_path.replace(os.sep, '/')}"
+
             # Open and parse the JSON file
             with open(file_path, "r") as f:
                 data = json.load(f)
@@ -132,11 +203,15 @@ def generate_component_list(directory):
             if "technology" in str(directory):
                 if "tec_type" in data:
                     tec_type = data.get("tec_type", "")
-                    component_ls.append((name, tec_type))
+                    # Create clickable link for technology name in reStructuredText format
+                    clickable_name = f"`{name} <{github_url}>`_"
+                    component_ls.append((clickable_name, tec_type, component_group))
             elif "network" in str(directory):
                 if "network_type" in data:
                     network_type = data.get("network_type", "")
-                    component_ls.append((name, network_type))
+                    # Create clickable link for network name in reStructuredText format
+                    clickable_name = f"`{name} <{github_url}>`_"
+                    component_ls.append((clickable_name, network_type, component_group))
     return component_ls
 
 
@@ -148,9 +223,9 @@ target_dir = (
 tech_list = generate_component_list(target_dir)
 
 with open("database/generated_tech_list.csv", "w") as f:
-    f.write(f"Technology name; Technology model (Tec_type)\n")
+    f.write(f"Technology name; Technology model (Tec_type); Technology group\n")
     for tech in tech_list:
-        f.write(f"{tech[0]}; {tech[1]}\n")
+        f.write(f"{tech[0]}; {tech[1]}; {tech[2]}\n")
 
 # specify path to network json files relative to current folder (not user-dependent)
 target_dir = (
@@ -160,6 +235,28 @@ netw_list = generate_component_list(target_dir)
 
 
 with open("database/generated_netw_list.csv", "w") as f:
-    f.write(f"Network name\n")
+    f.write(f"Network name; Network type; Network group\n")
     for netw in netw_list:
-        f.write(f"{netw[0]}; {netw[1]} \n")
+        f.write(f"{netw[0]}; {netw[1]}; {netw[2]}\n")
+
+
+# Generate GitHub link for Components database Excel file
+def generate_components_database_link():
+    """Generate GitHub link for the Components database Excel file"""
+    repo_path = Path(__file__).parent.parent.parent
+    remote_url, current_branch = get_git_info(repo_path)
+    base_github_url = f"{remote_url}/blob/{current_branch}"
+
+    # Path to the Excel file relative to repository root
+    excel_rel_path = "adopt_net0/database/data/Components database.xlsx"
+    github_excel_url = f"{base_github_url}/{excel_rel_path.replace(' ', '%20')}"
+
+    return github_excel_url
+
+
+# Generate the link and write it to a file that can be included in documentation
+excel_github_url = generate_components_database_link()
+with open("database/components_database_link.rst", "w") as f:
+    f.write(
+        f"All data used in the model can be found as flat data in the `Components database <{excel_github_url}>`_.\n"
+    )

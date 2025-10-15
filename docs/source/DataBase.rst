@@ -7,9 +7,9 @@ Below you find lists with available :ref:`technology<technologies_list>` and :re
 available in AdOpT-NET0. For a number of technologies and networks, there are also detailed cost models available. For
 their documentation see :ref:`here<cost_models>`.
 
+.. include:: database/components_database_link.rst
+
 .. toctree::
    :maxdepth: 1
 
    database/CostModels
-
-
