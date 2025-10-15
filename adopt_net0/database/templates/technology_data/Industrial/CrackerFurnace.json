@@ -73,5 +73,16 @@
     "const_max_input": 1,
     "const_opex_variable": 1,
     "const_opex_fixed": 1
+  },
+  "Units": {
+    "size": "MW",
+    "input_carrier": {
+      "naphtha": "tonne/hr",
+      "steam": "MW",
+      "electricity": "MW"
+    },
+    "output_carrier": {
+      "olefins": "tonne/hr"
+    }
   }
 }

@@ -28,7 +28,7 @@
     ],
     "main_input_carrier": "feedgas",
     "output_carrier": [
-      "syngas_r"
+      "syngas"
     ],
     "emission_factor": 0,
     "min_part_load": 0.4,
@@ -38,7 +38,7 @@
         1
       ],
       "out": {
-        "syngas_r": [
+        "syngas": [
           0,
           0.187
         ]
@@ -60,5 +60,15 @@
     "SU_load": -1,
     "SD_load": -1,
     "max_startups": -1
+  },
+  "Units": {
+    "size": "MW",
+    "input_carrier": {
+      "feedgas": "tonne/hr",
+      "electricity": "MW"
+    },
+    "output_carrier": {
+      "syngas": "tonne/hr"
+    }
   }
 }
