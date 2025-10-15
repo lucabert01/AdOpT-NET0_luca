@@ -61,5 +61,14 @@
     "const_max_input": 1,
     "const_opex_variable": 1,
     "const_opex_fixed": 1
+  },
+  "Units": {
+    "size": "MW",
+    "input_carrier": {
+      "electricity": "MW"
+    },
+    "output_carrier": {
+      "nitrogen": "tonne/hr"
+    }
   }
 }

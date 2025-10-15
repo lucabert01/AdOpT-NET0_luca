@@ -59,5 +59,15 @@
     "SU_load": -1,
     "SD_load": -1,
     "max_startups": -1
+  },
+  "Units": {
+    "size": "MW",
+    "input_carrier": {
+      "CO2": "tonne/hr",
+      "hydrogen": "MW"
+    },
+    "output_carrier": {
+      "syngas": "tonne/hr"
+    }
   }
 }

@@ -76,5 +76,19 @@
     "SU_load": -1,
     "SD_load": -1,
     "max_startups": -1
+  },
+  "Units": {
+    "size": "MW",
+    "input_carrier": {
+      "methanol": "tonne/hr",
+      "electricity": "MW",
+      "steam": "MW"
+    },
+    "output_carrier": {
+      "BTX": "tonne/hr",
+      "LPG": "tonne/hr",
+      "pentane": "tonne/hr",
+      "heatlowT": "MW"
+    }
   }
 }
