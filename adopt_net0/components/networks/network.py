@@ -574,7 +574,7 @@ class Network(ModelComponent):
             # Decommissioning is not possible, size fixed
             b_arc.var_size = pyo.Var(
                 within=size_domain,
-                bounds=(b_arc.para_size_initial,  b_arc.para_size_max),
+                bounds=(b_arc.para_size_initial, b_arc.para_size_max),
             )
         else:
             # Size is variable
@@ -958,7 +958,8 @@ class Network(ModelComponent):
 
         def init_opex_fixed(const):
             return (
-                b_netw.para_opex_fixed * fraction_of_year_modelled
+                b_netw.para_opex_fixed
+                * fraction_of_year_modelled
                 * (
                     sum(b_netw.arc_block[arc].var_capex_aux for arc in arc_set)
                     / annualization_factor

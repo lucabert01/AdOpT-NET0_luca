@@ -1199,7 +1199,7 @@ def test_decommissioning(request):
     )
     model = construct_tec_model(tec, nr_timesteps=time_steps)
 
-    #run model
+    # run model
     run_model(model, request.config.solver)
 
     assert model.var_size.value == 15
