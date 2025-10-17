@@ -70,7 +70,7 @@ range_co2_prices_fulll = np.append(range_co2_price_3040, range_co2_price_4050)
 fullprofile_co2_price = range_co2_prices_fulll[0:time_sim*365]
 
 # Save data
-data_path = Path(__file__).parent/'data_simulations_co2stor_linear'
+data_path = Path(__file__).parent/'inputData'
 
 np.save(data_path/'fullprofile_emissions_cement.npy', fullprofile_emissions_cement)
 np.save(data_path/'fullprofile_emissions_w2e.npy', fullprofile_emissions_w2e)

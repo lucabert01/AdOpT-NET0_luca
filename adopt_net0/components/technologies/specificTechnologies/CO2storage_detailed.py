@@ -174,7 +174,7 @@ class CO2storageDetailed(Technology):
             "eta": eta_pump,
             "p_pump_in": offshore_transport["p_pump_in"]
         }
-        file_path = Path(__file__).parent.parent.parent.parent.parent/"data_simulations_co2stor_linear/pump_coefficients.json"
+        file_path = Path(__file__).parent.parent.parent.parent.parent/"inputData/pump_coefficients.json"
         with open(file_path, "w") as file:
             json.dump(data_to_save, file, indent=4)
     def _calculate_bounds(self):

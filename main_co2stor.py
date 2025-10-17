@@ -19,7 +19,7 @@ def prepare_data_series(array, type, end_period):
 
 
 # Specify the path to your input data
-path = Path("./detailedCO2storage_test2")
+path = Path("detailedCO2storage_caseStudy")
 
 # Create template files (comment these lines if already defined)
 adopt.create_optimization_templates(path)
@@ -130,7 +130,7 @@ os.remove(path / "period1" / "network_topology" / "new" / "size_max_arcs.csv")
 # tot_inj_rate = pd.DataFrame(tot_inj_rate, columns=['Import limit'])
 
 # Load and prepare data series
-data_path = Path(__file__).parent/"data_simulations_co2stor_linear"
+data_path = Path(__file__).parent/"inputData"
 cement_emissions = np.load(data_path/"fullprofile_emissions_cement.npy", allow_pickle=True)
 cement_emissions = prepare_data_series(cement_emissions, "Demand", end_period)
 waste_emissions = np.load(data_path/"fullprofile_emissions_w2e.npy", allow_pickle=True)
