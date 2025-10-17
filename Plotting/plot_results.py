@@ -173,7 +173,7 @@ plt.show()
 
 
 # Plotting power pump
-file_path = Path(__file__).parent/ "pump_coefficients.json"
+file_path = Path(__file__).parent.parent/ "inputData/pump_coefficients.json"
 
 # Read the data from the JSON file
 with open(file_path, "r") as file:
