@@ -193,7 +193,9 @@ def generate_component_list(directory, base_github_url=None):
 
             # Create GitHub URL for the JSON file
             # Get relative path from the adopt-net0 root
-            rel_path = os.path.relpath(file_path, Path(__file__).parent.parent.parent)
+            rel_path = os.path.relpath(
+                file_path, str(Path(__file__).parent.parent.parent)
+            )
             github_url = f"{base_github_url}/{rel_path.replace(os.sep, '/')}"
 
             # Open and parse the JSON file
@@ -223,9 +225,9 @@ target_dir = (
 tech_list = generate_component_list(target_dir)
 
 with open("database/generated_tech_list.csv", "w") as f:
-    f.write(f"Technology name; Technology model (Tec_type); Technology group\n")
+    f.write(f"Technology group; Technology name; Technology model (Tec_type)\n")
     for tech in tech_list:
-        f.write(f"{tech[0]}; {tech[1]}; {tech[2]}\n")
+        f.write(f"{tech[2]}; {tech[0]}; {tech[1]}\n")
 
 # specify path to network json files relative to current folder (not user-dependent)
 target_dir = (
@@ -248,8 +250,9 @@ def generate_components_database_link():
     base_github_url = f"{remote_url}/blob/{current_branch}"
 
     # Path to the Excel file relative to repository root
-    excel_rel_path = "adopt_net0/database/data/Components database.xlsx"
-    github_excel_url = f"{base_github_url}/{excel_rel_path.replace(' ', '%20')}"
+    excel_rel_path = "adopt_net0/database/data/Components_database.xlsx"
+    # encode spaces (none expected) and build URL
+    github_excel_url = f"{base_github_url}/{excel_rel_path}"
 
     return github_excel_url
 
@@ -262,7 +265,7 @@ def setup_components_database_download():
         / "adopt_net0"
         / "database"
         / "data"
-        / "Components database.xlsx"
+        / "Components_database.xlsx"
     )
 
     # Create _static directory if it doesn't exist
@@ -277,7 +280,7 @@ def setup_components_database_download():
 
     if source_excel.exists():
         shutil.copy2(source_excel, dest_excel)
-        print(f"Copied Components database to: {dest_excel}")
+        print(f"Copied Components_database.xlsx to: {dest_excel}")
         return True
     else:
         print(f"Warning: Source Excel file not found at {source_excel}")

@@ -186,88 +186,114 @@ def determine_flow_existing_compressors(self, compressor, b_period, node):
     return size
 
 
+def flatten_json_for_excel(data, parent_key=""):
+    """
+    Flatten JSON data maintaining hierarchical structure for Excel headers
+    Special handling for carrier-specific attributes to avoid too many columns
+    """
+    flattened = {}
+
+    # Define carrier-specific attributes that should be consolidated
+    carrier_attributes = [
+        "input_carrier",
+        "output_carrier",
+        "main_input_carrier",
+        "main_output_carrier",
+        "carrier",
+    ]
+
+    for key, value in data.items():
+        # Create hierarchical key
+        new_key = f"{parent_key}.{key}" if parent_key else key
+
+        if isinstance(value, dict):
+            # Check if this is a carrier-specific attribute with units (Units section)
+            if any(attr in key.lower() for attr in carrier_attributes) and all(
+                isinstance(v, (str, int, float)) for v in value.values()
+            ):
+                # Consolidate carrier values into a single string: "electricity: MW; hydrogen: kg/h"
+                carrier_values = []
+                for carrier, unit in value.items():
+                    carrier_values.append(f"{carrier}: {unit}")
+                flattened[new_key] = "; ".join(carrier_values)
+            else:
+                # Recursively flatten nested dictionaries
+                nested_flattened = flatten_json_for_excel(value, new_key)
+                flattened.update(nested_flattened)
+        elif isinstance(value, list):
+            # Handle carrier lists (Performance section) and regular lists
+            if any(attr in key.lower() for attr in carrier_attributes):
+                # For carrier lists, join with commas: "electricity, hydrogen"
+                flattened[new_key] = ", ".join(str(v) for v in value)
+            else:
+                # Convert other lists to comma-separated strings
+                flattened[new_key] = ", ".join(str(v) for v in value)
+        else:
+            # Direct value
+            flattened[new_key] = value
+
+    return flattened
+
+
+def create_hierarchical_headers(columns):
+    """
+    Create hierarchical headers for Excel from flattened column names
+    Returns tuple of (header_level_1, header_level_2, has_hierarchy)
+    """
+    level1_headers = []
+    level2_headers = []
+    has_hierarchy = False
+
+    for col in columns:
+        if "." in col:
+            parts = col.split(".", 1)
+            level1_headers.append(parts[0])
+            level2_headers.append(parts[1])
+            has_hierarchy = True
+        else:
+            level1_headers.append(col)
+            level2_headers.append("")
+
+    return level1_headers, level2_headers, has_hierarchy
+
+
 def create_csv_database_from_json():
     """
     Creates an Excel database from all JSON files in the database/templates directory.
-    The Excel file contains comprehensive information about all components (technologies and networks)
-    and is saved as 'Components database.xlsx' in the database/data directory.
+    Creates separate sheets for Technologies and Networks with hierarchical headers.
     """
     # Define paths
     base_path = Path(__file__).parent / "database" / "templates"
     output_path = (
-        Path(__file__).parent / "database" / "data" / "Components database.xlsx"
+        Path(__file__).parent / "database" / "data" / "Components_database.xlsx"
     )
 
-    # Initialize lists to store processed data
-    all_components = []
+    # Ensure output directory exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Initialize data containers
+    tech_data = []
+    network_data = []
 
     # Process technology data files
     tech_data_path = base_path / "technology_data"
     if tech_data_path.exists():
+        print(f"Processing technology data from: {tech_data_path}")
+
         for json_file in tech_data_path.rglob("*.json"):
             try:
+                print(f"Processing technology: {json_file}")
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
-                # Extract basic information
-                component_info = {
-                    "Component_Type": "Technology",
-                    "Category": json_file.parent.name,
-                    "File_Name": json_file.name,
-                    "Component_Name": data.get("tec_type", "N/A"),
-                    "Decommission": data.get("decommission", "N/A"),
-                    "Size_Is_Int": data.get("size_is_int", "N/A"),
-                    "Size_Min": data.get("size_min", "N/A"),
-                    "Size_Max": data.get("size_max", "N/A"),
-                }
+                # Flatten the JSON data
+                flattened_data = flatten_json_for_excel(data)
 
-                # Extract Economics data
-                economics = data.get("Economics", {})
-                component_info.update(
-                    {
-                        "CAPEX_Model": economics.get("capex_model", "N/A"),
-                        "Unit_CAPEX": economics.get("unit_capex", "N/A"),
-                        "Fix_CAPEX": economics.get("fix_capex", "N/A"),
-                        "OPEX_Variable": economics.get("opex_variable", "N/A"),
-                        "OPEX_Fixed": economics.get("opex_fixed", "N/A"),
-                        "Discount_Rate": economics.get("discount_rate", "N/A"),
-                        "Lifetime": economics.get("lifetime", "N/A"),
-                        "Decommission_Cost": economics.get("decommission_cost", "N/A"),
-                    }
-                )
+                # Add metadata
+                flattened_data["File_Name"] = json_file.name
+                flattened_data["Technology_Group"] = json_file.parent.name
 
-                # Extract Performance data
-                performance = data.get("Performance", {})
-                component_info.update(
-                    {
-                        "Input_Carrier": (
-                            ", ".join(performance.get("input_carrier", []))
-                            if isinstance(performance.get("input_carrier"), list)
-                            else performance.get("input_carrier", "N/A")
-                        ),
-                        "Output_Carrier": (
-                            ", ".join(performance.get("output_carrier", []))
-                            if isinstance(performance.get("output_carrier"), list)
-                            else performance.get("output_carrier", "N/A")
-                        ),
-                        "Main_Input_Carrier": performance.get(
-                            "main_input_carrier", "N/A"
-                        ),
-                        "Rated_Power": performance.get("rated_power", "N/A"),
-                        "Efficiency": performance.get("efficiency", "N/A"),
-                        "Emission_Factor": performance.get("emission_factor", "N/A"),
-                    }
-                )
-
-                # Extract Units data
-                units = data.get("Units", {})
-                component_info.update(
-                    {
-                        "Size_Unit": units.get("size", "N/A"),
-                    }
-                )
-
-                all_components.append(component_info)
+                tech_data.append(flattened_data)
 
             except Exception as e:
                 print(f"Error processing {json_file}: {str(e)}")
@@ -276,116 +302,214 @@ def create_csv_database_from_json():
     # Process network data files
     network_data_path = base_path / "network_data"
     if network_data_path.exists():
+        print(f"Processing network data from: {network_data_path}")
+
         for json_file in network_data_path.rglob("*.json"):
             try:
+                print(f"Processing network: {json_file}")
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
-                # Extract basic information
-                component_info = {
-                    "Component_Type": "Network",
-                    "Category": "Network",
-                    "File_Name": json_file.name,
-                    "Component_Name": data.get("network_type", "N/A"),
-                    "Decommission": data.get("decommission", "N/A"),
-                    "Size_Is_Int": data.get("size_is_int", "N/A"),
-                    "Size_Min": data.get("size_min", "N/A"),
-                    "Size_Max": data.get("size_max", "N/A"),
-                }
+                # Flatten the JSON data
+                flattened_data = flatten_json_for_excel(data)
 
-                # Extract Economics data
-                economics = data.get("Economics", {})
-                component_info.update(
-                    {
-                        "CAPEX_Model": "N/A",  # Networks use gamma coefficients
-                        "Unit_CAPEX": "N/A",
-                        "Fix_CAPEX": "N/A",
-                        "OPEX_Variable": economics.get("opex_variable", "N/A"),
-                        "OPEX_Fixed": economics.get("opex_fixed", "N/A"),
-                        "Discount_Rate": economics.get("discount_rate", "N/A"),
-                        "Lifetime": economics.get("lifetime", "N/A"),
-                        "Decommission_Cost": economics.get("decommission_cost", "N/A"),
-                    }
-                )
+                # Add metadata
+                flattened_data["File_Name"] = json_file.name
+                flattened_data["Network_Group"] = "Network"
 
-                # Extract Performance data
-                performance = data.get("Performance", {})
-                component_info.update(
-                    {
-                        "Input_Carrier": performance.get("carrier", "N/A"),
-                        "Output_Carrier": performance.get("carrier", "N/A"),
-                        "Main_Input_Carrier": performance.get("carrier", "N/A"),
-                        "Rated_Power": "N/A",
-                        "Efficiency": f"Loss: {performance.get('loss', 'N/A')}",
-                        "Emission_Factor": performance.get("emissionfactor", "N/A"),
-                    }
-                )
-
-                # Extract Units data
-                units = data.get("Units", {})
-                component_info.update(
-                    {
-                        "Size_Unit": units.get("size", "N/A"),
-                    }
-                )
-
-                # Add network-specific gamma coefficients
-                component_info.update(
-                    {
-                        "Gamma1": economics.get("gamma1", "N/A"),
-                        "Gamma2": economics.get("gamma2", "N/A"),
-                        "Gamma3": economics.get("gamma3", "N/A"),
-                        "Gamma4": economics.get("gamma4", "N/A"),
-                    }
-                )
-
-                all_components.append(component_info)
+                network_data.append(flattened_data)
 
             except Exception as e:
                 print(f"Error processing {json_file}: {str(e)}")
                 continue
 
-    # Create DataFrame
-    if all_components:
-        df = pd.DataFrame(all_components)
-
-        # Create Excel writer with multiple sheets
+    # Create Excel file with hierarchical headers
+    if tech_data or network_data:
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-            # Write all components to main sheet
-            df.to_excel(writer, sheet_name="All Components", index=False)
 
-            # Create separate sheets for technologies and networks
-            tech_df = df[df["Component_Type"] == "Technology"]
-            network_df = df[df["Component_Type"] == "Network"]
+            # Create Technologies sheet
+            if tech_data:
+                tech_df = pd.DataFrame(tech_data)
 
-            if not tech_df.empty:
-                tech_df.to_excel(writer, sheet_name="Technologies", index=False)
+                # Reorder columns to put metadata first
+                meta_cols = ["File_Name", "Technology_Group"]
+                other_cols = [col for col in tech_df.columns if col not in meta_cols]
+                tech_df = tech_df[meta_cols + other_cols]
 
-            if not network_df.empty:
-                network_df.to_excel(writer, sheet_name="Networks", index=False)
-
-            # Create summary sheet with category breakdown
-            summary_data = []
-            if not tech_df.empty:
-                tech_summary = tech_df["Category"].value_counts().to_dict()
-                for category, count in tech_summary.items():
-                    summary_data.append(
-                        {"Type": "Technology", "Category": category, "Count": count}
-                    )
-
-            if not network_df.empty:
-                summary_data.append(
-                    {"Type": "Network", "Category": "Network", "Count": len(network_df)}
+                # Create hierarchical headers
+                level1_headers, level2_headers, has_hierarchy = (
+                    create_hierarchical_headers(tech_df.columns)
                 )
 
-            if summary_data:
-                summary_df = pd.DataFrame(summary_data)
-                summary_df.to_excel(writer, sheet_name="Summary", index=False)
+                if has_hierarchy:
+                    # Write to Excel with hierarchical headers (start at row 3, no pandas headers)
+                    tech_df.to_excel(
+                        writer,
+                        sheet_name="Technologies",
+                        index=False,
+                        startrow=2,
+                        header=False,
+                    )
 
-        print(f"Database created successfully with {len(all_components)} components!")
-        print(f"Excel file saved to: {output_path}")
+                    # Get worksheet and write hierarchical headers
+                    worksheet = writer.sheets["Technologies"]
+
+                    # Create font styles
+                    from openpyxl.styles import Font, Alignment
+
+                    bold_font = Font(bold=True)
+                    center_alignment = Alignment(horizontal="center", vertical="center")
+
+                    # Write level 1 headers with bold and center formatting
+                    for i, header in enumerate(level1_headers):
+                        cell = worksheet.cell(row=1, column=i + 1, value=header)
+                        cell.font = bold_font
+                        cell.alignment = center_alignment
+
+                    # Write level 2 headers with center formatting
+                    for i, header in enumerate(level2_headers):
+                        if header:  # Only write if there's a second level
+                            cell = worksheet.cell(row=2, column=i + 1, value=header)
+                            cell.alignment = center_alignment
+
+                    # Merge cells for level 1 headers that span multiple columns
+                    current_header = None
+                    start_col = 1
+                    for i, header in enumerate(level1_headers):
+                        if header != current_header:
+                            if current_header and i > start_col:
+                                # Merge previous header if it spans multiple columns
+                                if i - start_col > 1:
+                                    worksheet.merge_cells(
+                                        start_row=1,
+                                        start_column=start_col,
+                                        end_row=1,
+                                        end_column=i,
+                                    )
+                            current_header = header
+                            start_col = i + 1
+
+                    # Handle the last header group
+                    if len(level1_headers) > start_col:
+                        if len(level1_headers) - start_col > 0:
+                            worksheet.merge_cells(
+                                start_row=1,
+                                start_column=start_col,
+                                end_row=1,
+                                end_column=len(level1_headers),
+                            )
+                else:
+                    # Write to Excel with single header row (normal pandas output)
+                    tech_df.to_excel(writer, sheet_name="Technologies", index=False)
+
+                    # Format the single header row
+                    worksheet = writer.sheets["Technologies"]
+                    from openpyxl.styles import Font, Alignment
+
+                    bold_font = Font(bold=True)
+                    center_alignment = Alignment(horizontal="center", vertical="center")
+
+                    # Apply formatting to header row
+                    for i, header in enumerate(tech_df.columns):
+                        cell = worksheet.cell(row=1, column=i + 1)
+                        cell.font = bold_font
+                        cell.alignment = center_alignment
+
+                print(f"Created Technologies sheet with {len(tech_data)} technologies")
+
+            # Create Networks sheet
+            if network_data:
+                network_df = pd.DataFrame(network_data)
+
+                # Reorder columns to put metadata first
+                meta_cols = ["File_Name", "Network_Group"]
+                other_cols = [col for col in network_df.columns if col not in meta_cols]
+                network_df = network_df[meta_cols + other_cols]
+
+                # Create hierarchical headers
+                level1_headers, level2_headers, has_hierarchy = (
+                    create_hierarchical_headers(network_df.columns)
+                )
+
+                if has_hierarchy:
+                    # Write to Excel with hierarchical headers (start at row 3, no pandas headers)
+                    network_df.to_excel(
+                        writer,
+                        sheet_name="Networks",
+                        index=False,
+                        startrow=2,
+                        header=False,
+                    )
+
+                    # Get worksheet and write hierarchical headers
+                    worksheet = writer.sheets["Networks"]
+
+                    # Create font styles
+                    from openpyxl.styles import Font, Alignment
+
+                    bold_font = Font(bold=True)
+                    center_alignment = Alignment(horizontal="center", vertical="center")
+
+                    # Write level 1 headers with bold and center formatting
+                    for i, header in enumerate(level1_headers):
+                        cell = worksheet.cell(row=1, column=i + 1, value=header)
+                        cell.font = bold_font
+                        cell.alignment = center_alignment
+
+                    # Write level 2 headers with center formatting
+                    for i, header in enumerate(level2_headers):
+                        if header:  # Only write if there's a second level
+                            cell = worksheet.cell(row=2, column=i + 1, value=header)
+                            cell.alignment = center_alignment
+
+                    # Merge cells for level 1 headers that span multiple columns
+                    current_header = None
+                    start_col = 1
+                    for i, header in enumerate(level1_headers):
+                        if header != current_header:
+                            if current_header and i > start_col:
+                                # Merge previous header if it spans multiple columns
+                                if i - start_col > 1:
+                                    worksheet.merge_cells(
+                                        start_row=1,
+                                        start_column=start_col,
+                                        end_row=1,
+                                        end_column=i,
+                                    )
+                            current_header = header
+                            start_col = i + 1
+
+                    # Handle the last header group
+                    if len(level1_headers) > start_col:
+                        if len(level1_headers) - start_col > 0:
+                            worksheet.merge_cells(
+                                start_row=1,
+                                start_column=start_col,
+                                end_row=1,
+                                end_column=len(level1_headers),
+                            )
+                else:
+                    # Write to Excel with single header row (normal pandas output)
+                    network_df.to_excel(writer, sheet_name="Networks", index=False)
+
+                    # Format the single header row
+                    worksheet = writer.sheets["Networks"]
+                    from openpyxl.styles import Font, Alignment
+
+                    bold_font = Font(bold=True)
+                    center_alignment = Alignment(horizontal="center", vertical="center")
+
+                    # Apply formatting to header row
+                    for i, header in enumerate(network_df.columns):
+                        cell = worksheet.cell(row=1, column=i + 1)
+                        cell.font = bold_font
+                        cell.alignment = center_alignment
+
+                print(f"Created Networks sheet with {len(network_data)} networks")
+
+        print(f"Excel database created successfully at: {output_path}")
         return output_path
 
     else:
-        print("No components found to process!")
+        print("No data found to create Excel database!")
         return None
