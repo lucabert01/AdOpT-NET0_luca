@@ -1,7 +1,7 @@
 .. _chemical_industry:
 
-Chemical Industry
-=================
+Chemical Industry Transformation
+================================
 
 The chemical industry is one of the most critical yet challenging sectors in the global transition toward net-zero emissions.
 This research develops an open-source, multi-scale optimization framework to support strategic decision-making for transforming
