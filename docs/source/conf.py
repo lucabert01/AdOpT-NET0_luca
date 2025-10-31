@@ -37,6 +37,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.mathjax",
     "sphinx.ext.todo",
+    "sphinx_rtd_theme",
     "myst_nb",
 ]
 autodoc_member_order = "bysource"
