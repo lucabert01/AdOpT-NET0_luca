@@ -213,7 +213,7 @@ def generate_component_list(directory, base_github_url=None):
                     network_type = data.get("network_type", "")
                     # Create clickable link for network name in reStructuredText format
                     clickable_name = f"`{name} <{github_url}>`_"
-                    component_ls.append((clickable_name, network_type, component_group))
+                    component_ls.append((clickable_name, network_type))
     return component_ls
 
 
@@ -237,9 +237,9 @@ netw_list = generate_component_list(target_dir)
 
 
 with open("database/generated_netw_list.csv", "w") as f:
-    f.write(f"Network name; Network type; Network group\n")
+    f.write(f"Network name; Network type\n")
     for netw in netw_list:
-        f.write(f"{netw[0]}; {netw[1]}; {netw[2]}\n")
+        f.write(f"{netw[0]}; {netw[1]}\n")
 
 
 # Generate GitHub link for Components database Excel file
