@@ -16,7 +16,7 @@ from utilities.process_results import save_figure_for_paper, print_h5_structure
 
 colors = []
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8','#012E4D']
-
+results_path = "../figures/WtE_MEA"
 
 ## -----------------  DH ratio --------------------------
 
@@ -342,7 +342,7 @@ fig.legend(handles, labels, loc="upper center", ncol=5)
 
 plt.tight_layout(rect=[0, 0, 1, 0.95])  # leave space for global legend
 plt.show()
-
+save_figure_for_paper(fig, "MEA_operations_allDH", results_path)
 
 
 ## Plot the economics
@@ -389,21 +389,38 @@ for dh_ratio in explored_dh_ratio_str:
     capture_cost.append(capture)
 
 
+fig, ax = plt.subplots(figsize=(6, 4))  # You can adjust size if needed
+
 # Scatter points for capture cost
 for i, (x, y) in enumerate(zip(explored_dh_ratio, capture_cost)):
-    plt.scatter(x, y, color=batlow_colors[i], marker="s", s=100, edgecolor=batlow_colors[i], zorder=3, label="Capture Cost" if i == 0 else "")
+    ax.scatter(
+        x, y,
+        color=batlow_colors[i],
+        marker="s",
+        s=100,
+        edgecolor=batlow_colors[i],
+        zorder=3,
+        label="Capture Cost" if i == 0 else ""
+    )
 
 # Connect points with a dashed line
-plt.plot(explored_dh_ratio, capture_cost, linestyle="--", color="black", alpha=0.6, zorder=2)
+ax.plot(
+    explored_dh_ratio,
+    capture_cost,
+    linestyle="--",
+    color="black",
+    alpha=0.6,
+    zorder=2
+)
 
-# Labels
-plt.xlabel("Peak district heating demand [-]")
-plt.ylabel("Capture cost [€/tCO₂]")
+# Labels and legend
+ax.set_xlabel("Peak district heating demand [-]")
+ax.set_ylabel("Capture cost [€/tCO₂]")
+ax.legend()
 
-# Legend
-plt.legend()
-
+# Show and save
 plt.show()
+save_figure_for_paper(fig, "MEA_economics_DH50", results_path)
 
 
 ## Cost breakdown
