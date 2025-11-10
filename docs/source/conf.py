@@ -178,15 +178,12 @@ def generate_component_list(directory, base_github_url=None):
 
     # Walk through the directory and its subfolders
     for root, dirs, files in os.walk(directory):
-        print(f"Searching in {root}")
         # Filter JSON files
         json_files = [f for f in files if f.endswith(".json")]
-        print(f"Found JSON files: {json_files}")
 
         # Process each JSON file
         for json_file in json_files:
             file_path = os.path.join(root, json_file)
-            print(f"Processing file: {file_path}")
             name = os.path.splitext(os.path.basename(json_file))[0]
 
             # Get the technology group (folder name)
@@ -218,7 +215,7 @@ def generate_component_list(directory, base_github_url=None):
     return component_ls
 
 
-# specify path to technology json files relative to current folder (not user-dependent)
+# specify path to technology json files relative to current folder
 target_dir = (
     Path(__file__).parent.parent.parent
     / "adopt_net0/database/templates/technology_data"
@@ -281,7 +278,6 @@ def setup_components_database_download():
 
     if source_excel.exists():
         shutil.copy2(source_excel, dest_excel)
-        print(f"Copied Components_database.xlsx to: {dest_excel}")
         return True
     else:
         print(f"Warning: Source Excel file not found at {source_excel}")
@@ -295,20 +291,25 @@ excel_github_url = generate_components_database_link()
 # Auto-regenerate Components database Excel file during documentation build
 print("Regenerating Components database Excel file...")
 try:
-    # Import and call the function to create/update the Excel database
-    import sys
+    # Load the docs-only utilities module from the same docs folder
+    from importlib.util import spec_from_file_location, module_from_spec
 
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-    from adopt_net0.utilities import create_csv_database_from_json
+    docs_utils_path = Path(__file__).parent / "utilities_documentation.py"
+    if docs_utils_path.exists():
+        spec = spec_from_file_location("docs_utilities", str(docs_utils_path))
+        docs_utils = module_from_spec(spec)
+        spec.loader.exec_module(docs_utils)
 
-    # Generate the latest Excel database
-    excel_path = create_csv_database_from_json()
-    if excel_path:
-        print(f"Components database updated successfully: {excel_path}")
-        # Re-copy the updated Excel file to _static directory
-        excel_copied = setup_components_database_download()
+        # Call the docs-local generator
+        excel_path = docs_utils.create_csv_database_from_json()
+        if excel_path:
+            print(f"Components database updated successfully: {excel_path}")
+            # Re-copy the updated Excel file to _static directory
+            excel_copied = setup_components_database_download()
+        else:
+            print("Warning: Failed to update Components database")
     else:
-        print("Warning: Failed to update Components database")
+        print(f"Warning: docs utilities module not found at {docs_utils_path}")
 
 except Exception as e:
     print(f"Warning: Could not auto-regenerate Components database: {e}")
