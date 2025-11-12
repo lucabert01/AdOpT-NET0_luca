@@ -317,11 +317,15 @@ except Exception as e:
 with open("database/components_database_link.rst", "w") as f:
     if excel_copied:
         # Provide both download and GitHub links - use correct path for Sphinx static files
-        f.write("All data used in the model can be downloaded as flat data in\n")
+        f.write(
+            "All data used in the model are available in an Excel file that can be "
+            "downloaded in\n"
+        )
         f.write(":download:`Components database </_static/Components_database.xlsx>` ")
         f.write(f"or `view on GitHub <{excel_github_url}>`_.\n")
     else:
         # Fallback to GitHub link only
         f.write(
-            f"All data used in the model can be found as flat data in the `Components database <{excel_github_url}>`_.\n"
+            f"All data used in the model are available in an Excel file that can be found in "
+            f"`Components database <{excel_github_url}>`_.\n"
         )
