@@ -114,20 +114,28 @@ with open("advanced_topics/config.csv", "w", newline="", encoding="utf-8") as cs
 def get_git_info(repo_path):
     """
     Get Git repository information (remote URL and current branch/commit)
+    Handles both local builds and Read the Docs environment
     """
     try:
+        # Check if running on Read the Docs
+        rtd_version = os.environ.get("READTHEDOCS_VERSION")
+        rtd_version_type = os.environ.get("READTHEDOCS_VERSION_TYPE")
+
         # Change to the repository directory
         original_cwd = os.getcwd()
         os.chdir(repo_path)
 
         # Get the remote origin URL
-        remote_url = (
-            subprocess.check_output(
-                ["git", "remote", "get-url", "origin"], stderr=subprocess.DEVNULL
+        try:
+            remote_url = (
+                subprocess.check_output(
+                    ["git", "remote", "get-url", "origin"], stderr=subprocess.DEVNULL
+                )
+                .decode()
+                .strip()
             )
-            .decode()
-            .strip()
-        )
+        except:
+            remote_url = "https://github.com/UU-ER/AdOpT-NET0"
 
         # Convert SSH URL to HTTPS if needed
         if remote_url.startswith("git@github.com:"):
@@ -136,23 +144,59 @@ def get_git_info(repo_path):
             remote_url = remote_url[:-4]
 
         # Get current branch name
-        try:
-            current_branch = (
-                subprocess.check_output(
-                    ["git", "branch", "--show-current"], stderr=subprocess.DEVNULL
-                )
-                .decode()
-                .strip()
+        current_branch = None
+
+        # If on Read the Docs, use RTD environment variables
+        if rtd_version:
+            print(
+                f"Running on Read the Docs (version: {rtd_version}, type: {rtd_version_type})"
             )
-        except:
-            # If detached HEAD, get the commit hash
-            current_branch = (
-                subprocess.check_output(
-                    ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+            if rtd_version_type == "branch":
+                current_branch = rtd_version
+            elif rtd_version_type == "tag":
+                current_branch = rtd_version
+            elif rtd_version == "latest":
+                current_branch = "main"
+            else:
+                current_branch = rtd_version
+            print(f"Using branch from RTD environment: {current_branch}")
+
+        # If not RTD or RTD didn't provide branch, try git commands
+        if not current_branch:
+            try:
+                current_branch = (
+                    subprocess.check_output(
+                        ["git", "branch", "--show-current"], stderr=subprocess.DEVNULL
+                    )
+                    .decode()
+                    .strip()
                 )
-                .decode()
-                .strip()
-            )
+            except:
+                pass
+
+            # If still empty, try alternative methods
+            if not current_branch:
+                try:
+                    current_branch = (
+                        subprocess.check_output(
+                            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                            stderr=subprocess.DEVNULL,
+                        )
+                        .decode()
+                        .strip()
+                    )
+                    # If detached HEAD, get short commit hash
+                    if current_branch == "HEAD":
+                        current_branch = (
+                            subprocess.check_output(
+                                ["git", "rev-parse", "--short", "HEAD"],
+                                stderr=subprocess.DEVNULL,
+                            )
+                            .decode()
+                            .strip()
+                        )
+                except:
+                    current_branch = "main"  # Final fallback
 
         # Restore original directory
         os.chdir(original_cwd)
