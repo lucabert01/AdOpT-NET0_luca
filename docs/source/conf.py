@@ -162,7 +162,57 @@ def get_git_info(repo_path):
         except:
             pass
 
-        # If git didn't work and on Read the Docs, use RTD environment variables as fallback
+        # If in detached HEAD (common on RTD), try to find branch name from commit
+        if not current_branch:
+            try:
+                # Get current commit hash
+                current_commit = (
+                    subprocess.check_output(
+                        ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+                    )
+                    .decode()
+                    .strip()
+                )
+
+                # Get all branches containing this commit
+                branches_output = (
+                    subprocess.check_output(
+                        ["git", "branch", "-r", "--contains", current_commit],
+                        stderr=subprocess.DEVNULL,
+                    )
+                    .decode()
+                    .strip()
+                )
+
+                # Parse branch names from output
+                branches = [
+                    b.strip().replace("origin/", "")
+                    for b in branches_output.split("\n")
+                    if b.strip() and "origin/" in b and "->" not in b
+                ]
+
+                # If on RTD, try to match the normalized name
+                if rtd_version and branches:
+                    print(f"RTD version: {rtd_version}, Found branches: {branches}")
+                    # Try case-insensitive match
+                    for branch in branches:
+                        if branch.lower() == rtd_version.lower():
+                            current_branch = branch
+                            print(
+                                f"Matched RTD version '{rtd_version}' to actual branch '{branch}'"
+                            )
+                            break
+                    # If no match, use first branch found
+                    if not current_branch:
+                        current_branch = branches[0]
+                        print(f"No exact match, using first branch: {current_branch}")
+                elif branches:
+                    current_branch = branches[0]
+            except Exception as e:
+                print(f"Could not determine branch from commit: {e}")
+                pass
+
+        # If still no branch and on Read the Docs, use RTD environment variables as fallback
         if not current_branch and rtd_version:
             print(
                 f"Running on Read the Docs (version: {rtd_version}, type: {rtd_version_type})"
