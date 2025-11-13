@@ -146,88 +146,58 @@ def get_git_info(repo_path):
         # Get current branch name
         current_branch = None
 
-        # Try git commands first to get the real branch name (handles RTD normalization)
-        try:
-            current_branch = (
-                subprocess.check_output(
-                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                    stderr=subprocess.DEVNULL,
-                )
-                .decode()
-                .strip()
-            )
-            # If detached HEAD, current_branch will be "HEAD"
-            if current_branch == "HEAD":
-                current_branch = None
-        except:
-            pass
-
-        # If in detached HEAD (common on RTD), try to find branch name from commit
-        if not current_branch:
-            try:
-                # Get current commit hash
-                current_commit = (
-                    subprocess.check_output(
-                        ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
-                    )
-                    .decode()
-                    .strip()
-                )
-
-                # Get all branches containing this commit
-                branches_output = (
-                    subprocess.check_output(
-                        ["git", "branch", "-r", "--contains", current_commit],
-                        stderr=subprocess.DEVNULL,
-                    )
-                    .decode()
-                    .strip()
-                )
-
-                # Parse branch names from output
-                branches = [
-                    b.strip().replace("origin/", "")
-                    for b in branches_output.split("\n")
-                    if b.strip() and "origin/" in b and "->" not in b
-                ]
-
-                # If on RTD, try to match the normalized name
-                if rtd_version and branches:
-                    print(f"RTD version: {rtd_version}, Found branches: {branches}")
-                    # Try case-insensitive match
-                    for branch in branches:
-                        if branch.lower() == rtd_version.lower():
-                            current_branch = branch
-                            print(
-                                f"Matched RTD version '{rtd_version}' to actual branch '{branch}'"
-                            )
-                            break
-                    # If no match, use first branch found
-                    if not current_branch:
-                        current_branch = branches[0]
-                        print(f"No exact match, using first branch: {current_branch}")
-                elif branches:
-                    current_branch = branches[0]
-            except Exception as e:
-                print(f"Could not determine branch from commit: {e}")
-                pass
-
-        # If still no branch and on Read the Docs, use RTD environment variables as fallback
-        if not current_branch and rtd_version:
+        # Strategy 1: If on Read the Docs, match normalized version to actual branch name
+        if rtd_version:
             print(
                 f"Running on Read the Docs (version: {rtd_version}, type: {rtd_version_type})"
             )
+
             if rtd_version_type == "branch":
-                current_branch = rtd_version
+                try:
+                    # Get all remote branches
+                    branches_output = (
+                        subprocess.check_output(
+                            ["git", "branch", "-r"], stderr=subprocess.DEVNULL
+                        )
+                        .decode()
+                        .strip()
+                    )
+
+                    # Parse branch names (remove 'origin/' prefix and filter out HEAD)
+                    branches = [
+                        b.strip().replace("origin/", "")
+                        for b in branches_output.split("\n")
+                        if b.strip() and "origin/" in b and "->" not in b
+                    ]
+
+                    print(f"Available branches: {branches}")
+
+                    # Case-insensitive match to handle RTD's lowercase normalization
+                    for branch in branches:
+                        if branch.lower() == rtd_version.lower():
+                            current_branch = branch
+                            print(f"Matched '{rtd_version}' to '{branch}'")
+                            break
+
+                    # Fallback to RTD version if no match
+                    if not current_branch:
+                        current_branch = rtd_version
+                        print(f"No match found, using '{current_branch}'")
+
+                except Exception as e:
+                    print(f"Could not match branch: {e}")
+                    current_branch = rtd_version
+
             elif rtd_version_type == "tag":
                 current_branch = rtd_version
             elif rtd_version == "latest":
                 current_branch = "main"
             else:
                 current_branch = rtd_version
-            print(f"Using branch from RTD environment: {current_branch}")
 
-        # Final fallback: try other git commands
+            print(f"Using branch: {current_branch}")
+
+        # Strategy 2: Local build - try standard git commands
         if not current_branch:
             try:
                 current_branch = (
@@ -240,29 +210,19 @@ def get_git_info(repo_path):
             except:
                 pass
 
-            # If still empty, try alternative methods
-            if not current_branch:
-                try:
-                    current_branch = (
-                        subprocess.check_output(
-                            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                            stderr=subprocess.DEVNULL,
-                        )
-                        .decode()
-                        .strip()
+        # Strategy 3: Detached HEAD - get commit hash
+        if not current_branch:
+            try:
+                current_branch = (
+                    subprocess.check_output(
+                        ["git", "rev-parse", "--short", "HEAD"],
+                        stderr=subprocess.DEVNULL,
                     )
-                    # If detached HEAD, get short commit hash
-                    if current_branch == "HEAD":
-                        current_branch = (
-                            subprocess.check_output(
-                                ["git", "rev-parse", "--short", "HEAD"],
-                                stderr=subprocess.DEVNULL,
-                            )
-                            .decode()
-                            .strip()
-                        )
-                except:
-                    current_branch = "main"  # Final fallback
+                    .decode()
+                    .strip()
+                )
+            except:
+                current_branch = "main"  # Final fallback
 
         # Restore original directory
         os.chdir(original_cwd)
