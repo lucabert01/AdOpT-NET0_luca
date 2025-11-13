@@ -146,8 +146,24 @@ def get_git_info(repo_path):
         # Get current branch name
         current_branch = None
 
-        # If on Read the Docs, use RTD environment variables
-        if rtd_version:
+        # Try git commands first to get the real branch name (handles RTD normalization)
+        try:
+            current_branch = (
+                subprocess.check_output(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                    stderr=subprocess.DEVNULL,
+                )
+                .decode()
+                .strip()
+            )
+            # If detached HEAD, current_branch will be "HEAD"
+            if current_branch == "HEAD":
+                current_branch = None
+        except:
+            pass
+
+        # If git didn't work and on Read the Docs, use RTD environment variables as fallback
+        if not current_branch and rtd_version:
             print(
                 f"Running on Read the Docs (version: {rtd_version}, type: {rtd_version_type})"
             )
@@ -161,7 +177,7 @@ def get_git_info(repo_path):
                 current_branch = rtd_version
             print(f"Using branch from RTD environment: {current_branch}")
 
-        # If not RTD or RTD didn't provide branch, try git commands
+        # Final fallback: try other git commands
         if not current_branch:
             try:
                 current_branch = (
