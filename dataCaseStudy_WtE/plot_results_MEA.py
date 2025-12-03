@@ -38,6 +38,8 @@ emission_factor = info_wasteCHP["Performance"]["emission_factor"]
 json_mea = Path("./technologies_json/MEA_medium.json")
 info_mea = json.loads(json_mea.read_text())
 ccr = info_mea["Performance"]["capture_rate"]
+
+
 json_boiler = Path("./technologies_json/Boiler_Industrial_NG.json")
 info_boiler = json.loads(json_boiler.read_text())
 th_efficiency_boiler = info_boiler["Performance"]["performance"]["out"]["heat"][1]
@@ -142,7 +144,7 @@ for i in range(0,len(file_names)):
     results_summary[dh_ratio_str]['hourly_wte_heat_for_el'] = el_out/el_efficiency
     results_summary[dh_ratio_str]['hourly_wte_heat_for_el_ccs'] =  w2e_output['electricity_var_input_ccs']/el_efficiency
     results_summary[dh_ratio_str]['capex_tot'] = w2e_design["capex_ccs"]
-    results_summary[dh_ratio_str]['opex_fixed'] = w2e_design["opex_fixed"]
+    results_summary[dh_ratio_str]['opex_fixed'] = w2e_design["opex_fixed_ccs"]
     results_summary[dh_ratio_str]['opex_variable'] = w2e_design["opex_variable"]
     results_summary[dh_ratio_str]['loss_el_revenues'] = sum((baseline_el_prod-el_out)*el_price)
     results_summary[dh_ratio_str]['extra_cost_boiler'] = sum(boiler_output['heat_output']-baseline_boiler_prod)/th_efficiency_boiler*(emission_factor_boiler*carbon_tax + gas_price)
