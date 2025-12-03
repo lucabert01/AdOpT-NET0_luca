@@ -19,6 +19,7 @@ objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
 carbon_tax = 200
 gas_price = 40
+import_price_RDF = 20
 explored_el_price = [25, 50, 75, 100,125] # average el prices explored in the analysis
 existing_boiler_size = 250
 dh_ratio = 0.5
@@ -186,7 +187,13 @@ for av_el_price in explored_el_price:
         nodes=["industrial_cluster"],
     )
 
-
+    adopt.fill_carrier_data(
+        casepath,
+        value_or_data=import_price_RDF,
+        columns=["Import price"],
+        carriers=["wasteInRDF"],
+        nodes=["industrial_cluster"],
+    )
     
     adopt.fill_carrier_data(
         casepath,
