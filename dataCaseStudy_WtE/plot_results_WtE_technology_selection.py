@@ -11,6 +11,7 @@ import json
 import numpy as np
 from matplotlib import rcParams
 import warnings
+import pprint
 
 
 
@@ -19,27 +20,22 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8
 
 
 ## -----------------  Carbon and electricity price --------------------------
-explored_carbon_tax = [50, 75, 100,125, 150]
+explored_carbon_tax = [50, 75, 100]#,125, 150]
 explored_el_price = [25, 50, 75, 100,125] # average el prices explored in the analysis
 gas_price = 40
 import_price_RDF = 20
 
-path_processed_data = Path("./dataSources/data_processed.xlsx")
+path_processed_data = Path("../dataCaseStudy_Cement/dataSources/data_processed.xlsx")
 data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
 av_el_price = data["el_price_itNord"].mean()
 electricity_price_norm = data["el_price_itNord"]/av_el_price
 
-json_cement = Path("./technologies_json/CementEmitter.json")
-info_cement = json.loads(json_cement.read_text())
-emission_factor = info_cement["Performance"]["emission_factor"]
-json_heat_pump = Path("./technologies_json/HeatPump.json")
-info_heat_pump = json.loads(json_heat_pump.read_text())
-cop_hp = info_heat_pump["Performance"]["performance"]["out"]["heat"][1]
+
 
 
 num_el_prices = len(explored_el_price)
 num_carbon_tax = len(explored_carbon_tax)
-raw_results_path = Path("./raw_results")
+raw_results_path = Path("./raw_results/technology_selection")
 explored_carbon_tax_str = [str(r) for r in explored_carbon_tax]
 explored_el_price_str = [str(r) for r in explored_el_price]
 results_summary = {}
@@ -115,15 +111,15 @@ for j in range(0,num_carbon_tax):
             type_installed = "MEA"
             capex = w2e_design["capex_ccs"]
             opex_fixed = w2e_design["opex_fixed_ccs"]
-            opex_variable = w2e_design["opex_variable_ccs"]
+            #TODO change to opex_variable_ccs
+            opex_variable = w2e_design["opex_variable"]
             energy_cost = loss_el_revenues + extra_cost_boiler
             co2_captured = w2e_operation['CO2captured_var_output_ccs']
 
         
-        elif w2e_CaL_design["size"].iloc[0] > 0:
+        elif w2e_CaL_design["size"].iloc[0] > 0 and w2e_CaL_design["size_cal"].iloc[0]>0:
             w2e_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'WasteCaL_CCS')]
             revenue_el_cal = sum(w2e_operation['el_cal'] * el_price)
-            co2_captured = w2e_operation['CO2captured_var_output_ccs']
 
             
             type_installed = "CaL"
@@ -150,6 +146,18 @@ for j in range(0,num_carbon_tax):
         results_summary[carbon_tax_str][el_price_str]['type_installed'] = type_installed
 
 
+for carbon_tax_str, el_dict in results_summary.items():
+    print(f"\n=== Carbon tax: {carbon_tax_str} ===")
+
+    for el_price_str, vals in el_dict.items():
+        print(f"\n  Electricity price: {el_price_str}")
+        print("  ------------------------------")
+        print(f"    Capture type:        {vals.get('type_installed')}")
+        print(f"    CapEx total:        {vals.get('capex_tot')}")
+        print(f"    OpEx fixed:         {vals.get('opex_fixed')}")
+        print(f"    OpEx variable:      {vals.get('opex_variable')}")
+        print(f"    Energy cost:        {vals.get('energy_cost')}")
+        print(f"    Total CO₂ captured: {vals.get('tot_co2_captured')}")
 
 # Flatten nested dict into a list of rows
 data = []
@@ -199,7 +207,7 @@ plt.colorbar(im, label="LCOC [€/tCO$_2$]")
 plt.show()
 
 # --- Plot 2: Grid of installed type (categorical) ---
-types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + MEA"]
+types = ["none", "MEA", "CaL"]
 type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
 plt.figure(figsize=(7,5))
@@ -228,12 +236,10 @@ ax.legend(handles=patches, loc="lower center",
           bbox_to_anchor=(0.5, 1.05), ncol=len(types))
 
 plt.tight_layout()
-plt.show()
 
 
 
 # --- Plot 2: Grid of installed type (categorical) ---
-types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + MEA"]
 type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
 plt.figure(figsize=(7,5))
