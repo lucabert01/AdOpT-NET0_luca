@@ -45,7 +45,7 @@ electricity_price_norm = electricity_price_data["el_price_itNord"]/av_el_price
 
 
 for dh_ratio in explored_dh_ratio:
-    pyhub_dh_ratio = f"DH_ratio_{dh_ratio}"
+    pyhub_dh_ratio = f"dh_ratio_{dh_ratio}"
     pyhub[pyhub_dh_ratio] = {}
 
     for carbon_tax in explored_carbon_tax:
