@@ -26,7 +26,7 @@ data = pd.read_excel(path_processed_data)
 # General input data
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 explored_carbon_tax = [50, 75, 100,125, 150]
-explored_el_price = [25, 50, 75, 100,125] # average el prices explored in the analysis
+explored_el_price = [25, 50, 75, 100,125, 150, 175] # average el prices explored in the analysis
 explored_dh_ratio = [0.5, 0.75]
 plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
 gas_price = 40
