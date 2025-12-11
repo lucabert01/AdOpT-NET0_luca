@@ -147,6 +147,85 @@ def fill_carrier_data(
                 )  # Ensure directory exists
                 existing_data.to_csv(output_file, index=False, sep=";")
 
+def add_hourly_tech_info(
+    folder_path: str | Path,
+    data: float | pd.DataFrame,
+    columns: list = [],
+    technologies: list = [],
+    nodes: list = [],
+    investment_periods: list = None,
+):
+    """
+    Intoduce a technology input data for a time series based on a provided DataFrame and writes it to file.
+
+    Allows you to update co2_concentration of a technology that might install CCS.
+
+    :param str folder_path: Path to the folder containing the case study data
+    :param float | pd.DataFrame data: A DataFrame containing the new values for the hourly technology input data
+    :param list columns: Name of the columns that need to be changed
+    :param list investment_periods: Name of investment periods to be changed
+    :param list nodes: Name of the nodes that need to be changed
+    :param list technology: Name of the technology that need to be changed
+    """
+    # Convert to Path
+    if isinstance(folder_path, str):
+        folder_path = Path(folder_path)
+
+    # Read the topology json file
+    json_file_path = folder_path / "Topology.json"
+    with open(json_file_path, "r") as json_file:
+        topology = json.load(json_file)
+
+    # Define options
+    column_options = [
+        "co2_concentration",
+    ]
+
+    for period in (
+        investment_periods if investment_periods else topology["investment_periods"]
+    ):
+        for node_name in nodes if nodes else topology["nodes"]:
+            for tech in technologies:
+                tech_folder = (
+                        folder_path / period / "node_data" / node_name / "technology_data"
+                )
+                available_techs = {
+                    f.stem  # filename without ".json"
+                    for f in tech_folder.glob("*.json")
+                }
+                if tech in available_techs:
+                    # Fill in existing data with data from the provided DataFrame
+                    for column in columns if columns else column_options:
+                        # Write data to CSV file
+                        output_folder = (
+                                folder_path / period / "node_data" / node_name
+                        )
+                        filename = column + tech + ".csv"
+                        output_file = output_folder / filename
+                        if output_file.exists():
+                            existing_data = pd.read_csv(output_file, sep=";")
+                        else:
+                            existing_data = pd.DataFrame({column: data[column].values}) \
+                                if column in data.columns else pd.DataFrame({column: [None] * len(data)})
+
+                        if column in data.columns:
+                            existing_data[column] = data[column].values
+                        else:
+                            raise ValueError(
+                                f"Column {column} not found in the provided DataFrame"
+                            )
+
+
+                    # Save the updated data back to the CSV file
+                    output_file.parent.mkdir(
+                        parents=True, exist_ok=True
+                    )
+                    # Ensure directory exists
+                    existing_data.to_csv(output_file, index=False, sep=";")
+                else:
+                    raise ValueError(
+                        f"Technology {tech} not matching with any tech available in the case study"
+                    )
 
 def copy_technology_data(folder_path: str | Path, tec_data_path: str | Path = None):
     """

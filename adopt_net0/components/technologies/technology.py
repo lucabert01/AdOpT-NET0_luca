@@ -314,11 +314,11 @@ class Technology(ModelComponent):
 
         # CCS
         if self.ccs_possible:
-            co2_concentration = self.performance_data["ccs"]["co2_concentration"]
+
             self.ccs_data["name"] = "CCS"
             self.ccs_data["tec_type"] = self.ccs_type
             self.ccs_component = fit_ccs_coeff(
-                co2_concentration, self.ccs_data, climate_data
+                self.performance_data["ccs"], self.ccs_data,
             )
 
     def _calculate_bounds(self):

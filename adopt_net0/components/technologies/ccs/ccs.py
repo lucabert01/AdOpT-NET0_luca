@@ -21,7 +21,7 @@ class CcsComponent(ModelComponent):
         self.output_carrier = ccs_data["Performance"]["output_carrier"]
 
 
-def fit_ccs_coeff(co2_concentration: float, ccs_data: dict, climate_data: pd.DataFrame):
+def fit_ccs_coeff(tech_data: dict, ccs_data: dict, climate_data: pd.DataFrame):
     """
     Obtain bounds and input ratios for CCS
 
@@ -32,14 +32,16 @@ def fit_ccs_coeff(co2_concentration: float, ccs_data: dict, climate_data: pd.Dat
     mixed-integer linear model of post-combustion carbon capture for reliable use in energy system optimisation
     https://doi.org/10.1016/j.apenergy.2023.120738).
 
-    :param float co2_concentration: CO2 concentration for CCS
-    :param dict ccs_coeff: data of the CCS technology
+    :param dict tech_data: data with the characteristics of the technology that are relevant for the CCS unit
+    :param dict ccs_data: data of the CCS technology
     :param pd.Dataframe climate_data: dataframe containing climate data
     :return: CCS data updated with the bounds and input ratios for CCS
     """
+
     molar_mass_CO2 = 44.01
+    design_co2_concentration = ccs_data["co2_concentration"]
     # convert kmol/s of fluegas to ton/h of molar_mass_CO2 = 44.01
-    convert2t_per_h = molar_mass_CO2 * co2_concentration * 3.6
+    convert2t_per_h = molar_mass_CO2 * design_co2_concentration * 3.6
     capture_rate = ccs_data["Performance"]["capture_rate"]
     # Recalculate unit_capex in EUR/(t_CO2out/h)
     ccs_data["Economics"]["unit_capex"] = (
@@ -47,7 +49,7 @@ def fit_ccs_coeff(co2_concentration: float, ccs_data: dict, climate_data: pd.Dat
             ccs_data["Economics"]["capex_kappa"] / convert2t_per_h
             + ccs_data["Economics"]["capex_lambda"]
         )
-        * co2_concentration
+        * design_co2_concentration
     ) / convert2t_per_h
 
     ccs_data["Economics"]["fix_capex"] = ccs_data["Economics"]["capex_zeta"]
@@ -55,14 +57,21 @@ def fit_ccs_coeff(co2_concentration: float, ccs_data: dict, climate_data: pd.Dat
     ccs_data = CcsComponent(ccs_data)
 
     # Recalculate min/max size to have it in t/hCO2_out
-    ccs_data.size_min = ccs_data.size_min * co2_concentration * capture_rate
-    ccs_data.size_max = ccs_data.size_max * co2_concentration * capture_rate
+    ccs_data.size_min = ccs_data.size_min * design_co2_concentration * capture_rate
+    ccs_data.size_max = ccs_data.size_max * design_co2_concentration * capture_rate
 
     # Calculate input ratios
+    if ("co2_concentration_is_hourly" in tech_data.keys()
+            and tech_data["co2_concentration_is_hourly"]):
+        co2_concentration = tech_data["co2_concentration"]
+    else:
+        co2_concentration = design_co2_concentration
+
     ccs_data.processed_coeff.time_independent["size_min"] = ccs_data.size_min
     ccs_data.processed_coeff.time_independent["size_max"] = ccs_data.size_max
     ccs_data.processed_coeff.time_independent["capture_rate"] = capture_rate
     if "MEA" in ccs_data.technology_model:
+
         input_ratios = {}
         for car in ccs_data.input_carrier:
             input_ratios[car] = (
