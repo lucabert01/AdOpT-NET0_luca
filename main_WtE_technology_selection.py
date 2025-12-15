@@ -35,6 +35,7 @@ existing_boiler_size = max(data[f"emission_{plant_analyzed}"])/emission_factor*l
 wte_demand_is_averaged = 0
 heat_demand_is_averaged = 0
 rolling_av_hours = 24*7
+co2_concentration = data["co2_concentration_"+plant_analyzed]
 pyhub = {}
 
 path_processed_data = Path("dataCaseStudy_Cement/dataSources/data_processed.xlsx")
@@ -222,6 +223,15 @@ for dh_ratio in explored_dh_ratio:
                 carriers=["heat"],
                 nodes=["industrial_cluster"],
             )
+
+            tech_with_hourly_co2_concentration = ["WasteCHP", "WasteCaL_CCS"]
+            climate_data_file = (
+                    casepath / "period1" / "node_data" / "industrial_cluster" / "ClimateData.csv"
+            )
+            climate_data = pd.read_csv(climate_data_file)
+            for tech in tech_with_hourly_co2_concentration:
+                climate_data["co2_concentration_"+ tech] = co2_concentration.values
+            climate_data.to_csv(climate_data_file, index=False, sep=";")
 
 
             carbon_price = np.ones(8760) * carbon_tax

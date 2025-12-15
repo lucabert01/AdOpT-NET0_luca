@@ -24,6 +24,7 @@ carbon_tax = 100
 gas_price = 40
 explored_dh_ratio = [0, 0.25, 0.5, 0.75,1] # ratio of peak DH demand to supply compared to peak heat prod. from WtE
 existing_boiler_size = max(data[f"emission_{plant_analyzed}"])/emission_factor*lhv*th_efficiency
+co2_concentration = data["co2_concentration_"+plant_analyzed]
 wte_demand_is_averaged = 0
 heat_demand_is_averaged = 0
 rolling_av_hours = 24*7
@@ -206,7 +207,15 @@ for dh_ratio in explored_dh_ratio:
         carriers=["heat"],
         nodes=["industrial_cluster"],
     )
-
+    # Add hourly co2 concentration to ClimateData
+    tech_with_hourly_co2_concentration = ["WasteCHP"]
+    climate_data_file = (
+            casepath / "period1" / "node_data" / "industrial_cluster" / "ClimateData.csv"
+    )
+    climate_data = pd.read_csv(climate_data_file)
+    for tech in tech_with_hourly_co2_concentration:
+        climate_data["co2_concentration_" + tech] = co2_concentration.values
+    climate_data.to_csv(climate_data_file, index=False, sep=";")
     
     carbon_price = np.ones(8760) * carbon_tax
     carbon_cost_path = (
