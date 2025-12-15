@@ -223,14 +223,15 @@ for dh_ratio in explored_dh_ratio:
                 carriers=["heat"],
                 nodes=["industrial_cluster"],
             )
-            # hourly co2 concentration
-            adopt.add_hourly_tech_info(
-                casepath,
-                data=heat_demand,
-                columns=["co2_concentration"],
-                technologies=["WasteCHP", "WasteCaL_CCS"],
-                nodes=["industrial_cluster"],
+
+            tech_with_hourly_co2_concentration = ["WasteCHP", "WasteCaL_CCS"]
+            climate_data_file = (
+                    casepath / "period1" / "node_data" / "industrial_cluster" / "ClimateData.csv"
             )
+            climate_data = pd.read_csv(climate_data_file)
+            for tech in tech_with_hourly_co2_concentration:
+                climate_data["co2_concentration_"+ tech] = co2_concentration.values
+            climate_data.to_csv(climate_data_file, index=False, sep=";")
 
 
             carbon_price = np.ones(8760) * carbon_tax
