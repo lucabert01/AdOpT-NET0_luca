@@ -21,7 +21,7 @@ class CcsComponent(ModelComponent):
         self.output_carrier = ccs_data["Performance"]["output_carrier"]
 
 
-def fit_ccs_coeff(tech_data: dict, ccs_data: dict, climate_data: pd.DataFrame):
+def fit_ccs_coeff(tech_data: dict, ccs_data: dict, tech_name: str, climate_data: pd.DataFrame):
     """
     Obtain bounds and input ratios for CCS
 
@@ -34,12 +34,13 @@ def fit_ccs_coeff(tech_data: dict, ccs_data: dict, climate_data: pd.DataFrame):
 
     :param dict tech_data: data with the characteristics of the technology that are relevant for the CCS unit
     :param dict ccs_data: data of the CCS technology
+    :param str tech_name: name of the technology
     :param pd.Dataframe climate_data: dataframe containing climate data
     :return: CCS data updated with the bounds and input ratios for CCS
     """
 
     molar_mass_CO2 = 44.01
-    design_co2_concentration = ccs_data["co2_concentration"]
+    design_co2_concentration = tech_data["co2_concentration"]
     # convert kmol/s of fluegas to ton/h of molar_mass_CO2 = 44.01
     convert2t_per_h = molar_mass_CO2 * design_co2_concentration * 3.6
     capture_rate = ccs_data["Performance"]["capture_rate"]
@@ -61,11 +62,13 @@ def fit_ccs_coeff(tech_data: dict, ccs_data: dict, climate_data: pd.DataFrame):
     ccs_data.size_max = ccs_data.size_max * design_co2_concentration * capture_rate
 
     # Calculate input ratios
-    if ("co2_concentration_is_hourly" in tech_data.keys()
-            and tech_data["co2_concentration_is_hourly"]):
-        co2_concentration = tech_data["co2_concentration"]
+    if tech_data.get("co2_concentration_is_hourly", False):
+        co2_concentration = climate_data["co2_concentration_"+tech_name].values
+        ccs_data.processed_coeff.time_dependent_full["input_ratios"] = {}
+        input_ratios_container  = ccs_data.processed_coeff.time_dependent_full["input_ratios"]
     else:
         co2_concentration = design_co2_concentration
+        input_ratios_container = ccs_data.processed_coeff.time_independent["input_ratios"]
 
     ccs_data.processed_coeff.time_independent["size_min"] = ccs_data.size_min
     ccs_data.processed_coeff.time_independent["size_max"] = ccs_data.size_max
@@ -74,11 +77,10 @@ def fit_ccs_coeff(tech_data: dict, ccs_data: dict, climate_data: pd.DataFrame):
 
         input_ratios = {}
         for car in ccs_data.input_carrier:
-            input_ratios[car] = (
+            input_ratios_container[car] = (
                 ccs_data.performance_data["eta"][car]
                 + ccs_data.performance_data["omega"][car] * co2_concentration
             ) / (co2_concentration * molar_mass_CO2 * 3.6)
-        ccs_data.processed_coeff.time_independent["input_ratios"] = input_ratios
     else:
         raise Exception(
             "Only CCS type MEA is modelled so far. ccs_type in the json file of the "
