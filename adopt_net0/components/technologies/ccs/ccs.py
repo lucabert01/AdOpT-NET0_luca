@@ -64,6 +64,10 @@ def fit_ccs_coeff(tech_data: dict, ccs_data: dict, tech_name: str, climate_data:
     # Calculate input ratios
     if tech_data.get("co2_concentration_is_hourly", False):
         co2_concentration = climate_data["co2_concentration_"+tech_name].values
+        if not ((co2_concentration > 0).all() and (co2_concentration <= 1).all()):
+            raise ValueError(
+                f"co2_concentration_{tech_name} must be between 0 and 1 (exclusive of 0). "
+            )
         ccs_data.processed_coeff.time_dependent_full["input_ratios"] = {}
         input_ratios_container  = ccs_data.processed_coeff.time_dependent_full["input_ratios"]
     else:
@@ -74,13 +78,12 @@ def fit_ccs_coeff(tech_data: dict, ccs_data: dict, tech_name: str, climate_data:
     ccs_data.processed_coeff.time_independent["size_max"] = ccs_data.size_max
     ccs_data.processed_coeff.time_independent["capture_rate"] = capture_rate
     if "MEA" in ccs_data.technology_model:
-
-        input_ratios = {}
         for car in ccs_data.input_carrier:
+            el_consumption_compression = ccs_data.performance_data["el_consumption_compression"] / capture_rate if car=="electricity" else 0
             input_ratios_container[car] = (
                 ccs_data.performance_data["eta"][car]
                 + ccs_data.performance_data["omega"][car] * co2_concentration
-            ) / (co2_concentration * molar_mass_CO2 * 3.6)
+            ) / (co2_concentration * molar_mass_CO2 * 3.6)  + el_consumption_compression
     else:
         raise Exception(
             "Only CCS type MEA is modelled so far. ccs_type in the json file of the "
