@@ -8,6 +8,5 @@ from .data_loading import (
     copy_network_data,
     copy_technology_data,
     fill_carrier_data,
-    add_hourly_tech_info,
     load_climate_data_from_api,
 )
