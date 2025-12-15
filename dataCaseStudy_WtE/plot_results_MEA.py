@@ -272,13 +272,22 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
     boiler_output_frac = []
     co2_captured_frac = []
 
+    normalization = "max_wte_heat_prod" #"hourly_wte_heat_prod" "max_wte_heat_prod"
+
+
     for j in range(len(total_heat_production)):
+        if normalization == ["hourly_wte_heat_prod"]:
+            denominator = total_heat_production[j]
+        else:
+            denominator = max(total_heat_production)
+
+
         if total_heat_production[j] > 0:
-            heat_for_ccs.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_heat_ccs'][j] / total_heat_production[j])
-            wte_heat_to_demand.append(results_summary[dh_ratio_str]['hourly_wte_heat_to_demand'][j] / total_heat_production[j])
-            wte_heat_for_el.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_el'][j] / total_heat_production[j])
-            wte_heat_for_el_ccs.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_el_ccs'][j] / total_heat_production[j])
-            boiler_output_frac.append(results_summary[dh_ratio_str]['hourly_boiler_heat_out'][j] / total_heat_production[j])
+            heat_for_ccs.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_heat_ccs'][j] / denominator)
+            wte_heat_to_demand.append(results_summary[dh_ratio_str]['hourly_wte_heat_to_demand'][j] / denominator)
+            wte_heat_for_el.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_el'][j] / denominator)
+            wte_heat_for_el_ccs.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_el_ccs'][j] / denominator)
+            boiler_output_frac.append(results_summary[dh_ratio_str]['hourly_boiler_heat_out'][j] / denominator)
             co2_captured_frac.append(results_summary[dh_ratio_str]['hourly_co2_captured'][j] / results_summary['hourly_emissions'][j])
         else:
             heat_for_ccs.append(0)
@@ -333,6 +342,16 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
     ax.set_xlabel("Time [h]")
     ax.set_ylabel("Fraction of heat [-]")
     ax.set_ylim(0, 1.5)
+    # Annotation: DH ratio at top-center of each subplot
+    ax.text(
+        0.5, 0.97,
+        f"DH ratio {dh_ratio_str}",
+        transform=ax.transAxes,
+        ha="center",
+        va="top",
+        fontsize=16,
+        bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.8, edgecolor="none")
+    )
 
 # Remove unused axes
 for j in range(i + 1, len(axes)):
