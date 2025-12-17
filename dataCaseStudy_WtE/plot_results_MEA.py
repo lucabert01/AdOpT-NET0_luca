@@ -151,7 +151,8 @@ for i in range(0,len(file_names)):
     results_summary[dh_ratio_str]['tot_co2_captured'] = sum(co2_captured_w2e)
     results_summary['hourly_emissions'] = emissions_w2e
     results_summary['hourly_wasteProcessed'] = waste_processed_out
-
+    results_summary[dh_ratio_str]['heat_demand'] = heat_demand
+    results_summary[dh_ratio_str]['hourly_wte_heat_for_heat_ccs'] = w2e_output['heat_var_input_ccs'] / th_efficiency
 
 # # Plot
 # fraction_size_ccs = [results_summary[dh]['fraction_size_ccs'] for dh in explored_dh_ratio_str]
@@ -272,19 +273,28 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
     boiler_output_frac = []
     co2_captured_frac = []
 
-    normalization = "max_wte_heat_prod" #"hourly_wte_heat_prod" "max_wte_heat_prod"
+    normalization_hourly = 0
 
 
     for j in range(len(total_heat_production)):
-        if normalization == ["hourly_wte_heat_prod"]:
+        if normalization_hourly:
             denominator = total_heat_production[j]
         else:
             denominator = max(total_heat_production)
 
 
         if total_heat_production[j] > 0:
+            # Version 1
+            # heat_for_ccs.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_heat_ccs'][j] / denominator)
+            # wte_heat_to_demand.append(results_summary[dh_ratio_str]['hourly_wte_heat_to_demand'][j] / denominator)
+            # wte_heat_for_el.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_el'][j] / denominator)
+            # wte_heat_for_el_ccs.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_el_ccs'][j] / denominator)
+            # boiler_output_frac.append(results_summary[dh_ratio_str]['hourly_boiler_heat_out'][j] / denominator)
+            # co2_captured_frac.append(results_summary[dh_ratio_str]['hourly_co2_captured'][j] / results_summary['hourly_emissions'][j])
+
+            # Version 2
             heat_for_ccs.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_heat_ccs'][j] / denominator)
-            wte_heat_to_demand.append(results_summary[dh_ratio_str]['hourly_wte_heat_to_demand'][j] / denominator)
+            wte_heat_to_demand.append(results_summary[dh_ratio_str]['heat_demand'][j] / denominator)
             wte_heat_for_el.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_el'][j] / denominator)
             wte_heat_for_el_ccs.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_el_ccs'][j] / denominator)
             boiler_output_frac.append(results_summary[dh_ratio_str]['hourly_boiler_heat_out'][j] / denominator)
@@ -298,6 +308,7 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
             co2_captured_frac.append(0)
 
     time = range(len(heat_for_ccs))
+
 
     # Stacked area plot
     ax.stackplot(
@@ -324,24 +335,12 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
         linewidth=1.5,
         label="Boiler output"
     )
-    # ax2 = ax.twinx()
-    # ax2.plot(
-    #     time,
-    #     pd.Series(co2_captured_frac).rolling(window=rolling_av_hours).mean(),
-    #     color="black",
-    #     linestyle="--",
-    #     linewidth=1.2,
-    #     label="CO₂ captured"
-    # )
-    # ax2.set_ylabel("Fraction CO₂ captured [-]")  # adjust units to your data
-    # ax.set_title(dh_ratio_str)
-    # ax.set_xlabel("Time [h]")
-    # ax.set_ylabel("Fraction of total heat [-]")
-    # ax.set_ylim(0, 1)
+
 
     ax.set_xlabel("Time [h]")
     ax.set_ylabel("Fraction of heat [-]")
     ax.set_ylim(0, 1.5)
+    ax.set_xlim(0, 8760)
     # Annotation: DH ratio at top-center of each subplot
     ax.text(
         0.5, 0.97,
@@ -352,7 +351,46 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
         fontsize=16,
         bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.8, edgecolor="none")
     )
-
+    # # Shade for section when the boiler is active
+    # ax.axhspan(
+    #     1.0, ax.get_ylim()[1],
+    #     facecolor="grey",
+    #     alpha=0.15,
+    #     zorder=0
+    # )
+    # # Horizontal reference line at y = 1 (WtE-only limit)
+    # ax.axhline(
+    #     1.0,
+    #     color="grey",
+    #     linewidth=1.2,
+    #     linestyle="--",
+    #     alpha=0.8,
+    #     zorder=2
+    # )
+    # if i == 0:  # annotate only once to avoid clutter
+    #     ax.annotate(
+    #         "Boiler active",
+    #         xy=(0.15, 1.0),  # arrow tip (x in axes frac, y in data)
+    #         xycoords=ax.get_yaxis_transform(),
+    #         xytext=(0.15, 1.18),  # text position
+    #         textcoords=ax.get_yaxis_transform(),
+    #         ha="left",
+    #         va="bottom",
+    #         fontsize=12,
+    #         color="black",
+    #         arrowprops=dict(
+    #             arrowstyle="->",
+    #             color="grey",
+    #             linewidth=1.2,
+    #             alpha=0.8
+    #         ),
+    #         bbox=dict(
+    #             boxstyle="round,pad=0.25",
+    #             facecolor="white",
+    #             edgecolor="none",
+    #             alpha=0.8
+    #         )
+    #     )
 # Remove unused axes
 for j in range(i + 1, len(axes)):
     fig.delaxes(axes[j])
@@ -364,6 +402,8 @@ fig.legend(handles, labels, loc="upper center", ncol=5)
 plt.tight_layout(rect=[0, 0, 1, 0.95])  # leave space for global legend
 plt.show()
 save_figure_for_paper(fig, "MEA_operations_allDH", results_path)
+
+
 
 
 ## Plot the economics
