@@ -30,6 +30,7 @@ path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestud
 data = pd.read_excel(path_processed_data)
 av_el_price = data["el_price_itNord"].mean()
 electricity_price_norm = data["el_price_itNord"]/av_el_price
+co2_concentration = data["co2_concentration_"+plant_analyzed]
 pyhub = {}
 
 for av_el_price in explored_el_price:
@@ -210,6 +211,14 @@ for av_el_price in explored_el_price:
         nodes=["industrial_cluster"],
     )
 
+    tech_with_hourly_co2_concentration = ["WasteCaL_CCS"]
+    climate_data_file = (
+            casepath / "period1" / "node_data" / "industrial_cluster" / "ClimateData.csv"
+    )
+    climate_data = pd.read_csv(climate_data_file)
+    for tech in tech_with_hourly_co2_concentration:
+        climate_data["co2_concentration_" + tech] = co2_concentration.values
+    climate_data.to_csv(climate_data_file, index=False, sep=";")
     
     carbon_price = np.ones(8760) * carbon_tax
     carbon_cost_path = (
