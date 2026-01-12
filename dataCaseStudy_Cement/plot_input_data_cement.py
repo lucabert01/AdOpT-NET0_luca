@@ -41,9 +41,8 @@ plt.figure()
 plt.plot(clinker_demand.index,
          clinker_demand,
          color=batlow_colors[2])
-plt.title(f"Clinker Demand – {plant_analyzed}")
 plt.xlabel("Time")
-plt.ylabel("Clinker demand")
+plt.ylabel("Clinker production")
 plt.tight_layout()
 plt.show()
 

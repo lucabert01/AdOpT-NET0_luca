@@ -155,66 +155,66 @@ plt.tight_layout()
 
 
 
-##------------------------------------ fancy visualization ---------------------------------
-variables = {
-    "Electricity Price (norm)": electricity_price_norm,
-    "Normalized Heat Demand": norm_heat_demand,
-    "Waste Processed Demand": wasteProcessed_demand,
-    "CO2 Concentration": co2_concentration
-}
-
-
-# --- Figure setup ---
-sns.set_theme(style="darkgrid")
-fig, axes = plt.subplots(len(variables), 3, figsize=(18, 4*len(variables)))
-rolling_window = 24
-quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]
-
-for row_idx, (name, series) in enumerate(variables.items()):
-    # Ensure datetime index
-    start_time = pd.Timestamp("2025-01-01 00:00")
-    series.index = pd.date_range(start=start_time, periods=len(series), freq="H")
-
-    # --- 1. Raw data + rolling quantiles ---
-    rolling_q = pd.DataFrame({q: series.rolling(rolling_window, min_periods=1).quantile(q) for q in quantiles})
-    ax = axes[row_idx,0]
-    ax.plot(series.index, series, color='lightgrey', alpha=0.5, label='Raw data')
-    # Rolling median
-    ax.plot(rolling_q[0.5].index, rolling_q[0.5], color=batlow_colors[2], label='Median')
-    # IQR
-    ax.fill_between(rolling_q[0.25].index, rolling_q[0.25], rolling_q[0.75],
-                    color=batlow_colors[2], alpha=0.3, label='IQR')
-    # 5–95%
-    ax.fill_between(rolling_q[0.05].index, rolling_q[0.05], rolling_q[0.95],
-                    color=batlow_colors[3], alpha=0.2, label='5-95%')
-    ax.set_title(f"{name} — Raw + Rolling Quantiles")
-    ax.set_xlabel("Time")
-    ax.set_ylabel(name)
-    if row_idx==0:
-        ax.legend(loc='upper right')
-
-    # --- 2. Hour-of-day heatmap ---
-    df_heat = pd.DataFrame({
-        "day": series.index.date,
-        "hour": series.index.hour,
-        "value": series.values
-    })
-    df_pivot = df_heat.pivot_table(index="hour", columns="day", values="value", aggfunc="mean")
-    ax = axes[row_idx,1]
-    sns.heatmap(df_pivot, cmap="viridis", cbar_kws={"label": name}, ax=ax)
-    ax.set_title(f"{name} — Hour-of-Day Heatmap")
-    ax.set_xlabel("Day")
-    ax.set_ylabel("Hour of Day")
-
-    # --- 3. Diurnal distribution (hourly violins) ---
-    df_hourly = series.groupby(series.index.hour).apply(list)
-    ax = axes[row_idx,2]
-    sns.violinplot(data=df_hourly.tolist(), palette=batlow_colors[:len(df_hourly)], ax=ax, inner='quartile')
-    ax.set_xticks(range(24))
-    ax.set_xticklabels(range(24))
-    ax.set_title(f"{name} — Diurnal Distribution")
-    ax.set_xlabel("Hour of Day")
-    ax.set_ylabel(name)
-
-plt.tight_layout()
+# ##------------------------------------ fancy visualization ---------------------------------
+# variables = {
+#     "Electricity Price (norm)": electricity_price_norm,
+#     "Normalized Heat Demand": norm_heat_demand,
+#     "Waste Processed Demand": wasteProcessed_demand,
+#     "CO2 Concentration": co2_concentration
+# }
+#
+#
+# # --- Figure setup ---
+# sns.set_theme(style="darkgrid")
+# fig, axes = plt.subplots(len(variables), 3, figsize=(18, 4*len(variables)))
+# rolling_window = 24
+# quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]
+#
+# for row_idx, (name, series) in enumerate(variables.items()):
+#     # Ensure datetime index
+#     start_time = pd.Timestamp("2025-01-01 00:00")
+#     series.index = pd.date_range(start=start_time, periods=len(series), freq="H")
+#
+#     # --- 1. Raw data + rolling quantiles ---
+#     rolling_q = pd.DataFrame({q: series.rolling(rolling_window, min_periods=1).quantile(q) for q in quantiles})
+#     ax = axes[row_idx,0]
+#     ax.plot(series.index, series, color='lightgrey', alpha=0.5, label='Raw data')
+#     # Rolling median
+#     ax.plot(rolling_q[0.5].index, rolling_q[0.5], color=batlow_colors[2], label='Median')
+#     # IQR
+#     ax.fill_between(rolling_q[0.25].index, rolling_q[0.25], rolling_q[0.75],
+#                     color=batlow_colors[2], alpha=0.3, label='IQR')
+#     # 5–95%
+#     ax.fill_between(rolling_q[0.05].index, rolling_q[0.05], rolling_q[0.95],
+#                     color=batlow_colors[3], alpha=0.2, label='5-95%')
+#     ax.set_title(f"{name} — Raw + Rolling Quantiles")
+#     ax.set_xlabel("Time")
+#     ax.set_ylabel(name)
+#     if row_idx==0:
+#         ax.legend(loc='upper right')
+#
+#     # --- 2. Hour-of-day heatmap ---
+#     df_heat = pd.DataFrame({
+#         "day": series.index.date,
+#         "hour": series.index.hour,
+#         "value": series.values
+#     })
+#     df_pivot = df_heat.pivot_table(index="hour", columns="day", values="value", aggfunc="mean")
+#     ax = axes[row_idx,1]
+#     sns.heatmap(df_pivot, cmap="viridis", cbar_kws={"label": name}, ax=ax)
+#     ax.set_title(f"{name} — Hour-of-Day Heatmap")
+#     ax.set_xlabel("Day")
+#     ax.set_ylabel("Hour of Day")
+#
+#     # --- 3. Diurnal distribution (hourly violins) ---
+#     df_hourly = series.groupby(series.index.hour).apply(list)
+#     ax = axes[row_idx,2]
+#     sns.violinplot(data=df_hourly.tolist(), palette=batlow_colors[:len(df_hourly)], ax=ax, inner='quartile')
+#     ax.set_xticks(range(24))
+#     ax.set_xticklabels(range(24))
+#     ax.set_title(f"{name} — Diurnal Distribution")
+#     ax.set_xlabel("Hour of Day")
+#     ax.set_ylabel(name)
+#
+# plt.tight_layout()
 plt.show()
