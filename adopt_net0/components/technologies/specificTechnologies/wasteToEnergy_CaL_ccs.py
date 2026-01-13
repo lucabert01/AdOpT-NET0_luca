@@ -33,6 +33,57 @@ class WasteToEnergyCaLCCS(Technology):
         self.main_input_carrier = tec_data["Performance"][
             "main_input_carrier"
         ]
+    def fit_technology_performance(self, climate_data: pd.DataFrame, location: dict):
+        """
+        Fits the technology performance
+
+        :param pd.Dataframe climate_data: dataframe containing climate data
+        :param dict location: dict containing location details
+        """
+        super(WasteToEnergyCaLCCS, self).fit_technology_performance(climate_data, location)
+
+        other_data_path = Path(__file__).parent.parent.parent.parent
+        other_data_path = (
+                other_data_path
+                / "database/templates/technology_data/Industrial/WasteCaL_data/wasteCaL_sheet.xlsx"
+        )
+
+        emission_factor_data = pd.read_excel(
+            other_data_path, sheet_name="emission_factor_waste", index_col=0
+        )
+        # TODO: make emission factor based on hourly co2 concentration
+        possible_concentrations = emission_factor_data.columns.tolist()
+        co2_concentration = self.performance_data["design_co2_concentration"]
+
+        interp = interp1d(possible_concentrations, emission_factor_data.loc["emission_factor_tco2_twaste"],
+                          kind="linear",
+                          fill_value="extrapolate")
+        emission_factor = interp(co2_concentration)
+        self.performance_data["emission_factor"] = emission_factor
+
+        el_efficiency_cal_hourly = []
+        if self.performance_data["co2_concentration_is_hourly"]:
+            offdesign_co2_conc = pd.read_excel(
+                other_data_path, sheet_name="offdesign_results", index_col=0
+            )
+            co2_concentration = climate_data[f"co2_concentration_{self.name}"]
+            rel_eff_variation_down_conc = offdesign_co2_conc.loc["down conc", "rel_el_eff_variation"]
+            rel_eff_variation_up_conc = offdesign_co2_conc.loc["up conc", "rel_el_eff_variation"]
+            el_efficiency_design = self.performance_data["el_efficiency_CaL"]
+            design_co2_conc = self.performance_data["design_co2_concentration"]
+            for t in range(len(co2_concentration)):
+                if co2_concentration[t] >= design_co2_conc:
+                    var = rel_eff_variation_up_conc
+                else:
+                    var = rel_eff_variation_down_conc
+
+                el_efficiency_cal_hourly.append(el_efficiency_design*
+                                                    (1+var*(co2_concentration[t]-design_co2_conc)))
+
+            self.processed_coeff.time_dependent_full["el_efficiency_cal_hourly"] = el_efficiency_cal_hourly
+        self.processed_coeff.time_independent["max_el_efficiency_cal"] = max(el_efficiency_cal_hourly) if self.performance_data["co2_concentration_is_hourly"] else el_efficiency_design
+
+
 
     def _define_size(self, b_tec):
         """
@@ -61,28 +112,13 @@ class WasteToEnergyCaLCCS(Technology):
         """
         super(WasteToEnergyCaLCCS, self)._calculate_bounds()
 
-        other_data_path = Path(__file__).parent.parent.parent.parent
-        other_data_path = (
-                other_data_path
-                / "database/templates/technology_data/Industrial/WasteCaL_data/wasteCaL_sheet.xlsx"
-        )
 
-        emission_factor_data = pd.read_excel(
-            other_data_path, sheet_name="emission_factor_waste", index_col=0
-        )
-
-        possible_concentrations = emission_factor_data.columns.tolist()
-        co2_concentration = self.performance_data["co2_concentration"]
-
-        interp = interp1d(possible_concentrations, emission_factor_data.loc["emission_factor_tco2_twaste"], kind="linear",
-                                          fill_value="extrapolate")
-        emission_factor = interp(co2_concentration)
-        self.performance_data["emission_factor"] = emission_factor
+        emission_factor = self.performance_data["emission_factor"]
         time_steps = len(self.set_t_performance)
         th_efficiency = self.performance_data["th_efficiency"]
         el_efficiency = self.performance_data["el_efficiency"]
         emission_factor_RDF = self.performance_data["emission_factor_RDF"]
-        el_efficiency_CaL = self.performance_data["el_efficiency_CaL"]
+        el_efficiency_CaL = self.processed_coeff.time_independent["max_el_efficiency_cal"]
         th_input_CaL = self.performance_data["th_input_CaL"]
         ccr = self.performance_data["capture_rate"]
         lhv = self.performance_data["LHV"]
@@ -232,7 +268,7 @@ class WasteToEnergyCaLCCS(Technology):
         b_tec.var_el_cal = pyo.Var(
             self.set_t_performance,
             domain=pyo.NonNegativeReals,
-            bounds=(0, size_max_cal*th_input_CaL*el_efficiency_CaL)
+            bounds=(0, size_max_cal*th_input_CaL*self.processed_coeff.time_independent["max_el_efficiency_cal"])
         )
 
         b_tec.var_el_wte = pyo.Var(
@@ -243,7 +279,10 @@ class WasteToEnergyCaLCCS(Technology):
 
         #Force the el production from CaL to be linked to the CO2 capturing (RDF is linked to CO2captured later)
         def init_el_cal(const, t):
-            return b_tec.var_el_cal[t] == self.input[t, "wasteInRDF"]*lhv_RDF*el_efficiency_CaL
+            if self.performance_data["co2_concentration_is_hourly"]:
+                return b_tec.var_el_cal[t] == self.input[t, "wasteInRDF"] * lhv_RDF * self.processed_coeff.time_dependent_full["el_efficiency_cal_hourly"][t-1]
+            else:
+                return b_tec.var_el_cal[t] == self.input[t, "wasteInRDF"]*lhv_RDF*el_efficiency_CaL
 
         b_tec.const_el_cal = pyo.Constraint(self.set_t_performance, rule=init_el_cal)
 
@@ -430,7 +469,7 @@ class WasteToEnergyCaLCCS(Technology):
 
         self.economics["bp_x_capex_cal"] = capex_data.index.tolist()
         possible_concentrations = capex_data.columns.tolist()
-        co2_concentration = self.performance_data["co2_concentration"]
+        co2_concentration = self.performance_data["design_co2_concentration"]
         bp_y_capex_cal_adjusted = []
         for s in self.economics["bp_x_capex_cal"]:
             capex_interpolated = interp1d(possible_concentrations, capex_data.loc[s], kind="linear", fill_value="extrapolate")

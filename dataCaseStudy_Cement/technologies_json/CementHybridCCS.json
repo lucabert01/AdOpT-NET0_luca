@@ -54,7 +54,7 @@
     "clinker_capacity_is_fixed": 0,
     "prod_capacity_clinker": 80,
     "co2_out_is_compressed": 1,
-    "phase_of_co2_out": "gas",
+    "phase_of_co2_out": "supercritical",
     "input_carrier": [
       "extra_fuel",
       "electricity"
