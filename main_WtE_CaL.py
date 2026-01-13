@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 from adopt_net0.data_preprocessing import load_climate_data_from_api
-
+import os
 # Specify the path to your input data
 casepath= Path("CaseStudies_WtE/CaL")
 json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
@@ -30,6 +30,8 @@ path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestud
 data = pd.read_excel(path_processed_data)
 av_el_price = data["el_price_itNord"].mean()
 electricity_price_norm = data["el_price_itNord"]/av_el_price
+co2_concentration = data["co2_concentration_"+plant_analyzed]
+distance_to_stor = 100
 pyhub = {}
 
 for av_el_price in explored_el_price:
@@ -38,7 +40,7 @@ for av_el_price in explored_el_price:
     with open(casepath / "Topology.json", "r") as json_file:
         topology = json.load(json_file)
     # Nodes
-    topology["nodes"] = ["industrial_cluster"]
+    topology["nodes"] = ["storage", "industrial_cluster"]
     # Carriers:
     topology["carriers"] = [
         "electricity",
@@ -81,7 +83,16 @@ for av_el_price in explored_el_price:
     node_location.at["industrial_cluster", "alt"] = 10
     node_location = node_location.reset_index()
     node_location.to_csv(casepath / "NodeLocations.csv", sep=";", index=False)
-    
+
+    # Add technologies
+    with open(casepath / "period1" / "node_data" / "storage" / "Technologies.json", "r") as json_file:
+        technologies = json.load(json_file)
+    technologies["new"] = ["PermanentStorage_CO2_simple"]
+
+    with open(casepath / "period1" / "node_data" / "storage" / "Technologies.json", "w") as json_file:
+        json.dump(technologies, json_file, indent=4)
+
+
     with open(
         casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
     ) as json_file:
@@ -96,8 +107,48 @@ for av_el_price in explored_el_price:
     
     # Copy over technology files
     adopt.copy_technology_data(casepath, json_files_path)
-    
-    
+
+    # Add networks
+    with open(casepath / "period1" / "Networks.json", "r") as json_file:
+        networks = json.load(json_file)
+    networks["new"] = ["CO2PipelineOnshore"]
+
+    with open(casepath / "period1" / "Networks.json", "w") as json_file:
+        json.dump(networks, json_file, indent=4)
+
+    # Make a new folder for the new network
+    os.makedirs(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore", exist_ok=True)
+    # max size arc
+    arc_size = pd.read_csv(casepath / "period1" / "network_topology" / "new" / "size_max_arcs.csv", sep=";",
+                           index_col=0)
+    arc_size.loc["industrial_cluster", "storage"] = 10000
+    arc_size.to_csv(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore" / "size_max_arcs.csv",
+                    sep=";")
+    print("Max size per arc:", arc_size)
+
+    # Use the templates, fill and save them to the respective directory
+    # Connection
+    connection = pd.read_csv(casepath / "period1" / "network_topology" / "new" / "connection.csv", sep=";", index_col=0)
+    connection.loc["industrial_cluster", "storage"] = 1
+    connection.to_csv(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore" / "connection.csv",
+                      sep=";")
+    print("Connection:", connection)
+
+    # Delete the template
+    os.remove(casepath / "period1" / "network_topology" / "new" / "connection.csv")
+
+    # Distance
+    distance = pd.read_csv(casepath / "period1" / "network_topology" / "new" / "distance.csv", sep=";", index_col=0)
+    distance.loc["industrial_cluster", "storage"] = distance_to_stor
+    distance.to_csv(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore" / "distance.csv", sep=";")
+    print("Distance:", distance)
+
+    # Delete the template
+    os.remove(casepath / "period1" / "network_topology" / "new" / "distance.csv")
+
+    # Delete the max_size_arc template
+    os.remove(casepath / "period1" / "network_topology" / "new" / "size_max_arcs.csv")
+
     # Import hourly profiles
     electricity_price = electricity_price_norm*av_el_price
     if wte_demand_is_averaged:
@@ -210,6 +261,29 @@ for av_el_price in explored_el_price:
         nodes=["industrial_cluster"],
     )
 
+    adopt.fill_carrier_data(
+        casepath,
+        value_or_data=1000,
+        columns=["Import limit"],
+        carriers=["electricity"],
+        nodes=["storage"],
+    )
+
+    adopt.fill_carrier_data(
+        casepath,
+        value_or_data=electricity_price,
+        columns=["Import price"],
+        carriers=["electricity"],
+        nodes=["storage"],
+    )
+    tech_with_hourly_co2_concentration = ["WasteCaL_CCS"]
+    climate_data_file = (
+            casepath / "period1" / "node_data" / "industrial_cluster" / "ClimateData.csv"
+    )
+    climate_data = pd.read_csv(climate_data_file)
+    for tech in tech_with_hourly_co2_concentration:
+        climate_data["co2_concentration_" + tech] = co2_concentration.values
+    climate_data.to_csv(climate_data_file, index=False, sep=";")
     
     carbon_price = np.ones(8760) * carbon_tax
     carbon_cost_path = (
