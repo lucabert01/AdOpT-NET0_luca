@@ -9,6 +9,7 @@ import os
 # Specify the path to your input data
 casepath= Path("CaseStudies_WtE/technology_selection")
 json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
+json_files_path_network = Path("./dataCaseStudy_WtE/network_json")
 result_path = "./dataCaseStudy_WtE/raw_results/technology_selection"
 
 adopt.create_optimization_templates(casepath)
@@ -97,9 +98,10 @@ for dh_ratio in explored_dh_ratio:
             adopt.create_input_data_folder_template(casepath)
 
             node_location = pd.read_csv(casepath / "NodeLocations.csv", sep=";", index_col=0, header=0)
-            node_location.at["industrial_cluster", "lon"] = 10
-            node_location.at["industrial_cluster", "lat"] = 10
-            node_location.at["industrial_cluster", "alt"] = 10
+            for node in topology["nodes"]:
+                node_location.at[node, "lon"] = 10
+                node_location.at[node, "lat"] = 10
+                node_location.at[node, "alt"] = 10
             node_location = node_location.reset_index()
             node_location.to_csv(casepath / "NodeLocations.csv", sep=";", index=False)
 
@@ -133,6 +135,8 @@ for dh_ratio in explored_dh_ratio:
 
             with open(casepath / "period1" / "Networks.json", "w") as json_file:
                 json.dump(networks, json_file, indent=4)
+
+            adopt.copy_network_data(casepath, json_files_path_network)
 
             # Make a new folder for the new network
             os.makedirs(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore", exist_ok=True)
@@ -208,13 +212,7 @@ for dh_ratio in explored_dh_ratio:
                 carriers=["heat"],
                 nodes=["industrial_cluster"],
             )
-            adopt.fill_carrier_data(
-                casepath,
-                value_or_data=500,
-                columns=["Export limit"],
-                carriers=["CO2captured"],
-                nodes=["industrial_cluster"],
-            )
+
 
             adopt.fill_carrier_data(
                 casepath,
