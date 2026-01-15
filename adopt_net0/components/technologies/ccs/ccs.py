@@ -72,6 +72,7 @@ def fit_ccs_coeff(tech_data: dict, ccs_data: dict, tech_name: str, climate_data:
         input_ratios_container  = ccs_data.processed_coeff.time_dependent_full["input_ratios"]
     else:
         co2_concentration = design_co2_concentration
+        ccs_data.processed_coeff.time_independent["input_ratios"] = {}
         input_ratios_container = ccs_data.processed_coeff.time_independent["input_ratios"]
 
     ccs_data.processed_coeff.time_independent["size_min"] = ccs_data.size_min

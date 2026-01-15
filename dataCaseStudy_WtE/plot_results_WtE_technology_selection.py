@@ -21,7 +21,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8
 
 ## -----------------  Carbon and electricity price --------------------------
 explored_carbon_tax = [50, 75, 100,125, 150]
-explored_el_price = [25, 50, 75, 100,125, 150, 175] # average el prices explored in the analysis
+explored_el_price = [25, 50, 75, 100,125]#, 175] # average el prices explored in the analysis
 explored_dh_ratio = [0.5, 0.75]
 gas_price = 40
 import_price_RDF = 20
