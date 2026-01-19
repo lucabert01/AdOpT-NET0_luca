@@ -20,8 +20,9 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8
 
 ## -----------------  Electricity price --------------------------
 
-explored_el_price = [25, 50, 75, 100,125]
+explored_el_price = [150]#[25, 50, 75, 100,125] # average el prices explored in the analysis
 rolling_av_hours = 1
+import_price_RDF = 20
 
 path_processed_data = Path("./dataSources/hourly_data_casestudy.xlsx")
 data = pd.read_excel(path_processed_data)
@@ -94,7 +95,7 @@ for i in range(0,len(file_names)):
     el_price = electricity_price_norm * explored_el_price[i]
     capex_cal = w2e_design["capex_tot"]
     opex_fixed = w2e_design["opex_fixed"]
-    opex_variable = w2e_design["opex_variable"]
+    opex_variable = w2e_design["opex_variable"] + sum(waste_in_rdf*import_price_RDF)
     revenue_el_cal = sum(w2e_operation['el_cal']*el_price)
 
 
