@@ -1,7 +1,7 @@
 {
   "tec_type": "WasteToEnergyCaLCCS",
   "size_min": 0,
-  "size_max": 40,
+  "size_max": 94,
   "size_is_int": 0,
   "size_based_on": "input",
   "decommission": "impossible",
