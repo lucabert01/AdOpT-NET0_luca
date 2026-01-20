@@ -8,7 +8,7 @@
     "comment": "CAPEX is 0, cost are given by opex_variable in EUR/tCO2 stored",
     "capex_model": 1,
     "unit_capex": 0,
-    "opex_variable": 20,
+    "opex_variable": 7.3,
     "opex_fixed": 0,
     "discount_rate": 0.1,
     "lifetime": 25,
