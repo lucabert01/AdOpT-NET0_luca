@@ -96,7 +96,6 @@ class WasteToEnergyCaLCCS(Technology):
         self.processed_coeff.time_independent["max_th_input_cal"] = max(th_input_cal_hourly) if self.performance_data["co2_concentration_is_hourly"] else th_input_cal_design
 
 
-
     def _define_size(self, b_tec):
         """
         Calculates the bounds of the variables used
@@ -151,7 +150,7 @@ class WasteToEnergyCaLCCS(Technology):
             (
                 np.zeros(shape=(time_steps)),
                 np.ones(shape=time_steps)
-                * emission_factor * ccr * th_input_cal_max / lhv_RDF
+                * emission_factor * ccr * th_input_cal_max /(lhv_RDF- emission_factor_RDF*th_input_cal_max*ccr)
                 ,
             )
         )
@@ -182,60 +181,13 @@ class WasteToEnergyCaLCCS(Technology):
         self.bounds["output"]["CO2captured"] = np.column_stack(
             (
                 np.zeros(shape=(time_steps)),
-                np.ones(shape=time_steps)* (emission_factor * ccr
-                + emission_factor * ccr * th_input_cal_max / lhv_RDF * emission_factor_RDF * ccr)
+                np.ones(shape=time_steps)* (emission_factor * ccr /
+                                            (1- emission_factor_RDF*th_input_cal_max / lhv_RDF*ccr))
                 ,
             )
         )
 
 
-        # Input Bounds
-        self.bounds["input"]["wasteIn"] = np.column_stack(
-            (
-                np.zeros(shape=(time_steps)),
-                np.ones(shape=time_steps)
-                ,
-            )
-        )
-
-        self.bounds["input"]["wasteInRDF"] = np.column_stack(
-            (
-                np.zeros(shape=(time_steps)),
-                np.ones(shape=time_steps)
-                * 10000
-                ,
-            )
-        )
-        # Output Bounds
-        self.bounds["output"]["heat"] = np.column_stack(
-            (
-                np.zeros(shape=(time_steps)),
-                np.ones(shape=time_steps)
-                * 10000,
-            )
-        )
-
-        self.bounds["output"]["electricity"] = np.column_stack(
-            (
-                np.zeros(shape=(time_steps)),
-                np.ones(shape=time_steps)
-                * 10000,
-            )
-        )
-        self.bounds["output"]["wasteProcessed"] = np.column_stack(
-            (
-                np.zeros(shape=(time_steps)),
-                np.ones(shape=time_steps)
-                ,
-            )
-        )
-        self.bounds["output"]["CO2captured"] = np.column_stack(
-            (
-                np.zeros(shape=(time_steps)),
-                np.ones(shape=time_steps)* 10000
-                ,
-            )
-        )
 
 
     def construct_tech_model(self, b_tec, data: dict, set_t_full, set_t_clustered):
@@ -348,10 +300,10 @@ class WasteToEnergyCaLCCS(Technology):
         def init_max_co2_captured(const, t):
             if self.performance_data["co2_concentration_is_hourly"]:
                 return (self.output[t, "CO2captured"] <= self.input[t, "wasteIn"] * emission_factor * ccr
-                    * (1+ self.processed_coeff.time_dependent_full["th_input_cal_hourly"][t-1]/lhv_RDF*emission_factor_RDF*ccr))
+                    / (1- self.processed_coeff.time_dependent_full["th_input_cal_hourly"][t-1]/lhv_RDF*emission_factor_RDF*ccr))
             else:
                 return (self.output[t, "CO2captured"] <= self.input[t, "wasteIn"] * emission_factor * ccr
-                    * (1+th_input_CaL/lhv_RDF*emission_factor_RDF*ccr))
+                    / (1-th_input_CaL/lhv_RDF*emission_factor_RDF*ccr))
 
         b_tec.const_max_captured = pyo.Constraint(self.set_t_performance, rule=init_max_co2_captured)
 
