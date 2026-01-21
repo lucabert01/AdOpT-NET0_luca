@@ -314,11 +314,11 @@ class Technology(ModelComponent):
 
         # CCS
         if self.ccs_possible:
-            co2_concentration = self.performance_data["ccs"]["co2_concentration"]
+
             self.ccs_data["name"] = "CCS"
             self.ccs_data["tec_type"] = self.ccs_type
             self.ccs_component = fit_ccs_coeff(
-                co2_concentration, self.ccs_data, climate_data
+                self.performance_data["ccs"], self.ccs_data, self.name, climate_data
             )
 
     def _calculate_bounds(self):
@@ -335,13 +335,20 @@ class Technology(ModelComponent):
 
         # Calculate input and output bounds
         for car in self.ccs_component.input_carrier:
+            if self.performance_data["ccs"].get("co2_concentration_is_hourly", False):
+                input_ratio = max(self.ccs_component.processed_coeff.time_dependent_full[
+                    "input_ratios"
+                ][car])
+            else:
+                input_ratio = self.ccs_component.processed_coeff.time_independent[
+                    "input_ratios"
+                ][car]
+
             self.ccs_component.bounds["input"][car] = np.column_stack(
                 (
                     np.zeros(shape=(time_steps)),
                     np.ones(shape=(time_steps))
-                    * self.ccs_component.processed_coeff.time_independent[
-                        "input_ratios"
-                    ][car],
+                    * input_ratio,
                 )
             )
         for car in self.ccs_component.output_carrier:
@@ -1308,6 +1315,7 @@ class Technology(ModelComponent):
         :return: pyomo block with technology model
         """
         coeff_ti = self.ccs_component.processed_coeff.time_independent
+        coeff_td = self.ccs_component.processed_coeff.time_dependent_full
 
         capture_rate = coeff_ti["capture_rate"]
 
@@ -1398,12 +1406,20 @@ class Technology(ModelComponent):
 
         # Electricity and heat demand CCS
         def init_input_ccs(const, t, car):
-            return (
-                b_tec.var_input_ccs[t, car]
-                == coeff_ti["input_ratios"][car]
-                * b_tec.var_output_ccs[t, "CO2captured"]
-                / capture_rate
-            )
+            if self.performance_data["ccs"].get("co2_concentration_is_hourly", False):
+                return (
+                    b_tec.var_input_ccs[t, car]
+                    == coeff_td["input_ratios"][car][t-1]
+                    * b_tec.var_output_ccs[t, "CO2captured"]
+                    / capture_rate
+                )
+            else:
+                return (
+                    b_tec.var_input_ccs[t, car]
+                    == coeff_ti["input_ratios"][car]
+                    * b_tec.var_output_ccs[t, "CO2captured"]
+                    / capture_rate
+                )
 
         b_tec.const_input_el = pyo.Constraint(
             self.set_t_global, b_tec.set_input_carriers_ccs, rule=init_input_ccs
