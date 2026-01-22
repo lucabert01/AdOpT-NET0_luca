@@ -130,6 +130,7 @@ def ecdf(series):
     return x, y
 
 
+
 fig, axs = plt.subplots(4, 1, figsize=(8, 10), sharex=False)
 
 x, y = ecdf(electricity_price_norm)

@@ -12,6 +12,8 @@ from matplotlib import rcParams
 import warnings
 from utilities.process_results import save_figure_for_paper, print_h5_structure
 from matplotlib.lines import Line2D
+import matplotlib.patches as mpatches
+
 
 
 colors = []
@@ -20,7 +22,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8
 
 ## -----------------  Electricity price --------------------------
 
-explored_el_price = [150]#[25, 50, 75, 100,125] # average el prices explored in the analysis
+explored_el_price = [50, 75, 100,125, 150, 175] # average el prices explored in the analysis
 rolling_av_hours = 1
 import_price_RDF = 20
 
@@ -65,11 +67,24 @@ for i in range(0,len(file_names)):
     else:
         print(f"{el_price_str} NOT found in {file_names[i]}")
 
+
+    def print_structure(name, obj):
+        indent = "  " * name.count('/')
+        obj_type = "Group" if isinstance(obj, h5py.Group) else "Dataset"
+        print(f"{indent}{name} ({obj_type})")
+
+
+    with h5py.File(file_path, 'r') as hdf_file:
+        hdf_file.visititems(print_structure)
+
+
     with h5py.File(file_path, 'r') as hdf_file:
         df_operation = pd.DataFrame(extract_datasets_from_h5group(hdf_file["operation"]))
         df_design = pd.DataFrame(extract_datasets_from_h5group(hdf_file["design/nodes/period1"]))
+        df_design_network = pd.DataFrame(extract_datasets_from_h5group(hdf_file["design/networks/period1/CO2PipelineOnshore/industrial_clusterstorage"]))
     print(df_operation)
 
+    co2_storage_design = df_design.loc[:, ('storage', 'PermanentStorage_CO2_simple')]
     w2e_design = df_design.loc[:, ('industrial_cluster', 'WasteCaL_CCS')]
     boiler_design = df_design.loc[:, ('industrial_cluster', 'Boiler_Industrial_NG_existing')]
     w2e_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'WasteCaL_CCS')]
@@ -97,6 +112,9 @@ for i in range(0,len(file_names)):
     opex_fixed = w2e_design["opex_fixed"]
     opex_variable = w2e_design["opex_variable"] + sum(waste_in_rdf*import_price_RDF)
     revenue_el_cal = sum(w2e_operation['el_cal']*el_price)
+    pipeline_cost = df_design_network['capex'].values.flatten()[0]
+    storage_cost = co2_storage_design['opex_variable']
+    transport_stor_cost = storage_cost + pipeline_cost
 
 
     results_summary[el_price_str]['size_cal'] = size_cal
@@ -112,6 +130,7 @@ for i in range(0,len(file_names)):
     results_summary[el_price_str]['capex_tot'] = capex_cal
     results_summary[el_price_str]['opex_fixed'] = opex_fixed
     results_summary[el_price_str]['opex_variable'] = opex_variable
+    results_summary[el_price_str]['transport_stor_cost'] = transport_stor_cost
     results_summary[el_price_str]['revenue_el_cal'] = revenue_el_cal
     results_summary[el_price_str]['tot_co2_avoided'] = sum(waste_in*emission_factor)-(sum(emissions_w2e-co2_captured_w2e))
     results_summary[el_price_str]['tot_co2_captured'] = sum(co2_captured_w2e)
@@ -141,23 +160,23 @@ for el_price in explored_el_price_str:
 
 # Use exactly your defined colors
 colors = batlow_colors[:len(el_prices)]
-
-plt.figure(figsize=(7,5))
-
-# Scatter plot with batlow colors
-for i, (x, y) in enumerate(zip(el_prices, fraction_size_cal_values)):
-    plt.scatter(x, y, color=colors[i], s=100, edgecolor=colors[i], zorder=3)
-
-# Connect points with a neutral line
-plt.plot(el_prices, fraction_size_cal_values, linestyle="--", color="gray", alpha=0.6, zorder=2)
-
-plt.xlabel("Electricity Price [€/MWh]")
-plt.ylabel("Fraction CO2 treated")
-plt.title("Fraction CaL Size vs Electricity Price")
-
-plt.show()
-
-
+#
+# plt.figure(figsize=(7,5))
+#
+# # Scatter plot with batlow colors
+# for i, (x, y) in enumerate(zip(el_prices, fraction_size_cal_values)):
+#     plt.scatter(x, y, color=colors[i], s=100, edgecolor=colors[i], zorder=3)
+#
+# # Connect points with a neutral line
+# plt.plot(el_prices, fraction_size_cal_values, linestyle="--", color="gray", alpha=0.6, zorder=2)
+#
+# plt.xlabel("Electricity Price [€/MWh]")
+# plt.ylabel("Fraction CO2 treated")
+# plt.title("Fraction CaL Size vs Electricity Price")
+#
+# plt.show()
+#
+#
 el_prices = []
 capacity_factor_cal_values = []
 
@@ -169,24 +188,24 @@ for el_price in explored_el_price_str:
         size_val = float(size_series)
     el_prices.append(float(el_price))
     capacity_factor_cal_values.append(size_val)
-
-# Use exactly your defined colors
-colors = batlow_colors[:len(el_prices)]
-
-plt.figure(figsize=(7,5))
-
-# Scatter plot with batlow colors
-for i, (x, y) in enumerate(zip(el_prices, capacity_factor_cal_values)):
-    plt.scatter(x, y, color=colors[i], s=100, edgecolor=colors[i], zorder=3)
-
-# Connect points with a neutral line
-plt.plot(el_prices, capacity_factor_cal_values, linestyle="--", color="gray", alpha=0.6, zorder=2)
-
-plt.xlabel("Electricity price [€/MWh]")
-plt.ylabel("CaL load factor [-]")
-plt.title("Load factor CaL vs Electricity Price")
-
-plt.show()
+#
+# # Use exactly your defined colors
+# colors = batlow_colors[:len(el_prices)]
+#
+# plt.figure(figsize=(7,5))
+#
+# # Scatter plot with batlow colors
+# for i, (x, y) in enumerate(zip(el_prices, capacity_factor_cal_values)):
+#     plt.scatter(x, y, color=colors[i], s=100, edgecolor=colors[i], zorder=3)
+#
+# # Connect points with a neutral line
+# plt.plot(el_prices, capacity_factor_cal_values, linestyle="--", color="gray", alpha=0.6, zorder=2)
+#
+# plt.xlabel("Electricity price [€/MWh]")
+# plt.ylabel("CaL load factor [-]")
+# plt.title("Load factor CaL vs Electricity Price")
+#
+# plt.show()
 
 # Plot fraction CaL and load factor at the same time
 
@@ -227,47 +246,68 @@ fig.tight_layout()
 plt.show()
 
 
+
+
+
 ## Plot the economics
 
 capex_tot = []
 opex_fixed = []
 opex_variable = []
 revenue_el_cal = []
-tot_co2_avoided = []
+correct_for_avoided = []
 tot_co2_captured = []
 abatement_cost = []
 capture_cost = []
+transport_stor_cost = []
 
 
 economics = {
     "capex_tot": capex_tot,
     "opex_fixed": opex_fixed,
     "opex_variable": opex_variable,
+    "transport_stor_cost": transport_stor_cost,
     "revenue_el_cal": revenue_el_cal,
-    "tot_co2_avoided": tot_co2_avoided,
+}
+
+emissions ={
+    "correct_for_avoided": correct_for_avoided,
     "tot_co2_captured": tot_co2_captured,
 }
 
 for el_price in explored_el_price_str:
+    # Emissions
+    for emissions_param, storage_list in emissions.items():
+        if emissions_param == "tot_co2_captured":
+            val = results_summary[el_price]["tot_co2_captured"]
+        elif emissions_param == "correct_for_avoided":
+            val = (
+                results_summary[el_price]["tot_co2_captured"]
+                / results_summary[el_price]["tot_co2_avoided"]
+            )
+        storage_list.append(val)
+
+    # Economics (€/tCO2)
     values = {}
-    tot_co2_captured = results_summary[el_price]["tot_co2_captured"]
-    # Collect each parameter first
     for economic_param, storage_list in economics.items():
-        val = results_summary[el_price][economic_param]/tot_co2_captured
+        val = (
+            results_summary[el_price][economic_param]
+            / results_summary[el_price]["tot_co2_captured"]
+        )
         storage_list.append(val)
         values[economic_param] = val
 
-    # Compute abatement cost
-    if results_summary[el_price_str]['tot_co2_avoided'] > 0:
+    # capture cost
+    if results_summary[el_price]["tot_co2_avoided"] > 0:
         capture = (
             values["capex_tot"]
             + values["opex_fixed"]
             + values["opex_variable"]
+            + values["transport_stor_cost"]
             - values["revenue_el_cal"]
         )
-
     else:
-        capture_cost = 0
+        capture = 0
 
     capture_cost.append(capture)
 
@@ -286,6 +326,115 @@ plt.ylabel("Cost [€/tCO₂]")
 
 # Legend
 plt.legend()
+plt.show()
+
+
+# BArchart
+labels = [
+    "CAPEX",
+    "OPEX fixed",
+    "OPEX variable",
+    "Transport & Storage",
+    "Electricity revenue",
+]
+item_colors = {
+    "CAPEX": batlow_colors[0],
+    "OPEX fixed": batlow_colors[1],
+    "OPEX variable": batlow_colors[2],
+    "Transport & Storage": batlow_colors[3],
+    "Electricity revenue": batlow_colors[4],
+}
+
+
+capex   = np.array(economics["capex_tot"], dtype=float).ravel()
+opex_f  = np.array(economics["opex_fixed"], dtype=float).ravel()
+opex_v  = np.array(economics["opex_variable"], dtype=float).ravel()
+t_s     = np.array(economics["transport_stor_cost"], dtype=float).ravel()
+revenue = -np.array(economics["revenue_el_cal"], dtype=float).ravel()
+
+correct_factor = np.array(emissions["correct_for_avoided"], dtype=float).ravel()
+
+capex_corr   = np.array(economics["capex_tot"], dtype=float).ravel() * correct_factor
+opex_f_corr  = np.array(economics["opex_fixed"], dtype=float).ravel() * correct_factor
+opex_v_corr  = np.array(economics["opex_variable"], dtype=float).ravel() * correct_factor
+t_s_corr     = np.array(economics["transport_stor_cost"], dtype=float).ravel() * correct_factor
+revenue_corr = -np.array(economics["revenue_el_cal"], dtype=float).ravel() * correct_factor
+
+
+width = 0.35  # width of each bar
+x = np.arange(len(el_prices))
+
+
+def stacked_bar(ax, x_pos, capex, opex_f, opex_v, t_s, revenue, colors, return_tops=False):
+    """
+    Plots a stacked bar correctly handling negative revenues.
+    """
+    bottom = np.zeros(len(x_pos), dtype=float)
+
+    ax.bar(x_pos, capex, width, bottom=bottom, color=colors["CAPEX"], linewidth=0)
+    bottom += capex
+
+    ax.bar(x_pos, opex_f, width, bottom=bottom, color=colors["OPEX fixed"], linewidth=0)
+    bottom += opex_f
+
+    ax.bar(x_pos, opex_v, width, bottom=bottom, color=colors["OPEX variable"], linewidth=0)
+    bottom += opex_v
+
+    ax.bar(x_pos, t_s, width, bottom=bottom, color=colors["Transport & Storage"], linewidth=0)
+    bottom += t_s
+
+    # Plot revenue separately as negative height
+    ax.bar(x_pos, revenue, width, bottom=np.zeros(len(x_pos)), color=colors["Electricity revenue"], linewidth=0)
+
+    if return_tops:
+        # top coordinate includes revenue only if positive; for negative revenue, top = total cost
+        tops = bottom.copy()
+        return tops
+# --- Create figure ---
+fig, ax = plt.subplots(figsize=(12, 6))
+
+# Plot original bars (left)
+stacked_bar(ax, x - width/2, capex, opex_f, opex_v, t_s, revenue, item_colors)
+
+# Plot corrected bars (right) and get top positions
+tops_corrected = stacked_bar(ax, x + width/2, capex_corr, opex_f_corr, opex_v_corr, t_s_corr, revenue_corr, item_colors, return_tops=True)
+
+# Draw dashed rectangle around corrected bars
+for xi, top, rev in zip(x, tops_corrected, revenue_corr):
+    bottom = min(0, rev)
+    rect = mpatches.Rectangle(
+        (xi + width/2 - width/2, bottom),
+        width,
+        top - bottom,
+        fill=False,
+        edgecolor='black',
+        linestyle='--',
+        linewidth=1.5
+    )
+    ax.add_patch(rect)
+
+# --- Add black squares for total capture cost ---
+for xi, vals_orig, vals_corr in zip(x, zip(capex, opex_f, opex_v, t_s, revenue), zip(capex_corr, opex_f_corr, opex_v_corr, t_s_corr, revenue_corr)):
+    # Original
+    total_orig = sum(vals_orig)
+    ax.scatter(xi - width/2, total_orig, color='black', marker='s', s=50, zorder=5)
+    # Corrected
+    total_corr = sum(vals_corr)
+    ax.scatter(xi + width/2, total_corr, color='black', marker='s', s=50, zorder=5)
+
+# Axes and labels
+ax.axhline(0, color='black', linewidth=0.8)
+ax.set_xticks(x)
+ax.set_xticklabels(el_prices)
+ax.set_xlabel("Electricity Price [€/MWh]")
+ax.set_ylabel("Cost breakdown [€/tCO₂]")
+
+# Legend: cost items + dashed rectangle
+handles = [mpatches.Patch(color=c, label=l) for l, c in item_colors.items()]
+correct_patch = mpatches.Patch(facecolor='none', edgecolor='black', linestyle='--', linewidth=1.5, label='Corrected for CO₂ avoided')
+ax.legend(handles + [correct_patch], [*item_colors.keys(), 'Corrected for CO₂ avoided'], bbox_to_anchor=(1.05,1), loc='upper left')
+
+plt.tight_layout()
 plt.show()
 
 
