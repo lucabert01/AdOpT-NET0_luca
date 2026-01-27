@@ -270,7 +270,7 @@ for av_el_price in explored_el_price:
 
     adopt.fill_carrier_data(
         casepath,
-        value_or_data=electricity_price,
+        value_or_data=0,
         columns=["Import price"],
         carriers=["electricity"],
         nodes=["storage"],

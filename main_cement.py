@@ -188,7 +188,7 @@ for carbon_tax in explored_carbon_tax:
             value_or_data=electricity_price,
             columns=["Import price"],
             carriers=["electricity"],
-            nodes=["industrial_cluster", "storage"],
+            nodes=["industrial_cluster"],
         )
 
         adopt.fill_carrier_data(
