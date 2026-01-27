@@ -78,7 +78,7 @@ class WasteToEnergyCaLCCS(Technology):
             th_input_cal_design = self.performance_data["th_input_CaL"]
 
             for t in range(len(co2_concentration)):
-                if co2_concentration[t] >= design_co2_conc:
+                if co2_concentration.iloc[t] >= design_co2_conc:
                     var_eff = rel_eff_variation_up_conc
                     var_th_input = rel_th_input_RDF_variation_up_conc
                 else:
@@ -86,9 +86,9 @@ class WasteToEnergyCaLCCS(Technology):
                     var_th_input = rel_th_input_RDF_variation_down_conc
 
                 el_efficiency_cal_hourly.append(el_efficiency_design*
-                                                    (1+var_eff*(co2_concentration[t]-design_co2_conc)))
+                                                    (1+var_eff*(co2_concentration.iloc[t]-design_co2_conc)))
                 th_input_cal_hourly.append(th_input_cal_design*
-                                                    (1+var_th_input*(co2_concentration[t]-design_co2_conc)))
+                                                    (1+var_th_input*(co2_concentration.iloc[t]-design_co2_conc)))
 
             self.processed_coeff.time_dependent_full["el_efficiency_cal_hourly"] = el_efficiency_cal_hourly
             self.processed_coeff.time_dependent_full["th_input_cal_hourly"] = th_input_cal_hourly
