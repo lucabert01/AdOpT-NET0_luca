@@ -24,7 +24,7 @@ figures_path = "../figures"
 explored_dh_ratio = [0, 0.25, 0.5, 0.75,1] # ratio of peak DH demand to supply compared to peak heat prod. from WtE
 gas_price = 40
 carbon_tax = 150
-sim_is_timeless = 0
+sim_is_timeless = 1
 
 if sim_is_timeless:
     name_sim = "MEA_timeless"
@@ -403,7 +403,7 @@ for j in range(empty_ax_idx + 1, len(axes)):
 
 
 fig.tight_layout(pad=0.6)
-save_figure_for_paper(fig, "MEA_operations_allDH", figures_path)
+save_figure_for_paper(fig, f"{name_sim}_operations_allDH", figures_path)
 
 
 
@@ -536,5 +536,5 @@ ax.set_ylim(0, 130)
 ax.legend()
 
 fig.tight_layout()
-save_figure_for_paper(fig, "mea_cost_breakdown", figures_path)
+save_figure_for_paper(fig, f"{name_sim}_cost_breakdown", figures_path)
 plt.show()
