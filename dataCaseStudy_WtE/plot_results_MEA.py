@@ -22,7 +22,7 @@ results_path = "../figures/WtE_MEA"
 
 explored_dh_ratio = [0, 0.25, 0.5, 0.75,1] # ratio of peak DH demand to supply compared to peak heat prod. from WtE
 gas_price = 40
-carbon_tax = 100
+carbon_tax = 150
 
 
 path_processed_data = Path("./dataSources/hourly_data_casestudy.xlsx")
@@ -45,7 +45,7 @@ info_boiler = json.loads(json_boiler.read_text())
 th_efficiency_boiler = info_boiler["Performance"]["performance"]["out"]["heat"][1]
 emission_factor_boiler = info_boiler["Performance"]["emission_factor"]
 num_cases = len(explored_dh_ratio)
-raw_results_path = Path("./raw_results/MEA")
+raw_results_path = Path("./raw_results/MEA_timeless")
 # Get all directories that contain 'dh_ratio' in the name
 dh_ratio_dirs = [d for d in raw_results_path.iterdir()
                  if d.is_dir() and "dh_ratio" in d.name]
@@ -72,12 +72,12 @@ for i in range(0,len(file_names)):
         print(f"{dh_ratio_str} NOT found in {file_names[i]}")
 
     with h5py.File(file_path, 'r') as hdf_file:
-
-
         df_operation = pd.DataFrame(extract_datasets_from_h5group(hdf_file["operation"]))
         df_design = pd.DataFrame(extract_datasets_from_h5group(hdf_file["design/nodes/period1"]))
+        df_design_network = pd.DataFrame(extract_datasets_from_h5group(hdf_file["design/networks/period1/CO2PipelineOnshore/industrial_clusterstorage"]))
     print(df_operation)
 
+    co2_storage_design = df_design.loc[:, ('storage', 'PermanentStorage_CO2_simple')]
     w2e_design = df_design.loc[:, ('industrial_cluster', 'WasteCHP')]
     boiler_design = df_design.loc[:, ('industrial_cluster', 'Boiler_Industrial_NG_existing')]
     w2e_output = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'WasteCHP')]
@@ -96,6 +96,10 @@ for i in range(0,len(file_names)):
     size_ccs = w2e_design["size_ccs"]
     fraction_size_ccs = size_ccs/ (max(emissions_w2e)*ccr)
     ccs_capacity_factor = sum(co2_captured_w2e)/(size_ccs*8760)
+
+    pipeline_cost = df_design_network['capex'].values.flatten()[0]
+    storage_cost = co2_storage_design['opex_variable']
+    transport_stor_cost = storage_cost + pipeline_cost
 
     if explored_dh_ratio[i] == 0:
         boiler_load_factor = 0
@@ -141,14 +145,17 @@ for i in range(0,len(file_names)):
             f"Boiler output exceeds heat demand at {dh_ratio_str} dh_ratio.",
             UserWarning
         )
-    results_summary[dh_ratio_str]['hourly_wte_heat_for_el'] = el_out/el_efficiency
+    extra_usage_boiler = sum(boiler_output['heat_output']-baseline_boiler_prod)/th_efficiency_boiler
+    results_summary[dh_ratio_str]['hourly_wte_heat_for_el'] = (el_out-w2e_output['electricity_var_input_ccs'])/el_efficiency
     results_summary[dh_ratio_str]['hourly_wte_heat_for_el_ccs'] =  w2e_output['electricity_var_input_ccs']/el_efficiency
     results_summary[dh_ratio_str]['capex_tot'] = w2e_design["capex_ccs"]
     results_summary[dh_ratio_str]['opex_fixed'] = w2e_design["opex_fixed_ccs"]
     results_summary[dh_ratio_str]['opex_variable'] = w2e_design["opex_variable"]
     results_summary[dh_ratio_str]['loss_el_revenues'] = sum((baseline_el_prod-el_out)*el_price)
-    results_summary[dh_ratio_str]['extra_cost_boiler'] = sum(boiler_output['heat_output']-baseline_boiler_prod)/th_efficiency_boiler*(emission_factor_boiler*carbon_tax + gas_price)
+    results_summary[dh_ratio_str]['extra_cost_boiler'] = extra_usage_boiler*(emission_factor_boiler*carbon_tax + gas_price)
+    results_summary[dh_ratio_str]['transport_stor_cost'] = transport_stor_cost
     results_summary[dh_ratio_str]['tot_co2_captured'] = sum(co2_captured_w2e)
+    results_summary[dh_ratio_str]['tot_co2_avoided'] = sum(emissions_w2e)-(sum(emissions_w2e-co2_captured_w2e)+extra_usage_boiler*emission_factor_boiler)
     results_summary['hourly_emissions'] = emissions_w2e
     results_summary['hourly_wasteProcessed'] = waste_processed_out
     results_summary[dh_ratio_str]['heat_demand'] = heat_demand
@@ -297,7 +304,7 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
             wte_heat_to_demand.append(results_summary[dh_ratio_str]['heat_demand'][j] / denominator)
             wte_heat_for_el.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_el'][j] / denominator)
             wte_heat_for_el_ccs.append(results_summary[dh_ratio_str]['hourly_wte_heat_for_el_ccs'][j] / denominator)
-            boiler_output_frac.append(results_summary[dh_ratio_str]['hourly_boiler_heat_out'][j] / denominator)
+            boiler_output_frac.append(results_summary[dh_ratio_str]['hourly_boiler_heat_out'][j] / max(total_heat_production))
             co2_captured_frac.append(results_summary[dh_ratio_str]['hourly_co2_captured'][j] / results_summary['hourly_emissions'][j])
         else:
             heat_for_ccs.append(0)
@@ -318,10 +325,10 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
         pd.Series(heat_for_ccs).rolling(window=rolling_av_hours).mean(),
         pd.Series(wte_heat_for_el_ccs).rolling(window=rolling_av_hours).mean(),
         labels=[
-            "Heat to demand",
-            "Heat for grid el.",
+            "District heating demand",
+            "Electricity to grid",
             "Heat for CCS",
-            "Heat for CCS el."
+            "Electricity for CCS"
         ],
         colors=stack_colors,
         alpha=0.8
@@ -339,7 +346,7 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
 
     ax.set_xlabel("Time [h]")
     ax.set_ylabel("Fraction of heat [-]")
-    ax.set_ylim(0, 1.5)
+    # ax.set_ylim(0, 1.5)
     ax.set_xlim(0, 8760)
     # Annotation: DH ratio at top-center of each subplot
     ax.text(
@@ -351,57 +358,40 @@ for i, dh_ratio_str in enumerate(explored_dh_ratio_str):
         fontsize=16,
         bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.8, edgecolor="none")
     )
-    # # Shade for section when the boiler is active
-    # ax.axhspan(
-    #     1.0, ax.get_ylim()[1],
-    #     facecolor="grey",
-    #     alpha=0.15,
-    #     zorder=0
-    # )
-    # # Horizontal reference line at y = 1 (WtE-only limit)
-    # ax.axhline(
-    #     1.0,
-    #     color="grey",
-    #     linewidth=1.2,
-    #     linestyle="--",
-    #     alpha=0.8,
-    #     zorder=2
-    # )
-    # if i == 0:  # annotate only once to avoid clutter
-    #     ax.annotate(
-    #         "Boiler active",
-    #         xy=(0.15, 1.0),  # arrow tip (x in axes frac, y in data)
-    #         xycoords=ax.get_yaxis_transform(),
-    #         xytext=(0.15, 1.18),  # text position
-    #         textcoords=ax.get_yaxis_transform(),
-    #         ha="left",
-    #         va="bottom",
-    #         fontsize=12,
-    #         color="black",
-    #         arrowprops=dict(
-    #             arrowstyle="->",
-    #             color="grey",
-    #             linewidth=1.2,
-    #             alpha=0.8
-    #         ),
-    #         bbox=dict(
-    #             boxstyle="round,pad=0.25",
-    #             facecolor="white",
-    #             edgecolor="none",
-    #             alpha=0.8
-    #         )
-    #     )
-# Remove unused axes
-for j in range(i + 1, len(axes)):
+
+
+# Index of first unused axis
+empty_ax_idx = i + 1
+
+# Get legend handles from the last plotted axis
+handles, labels = axes[i].get_legend_handles_labels()
+
+# Use the empty subplot for the legend
+legend_ax = axes[empty_ax_idx]
+legend_ax.axis("off")
+
+legend = legend_ax.legend(
+    handles,
+    labels,
+    loc="center",
+    frameon=True,
+    ncol=1,
+    fontsize=13
+)
+
+# Style the legend box
+legend.get_frame().set_facecolor("white")
+legend.get_frame().set_edgecolor("black")
+legend.get_frame().set_linewidth(1.2)
+legend.get_frame().set_alpha(0.95)
+
+# Remove any remaining unused axes
+for j in range(empty_ax_idx + 1, len(axes)):
     fig.delaxes(axes[j])
 
-# Collect all handles and labels from the last axis
-handles, labels = ax.get_legend_handles_labels()
-fig.legend(handles, labels, loc="upper center", ncol=5)
+plt.tight_layout()
 
-plt.tight_layout(rect=[0, 0, 1, 0.95])  # leave space for global legend
-plt.show()
-save_figure_for_paper(fig, "MEA_operations_allDH", results_path)
+#save_figure_for_paper(fig, "MEA_operations_allDH", results_path)
 
 
 
@@ -413,6 +403,8 @@ opex_fixed = []
 opex_variable = []
 loss_el_revenues = []
 extra_cost_boiler = []
+transport_stor_cost = []
+correct_for_avoided = []
 tot_co2_captured = []
 capture_cost = []
 
@@ -423,26 +415,41 @@ economics = {
     "opex_variable": opex_variable,
     "loss_el_revenues": loss_el_revenues,
     "extra_cost_boiler": extra_cost_boiler,
+    "transport_stor_cost": transport_stor_cost
+}
+
+emissions ={
+    "correct_for_avoided": correct_for_avoided,
     "tot_co2_captured": tot_co2_captured,
 }
 
 for dh_ratio in explored_dh_ratio_str:
+    for emissions_param, storage_list in emissions.items():
+        if emissions_param == "tot_co2_captured":
+            val = results_summary[dh_ratio]["tot_co2_captured"]
+        elif emissions_param == "correct_for_avoided":
+            val = (
+                results_summary[dh_ratio]["tot_co2_captured"]
+                / results_summary[dh_ratio]["tot_co2_avoided"]
+            )
+        storage_list.append(val)
     values = {}
     # Collect each parameter first
     for economic_param, storage_list in economics.items():
-        val = results_summary[dh_ratio][economic_param]
+        val = results_summary[dh_ratio][economic_param]/ results_summary[dh_ratio]['tot_co2_captured']
         storage_list.append(val)
         values[economic_param] = val
 
     # Compute abatement cost
-    if results_summary[dh_ratio_str]['tot_co2_captured'] > 0:
+    if results_summary[dh_ratio]['tot_co2_captured'] > 0:
         capture = (
             values["capex_tot"]
             + values["opex_fixed"]
             + values["opex_variable"]
             + values["loss_el_revenues"]
             + values["extra_cost_boiler"]
-        ) / values["tot_co2_captured"]
+            + values["transport_stor_cost"]
+        )
 
     else:
         capture_cost = 0
@@ -479,35 +486,47 @@ ax.set_xlabel("Peak district heating demand [-]")
 ax.set_ylabel("Capture cost [€/tCO₂]")
 ax.legend()
 
-# Show and save
-plt.show()
-save_figure_for_paper(fig, "MEA_economics_DH50", results_path)
+# save_figure_for_paper(fig, "MEA_economics_DH50", results_path)
 
 
 ## Cost breakdown
-tot_co2_captured = (np.array(tot_co2_captured).reshape(-1, 1))
-capex_norm = (np.array(capex_tot) / tot_co2_captured).flatten()
-opex_fixed_norm = (np.array(opex_fixed) / tot_co2_captured).flatten()
-opex_variable_norm = (np.array(opex_variable) / tot_co2_captured).flatten()
-loss_el_revenues_norm = (np.array(loss_el_revenues).reshape(-1, 1) / tot_co2_captured).flatten()
-extra_cost_boiler_norm = (np.array(extra_cost_boiler).reshape(-1, 1) / tot_co2_captured).flatten()
+# tot_co2_captured = (np.array(tot_co2_captured).reshape(-1, 1))
+# capex = (np.array(capex_tot) / tot_co2_captured).flatten()
+# opex_f = (np.array(opex_fixed) / tot_co2_captured).flatten()
+# opex_variable_norm = (np.array(opex_variable) / tot_co2_captured).flatten()
+# loss_el_revenues = (np.array(loss_el_revenues).reshape(-1, 1) / tot_co2_captured).flatten()
+# extra_cost_boiler = (np.array(extra_cost_boiler).reshape(-1, 1) / tot_co2_captured).flatten()
+
+
+#TODO: make barchart in a smarter way, maybe include correction avoided
+correct_factor = np.array(emissions["correct_for_avoided"], dtype=float).ravel()
+
+capex   = np.array(economics["capex_tot"], dtype=float).ravel() * correct_factor
+opex_f  = np.array(economics["opex_fixed"], dtype=float).ravel() * correct_factor
+t_s     = np.array(economics["transport_stor_cost"], dtype=float).ravel() * correct_factor
+extra_cost_boiler = np.array(economics["extra_cost_boiler"], dtype=float).ravel() * correct_factor
+loss_el_revenues = np.array(economics["loss_el_revenues"], dtype=float).ravel() * correct_factor
 
 plt.figure(figsize=(9, 6))
 bar_width = 0.1
 
-plt.bar(explored_dh_ratio, capex_norm, width=bar_width, label="CAPEX", color=batlow_colors[0])
-plt.bar(explored_dh_ratio, opex_fixed_norm, width=bar_width, bottom=capex_norm, label="OPEX", color=batlow_colors[1])
-plt.bar(explored_dh_ratio, loss_el_revenues_norm, width=bar_width,
-        bottom=capex_norm + opex_fixed_norm,
-        label="Lost electricity revenues", color=batlow_colors[3])
-plt.bar(explored_dh_ratio, extra_cost_boiler_norm, width=bar_width,
-        bottom=capex_norm + opex_fixed_norm + loss_el_revenues_norm,
-        label="Extra cost boiler", color=batlow_colors[4])
+plt.bar(explored_dh_ratio, capex, width=bar_width, label="CAPEX", color=batlow_colors[0])
+plt.bar(explored_dh_ratio, opex_f, width=bar_width, bottom=capex, label="OPEX fixed", color=batlow_colors[1])
+
+plt.bar(explored_dh_ratio, t_s, width=bar_width,
+        bottom=capex + opex_f,
+        label="Transport & Storage", color=batlow_colors[3])
+plt.bar(explored_dh_ratio, loss_el_revenues, width=bar_width,
+        bottom=capex + opex_f + t_s,
+        label="Lost electricity revenues", color=batlow_colors[4])
+plt.bar(explored_dh_ratio, extra_cost_boiler, width=bar_width,
+        bottom=capex + opex_f + loss_el_revenues + t_s,
+        label="Extra cost boiler", color=batlow_colors[5])
 
 plt.xticks(explored_dh_ratio, explored_dh_ratio_str, rotation=45)
 plt.xlabel("Peak district heating demand [-]")
-plt.ylabel("Cost breakdown [€/tCO₂]")
-plt.ylim([0, 80])
+plt.ylabel("CAC [€/tCO₂]")
+plt.ylim([0, 130])
 plt.legend()
 plt.tight_layout()
 plt.show()
