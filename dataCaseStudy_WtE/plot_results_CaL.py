@@ -22,7 +22,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8
 
 ## -----------------  Electricity price --------------------------
 
-explored_el_price = [50, 75, 100,125, 150, 175] # average el prices explored in the analysis
+explored_el_price = [ 75, 100,125, 150, 175] # average el prices explored in the analysis
 rolling_av_hours = 1
 import_price_RDF = 20
 
@@ -243,7 +243,6 @@ legend_elements = [
 ax1.legend(handles=legend_elements, loc="center left")
 
 fig.tight_layout()
-plt.show()
 
 
 
@@ -281,10 +280,13 @@ for el_price in explored_el_price_str:
         if emissions_param == "tot_co2_captured":
             val = results_summary[el_price]["tot_co2_captured"]
         elif emissions_param == "correct_for_avoided":
-            val = (
-                results_summary[el_price]["tot_co2_captured"]
-                / results_summary[el_price]["tot_co2_avoided"]
-            )
+            if results_summary[el_price]["tot_co2_avoided"] > 0:
+                val = (
+                    results_summary[el_price]["tot_co2_captured"]
+                    / results_summary[el_price]["tot_co2_avoided"]
+                )
+            else:
+                val = 0
         storage_list.append(val)
 
     # Economics (€/tCO2)
@@ -326,7 +328,6 @@ plt.ylabel("Cost [€/tCO₂]")
 
 # Legend
 plt.legend()
-plt.show()
 
 
 # BArchart
