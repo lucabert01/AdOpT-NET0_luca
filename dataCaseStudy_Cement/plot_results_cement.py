@@ -281,6 +281,6 @@ ax.legend(
 )
 
 fig.tight_layout(pad=0.6)
-save_figure_for_paper(fig, "technology_choice_cost_map", figures_path)
+save_figure_for_paper(fig, "cement_tech_selection", figures_path)
 
 plt.show()

@@ -23,8 +23,8 @@ figures_path = "../figures"
 
 
 ## -----------------  Carbon and electricity price --------------------------
-explored_carbon_tax = [75, 100,125, 150, 175, 200]
-explored_el_price = [50, 75, 100,125,150,  175, 200] # average el prices explored in the analysis
+explored_carbon_tax = [50, 75, 100,125, 150]
+explored_el_price = [25, 50, 75, 100,125, 150, 175] # average el prices explored in the analysis
 explored_dh_ratio = [0.5, 0.75]
 gas_price = 40
 import_price_RDF = 20
@@ -48,7 +48,7 @@ results_summary = {}
 
 for i_dh in range(0,num_dh_ratio):
     dh_ratio = explored_dh_ratio[i_dh]
-    dh_ratio_str = f"DH_ratio_{explored_dh_ratio_str[i_dh]}"
+    dh_ratio_str = f"dh_{explored_dh_ratio_str[i_dh]}"
     results_summary[dh_ratio_str] = {}
 
     # Get all directories that contain 'dh_ratio_str' in the name
@@ -62,7 +62,7 @@ for i_dh in range(0,num_dh_ratio):
     dh_ratio_names = [d.name for d in dir_results_sorted[-num_el_prices*num_carbon_tax:]]
     for j in range(0,num_carbon_tax):
         carbon_tax = explored_carbon_tax[j]
-        carbon_tax_str = f"carbon_tax_{explored_carbon_tax_str[j]}"
+        carbon_tax_str = f"ctax_{explored_carbon_tax_str[j]}"
         results_summary[dh_ratio_str][carbon_tax_str] = {}
 
         # Get all file names that contain 'carbon_tax_str' in the name
@@ -227,7 +227,7 @@ for dh in explored_dh_ratio_str:
     # 2. Loop through results and collect rows
     for ct in explored_carbon_tax_str:
         for ep in explored_el_price_str:
-            entry = results_summary[f"DH_ratio_{dh}"][f"carbon_tax_{ct}"][f"el_price_{ep}"]
+            entry = results_summary[f"dh_ratio_{dh}"][f"carbon_tax_{ct}"][f"el_price_{ep}"]
             dh_data_rows.append({
                 "carbon_tax": ct,
                 "el_price": ep,
