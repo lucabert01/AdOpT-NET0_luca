@@ -21,7 +21,7 @@ data = pd.read_excel(path_processed_data)
 # General input data
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
-carbon_tax = 100
+carbon_tax = 150
 gas_price = 40
 explored_dh_ratio = [0, 0.25, 0.5, 0.75,1] # ratio of peak DH demand to supply compared to peak heat prod. from WtE
 existing_boiler_size = max(data[f"emission_{plant_analyzed}"])/emission_factor*lhv*th_efficiency
@@ -275,7 +275,7 @@ for dh_ratio in explored_dh_ratio:
 
     adopt.fill_carrier_data(
         casepath,
-        value_or_data=electricity_price,
+        value_or_data=0,
         columns=["Import price"],
         carriers=["electricity"],
         nodes=["storage"],

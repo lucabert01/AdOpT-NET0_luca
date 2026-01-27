@@ -22,10 +22,11 @@ data = pd.read_excel(path_processed_data)
 # General input data
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
-carbon_tax = 100
+carbon_tax = 150
 gas_price = 40
 explored_dh_ratio = [0, 0.25, 0.5, 0.75,1] # ratio of peak DH demand to supply compared to peak heat prod. from WtE
 existing_boiler_size = max(data[f"emission_{plant_analyzed}"])/emission_factor*lhv*th_efficiency
+co2_concentration = data["co2_concentration_"+plant_analyzed]
 wte_demand_is_averaged = 0
 heat_demand_is_averaged = 0
 rolling_av_hours = 24*7
@@ -36,7 +37,7 @@ pyhub = {}
 casepath= Path("CaseStudies_WtE/MEA")
 json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
 json_files_path_network = Path("./dataCaseStudy_WtE/network_json")
-result_path = "./dataCaseStudy_WtE/raw_results/MEA"
+result_path = "./dataCaseStudy_WtE/raw_results/MEA_timeless"
 
 adopt.create_optimization_templates(casepath)
 
@@ -265,12 +266,22 @@ for dh_ratio in explored_dh_ratio:
 
     adopt.fill_carrier_data(
         casepath,
-        value_or_data=electricity_price,
+        value_or_data=0,
         columns=["Import price"],
         carriers=["electricity"],
         nodes=["storage"],
     )
-    
+
+    # Add hourly co2 concentration to ClimateData
+    tech_with_hourly_co2_concentration = ["WasteCHP"]
+    climate_data_file = (
+            casepath / "period1" / "node_data" / "industrial_cluster" / "ClimateData.csv"
+    )
+    climate_data = pd.read_csv(climate_data_file)
+    for tech in tech_with_hourly_co2_concentration:
+        climate_data["co2_concentration_" + tech] = co2_concentration.values
+    climate_data.to_csv(climate_data_file, index=False, sep=";")
+
     carbon_price = np.ones(8760) * carbon_tax
     carbon_cost_path = (
         casepath / "period1" / "node_data" / "industrial_cluster" / "CarbonCost.csv"
