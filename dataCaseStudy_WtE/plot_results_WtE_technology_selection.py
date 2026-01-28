@@ -23,9 +23,9 @@ figures_path = "../figures"
 
 
 ## -----------------  Carbon and electricity price --------------------------
-explored_carbon_tax = [50, 75, 100,125, 150]
-explored_el_price = [25, 50, 75, 100,125, 150, 175] # average el prices explored in the analysis
-explored_dh_ratio = [0.5, 0.75]
+explored_carbon_tax = [100, 150, 200, 250]
+explored_el_price = [50, 100, 150, 200, 250]  # average el prices explored in the analysis
+explored_dh_ratio = [0.5, 1]
 gas_price = 40
 import_price_RDF = 20
 
@@ -227,7 +227,7 @@ for dh in explored_dh_ratio_str:
     # 2. Loop through results and collect rows
     for ct in explored_carbon_tax_str:
         for ep in explored_el_price_str:
-            entry = results_summary[f"dh_ratio_{dh}"][f"carbon_tax_{ct}"][f"el_price_{ep}"]
+            entry = results_summary[f"dh_{dh}"][f"ctax_{ct}"][f"el_price_{ep}"]
             dh_data_rows.append({
                 "carbon_tax": ct,
                 "el_price": ep,
@@ -248,8 +248,8 @@ for dh in explored_dh_ratio_str:
 
     # 5. Sort indices and store them in the result dictionaries
     # We rename the variables to avoid confusion with the single matrix object
-    cost_matrix[f"DH_ratio_{dh}"] = cost_matrix_temporary.sort_index(ascending=False).sort_index(axis=1)
-    type_matrix[f"DH_ratio_{dh}"] = type_matrix_temporary.sort_index(ascending=False).sort_index(axis=1)
+    cost_matrix[f"dh_{dh}"] = cost_matrix_temporary.sort_index(ascending=False).sort_index(axis=1)
+    type_matrix[f"dh_{dh}"] = type_matrix_temporary.sort_index(ascending=False).sort_index(axis=1)
 
 # The results are now in final_cost_matrices and final_type_matrices
 
@@ -260,7 +260,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
                  '#F7D03C', '#D491B8', '#012E4D']
 
 for dh in explored_dh_ratio_str:
-    dh_ratio_str = f"DH_ratio_{dh}"
+    dh_ratio_str = f"dh_{dh}"
     # # --- Plot 1: Heatmap of costs (continuous) ---
     # plt.figure(figsize=(7,5))
     # im = plt.imshow(cost_matrix[dh_ratio_str].values.astype(float),
@@ -363,6 +363,6 @@ for dh in explored_dh_ratio_str:
     # SAVE
     # ------------------------------------------------------------
     fig.tight_layout(pad=0.6)
-    save_figure_for_paper(fig, "cal_load_factor_vs_size", figures_path)
+    save_figure_for_paper(fig, f"wte_tech_selection_{dh_ratio_str}", figures_path)
 
     plt.show()

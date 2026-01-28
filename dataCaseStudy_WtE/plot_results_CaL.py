@@ -23,7 +23,7 @@ figures_path = "../figures"
 
 ## -----------------  Electricity price --------------------------
 
-explored_el_price = [ 75, 100,125, 150, 175] # average el prices explored in the analysis
+explored_el_price = [75, 100,125, 150, 175] # average el prices explored in the analysis
 rolling_av_hours = 1
 import_price_RDF = 20
 
@@ -210,42 +210,100 @@ for el_price in explored_el_price_str:
 
 # Plot fraction CaL and load factor at the same time
 
-# Create figure
+# ------------------------------------------------------------
+# PAPER SETUP
+# ------------------------------------------------------------
 setup_matplotlib_for_paper("single")
+
+# ------------------------------------------------------------
+# FIGURE
+# ------------------------------------------------------------
 fig, ax1 = plt.subplots()
 
-# Plot Fraction CO2 treated (circle marker)
+# ============================================================
+# LEFT AXIS — CaL size
+# ============================================================
 for i, (x, y) in enumerate(zip(el_prices, fraction_size_cal_values)):
-    ax1.scatter(x, y, color=colors[i], marker="o", s=100, edgecolor=colors[i], zorder=3)
-ax1.plot(el_prices, fraction_size_cal_values, linestyle="--", color="gray", alpha=0.6, zorder=2)
+    ax1.scatter(
+        x, y,
+        color=colors[i],
+        marker="o",
+        s=90,
+        edgecolor=colors[i],
+        zorder=3
+    )
 
-# Axis styling (black labels/ticks)
-ax1.set_xlabel("Electricity Price [€/MWh]", color="black")
-ax1.set_ylabel("Size [-]", color="black")
-ax1.tick_params(axis="x", labelcolor="black")
-ax1.tick_params(axis="y", labelcolor="black")
+ax1.plot(
+    el_prices,
+    fraction_size_cal_values,
+    linestyle="--",
+    color="gray",
+    alpha=0.6,
+    zorder=2
+)
 
-# Twin axis for CaL load factor
+ax1.set_xlabel("Electricity price [€/MWh]")
+ax1.set_ylabel("CaL size [-]")
+
+# ============================================================
+# RIGHT AXIS — CaL load factor
+# ============================================================
 ax2 = ax1.twinx()
 
 for i, (x, y) in enumerate(zip(el_prices, capacity_factor_cal_values)):
-    ax2.scatter(x, y, color=colors[i], marker="^", s=100, edgecolor=colors[i], zorder=3)
-ax2.plot(el_prices, capacity_factor_cal_values, linestyle="--", color="black", alpha=0.6, zorder=2)
+    ax2.scatter(
+        x, y,
+        color=colors[i],
+        marker="^",
+        s=90,
+        edgecolor=colors[i],
+        zorder=3
+    )
 
-ax2.set_ylabel("Load factor [-]", color="black")
-ax2.tick_params(axis="y", labelcolor="black")
+ax2.plot(
+    el_prices,
+    capacity_factor_cal_values,
+    linestyle="--",
+    color="black",
+    alpha=0.6,
+    zorder=2
+)
 
-# Custom legend (middle left)
+ax2.set_ylabel("CaL load factor [-]")
+
+# ============================================================
+# LEGEND — explains symbol meaning only
+# ============================================================
 legend_elements = [
-    Line2D([0], [0], marker="o", color="gray", label="Size",
-           markerfacecolor="gray", markersize=10, linestyle="None"),
-    Line2D([0], [0], marker="^", color="black", label="Load factor",
-           markerfacecolor="black", markersize=10, linestyle="None")
+    Line2D([0], [0],
+           marker="o",
+           linestyle="None",
+           color="gray",
+           label="CaL size",
+           markersize=9),
+    Line2D([0], [0],
+           marker="^",
+           linestyle="None",
+           color="black",
+           label="CaL load factor",
+           markersize=9)
 ]
-ax1.legend(handles=legend_elements, loc="center left")
 
-fig.tight_layout()
+ax1.legend(
+    handles=legend_elements,
+    loc="center left",
+    frameon=True
+)
+
+# ------------------------------------------------------------
+# FINALIZE & SAVE
+# ------------------------------------------------------------
+fig.tight_layout(pad=0.6)
 save_figure_for_paper(fig, "cal_load_factor_vs_size", figures_path)
+
+plt.show()
+
+
 
 
 
@@ -432,12 +490,12 @@ ax.axhline(0, color='black', linewidth=0.8)
 ax.set_xticks(x)
 ax.set_xticklabels(el_prices)
 ax.set_xlabel("Electricity price [€/MWh]")
-ax.set_ylabel("Cost breakdown [€/tCO₂]")
+ax.set_ylabel("Cost breakdown [€/tCO$_2$]")
 
 # Legend: cost items + dashed rectangle
 handles = [mpatches.Patch(color=c, label=l) for l, c in item_colors.items()]
-correct_patch = mpatches.Patch(facecolor='none', edgecolor='black', linestyle='--', linewidth=1.5, label='Corrected for CO₂ avoided')
-ax.legend(handles + [correct_patch], [*item_colors.keys(), 'Corrected for CO₂ avoided'], bbox_to_anchor=(1.05,1), loc='upper left')
+correct_patch = mpatches.Patch(facecolor='none', edgecolor='black', linestyle='--', linewidth=1.5, label='Corrected for CO$_2$ avoided')
+ax.legend(handles + [correct_patch], [*item_colors.keys(), 'Corrected for CO$_2$ avoided'], bbox_to_anchor=(1.05,1), loc='upper left')
 
 plt.tight_layout()
 save_figure_for_paper(fig, "cal_cost_breakdown", figures_path)
