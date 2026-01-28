@@ -10,7 +10,7 @@ env = os.environ.copy()
 # Start all scripts
 for script in mains:
     p = subprocess.Popen(
-    [sys.executable, "main_WtE_CaL.py"],
+    [sys.executable, script],
     env=env
 )
     processes.append(p)
