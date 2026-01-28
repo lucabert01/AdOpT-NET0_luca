@@ -9,14 +9,15 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import json
 import numpy as np
-from matplotlib import rcParams
 import warnings
 
-from utilities.process_results import save_figure_for_paper, print_h5_structure
+from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
+from matplotlib import rcParams
 
 
 colors = []
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8','#012E4D']
+figures_path = "../figures"
 
 
 ## -----------------  Carbon and electricity price --------------------------
@@ -155,90 +156,131 @@ type_matrix = type_matrix.sort_index(ascending=False).sort_index(axis=1)
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
                  '#F7D03C', '#D491B8', '#012E4D']
 
-# --- Plot 1: Heatmap of costs (continuous) ---
-plt.figure(figsize=(7,5))
-im = plt.imshow(cost_matrix.values.astype(float),
-                cmap=plt.cm.colors.ListedColormap(batlow_colors),
-                aspect="auto")
-
-# add text annotations
-for i in range(cost_matrix.shape[0]):
-    for j in range(cost_matrix.shape[1]):
-        plt.text(j, i, f"{cost_matrix.iloc[i, j]:.1f}",
-                 ha="center", va="center", color="white", fontsize=8)
-
-plt.xticks(range(len(cost_matrix.columns)), cost_matrix.columns)
-plt.yticks(range(len(cost_matrix.index)), cost_matrix.index)
-plt.xlabel("Carbon tax [€/tCO$_2$]")
-plt.ylabel("Electricity price [€/MWh]")
-plt.colorbar(im, label="LCOC [€/tCO$_2$]")
-plt.show()
+# # --- Plot 1: Heatmap of costs (continuous) ---
+# plt.figure(figsize=(7,5))
+# im = plt.imshow(cost_matrix.values.astype(float),
+#                 cmap=plt.cm.colors.ListedColormap(batlow_colors),
+#                 aspect="auto")
+#
+# # add text annotations
+# for i in range(cost_matrix.shape[0]):
+#     for j in range(cost_matrix.shape[1]):
+#         plt.text(j, i, f"{cost_matrix.iloc[i, j]:.1f}",
+#                  ha="center", va="center", color="white", fontsize=8)
+#
+# plt.xticks(range(len(cost_matrix.columns)), cost_matrix.columns)
+# plt.yticks(range(len(cost_matrix.index)), cost_matrix.index)
+# plt.xlabel("Carbon tax [€/tCO$_2$]")
+# plt.ylabel("Electricity price [€/MWh]")
+# plt.colorbar(im, label="LCOC [€/tCO$_2$]")
+# plt.show()
 
 # --- Plot 2: Grid of installed type (categorical) ---
+# types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + MEA"]
+# type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
+#
+# plt.figure(figsize=(7,5))
+# ax = plt.gca()
+# for i, ep in enumerate(type_matrix.index):
+#     for j, ct in enumerate(type_matrix.columns):
+#         t = type_matrix.loc[ep, ct]
+#         ax.add_patch(
+#             plt.Rectangle((j, i), 1, 1, color=type_to_color[t])
+#         )
+#
+#
+# ax.set_xlim(0, len(type_matrix.columns))
+# ax.set_ylim(0, len(type_matrix.index))
+# ax.set_xticks([x+0.5 for x in range(len(type_matrix.columns))])
+# ax.set_yticks([y+0.5 for y in range(len(type_matrix.index))])
+# ax.set_xticklabels(type_matrix.columns)
+# ax.set_yticklabels(type_matrix.index)
+# ax.invert_yaxis()
+# plt.xlabel("Carbon tax [€/tCO$_2$]")
+# plt.ylabel("Electricity price [€/MWh]")
+#
+# # Legend outside at the top, horizontal
+# patches = [mpatches.Patch(color=type_to_color[t], label=t) for t in types]
+# ax.legend(handles=patches, loc="lower center",
+#           bbox_to_anchor=(0.5, 1.05), ncol=len(types))
+#
+# plt.tight_layout()
+# plt.show()
+
+
+
+# ------------------------------------------------------------
+# PAPER SETUP
+# ------------------------------------------------------------
+setup_matplotlib_for_paper("single")
+
 types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + MEA"]
 type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
-plt.figure(figsize=(7,5))
-ax = plt.gca()
+# ------------------------------------------------------------
+# FIGURE
+# ------------------------------------------------------------
+fig, ax = plt.subplots()
+
+# ------------------------------------------------------------
+# GRID PLOT
+# ------------------------------------------------------------
 for i, ep in enumerate(type_matrix.index):
     for j, ct in enumerate(type_matrix.columns):
-        t = type_matrix.loc[ep, ct]
+        tech = type_matrix.loc[ep, ct]
+        cost = cost_matrix.loc[ep, ct]
+
+        # colored cell
         ax.add_patch(
-            plt.Rectangle((j, i), 1, 1, color=type_to_color[t])
+            plt.Rectangle(
+                (j, i), 1, 1,
+                facecolor=type_to_color[tech],
+                edgecolor="white",
+                linewidth=0.8
+            )
         )
 
-
-ax.set_xlim(0, len(type_matrix.columns))
-ax.set_ylim(0, len(type_matrix.index))
-ax.set_xticks([x+0.5 for x in range(len(type_matrix.columns))])
-ax.set_yticks([y+0.5 for y in range(len(type_matrix.index))])
-ax.set_xticklabels(type_matrix.columns)
-ax.set_yticklabels(type_matrix.index)
-ax.invert_yaxis()
-plt.xlabel("Carbon tax [€/tCO$_2$]")
-plt.ylabel("Electricity price [€/MWh]")
-
-# Legend outside at the top, horizontal
-patches = [mpatches.Patch(color=type_to_color[t], label=t) for t in types]
-ax.legend(handles=patches, loc="lower center",
-          bbox_to_anchor=(0.5, 1.05), ncol=len(types))
-
-plt.tight_layout()
-plt.show()
-
-
-
-# --- Plot 2: Grid of installed type (categorical) ---
-types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + MEA"]
-type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
-
-plt.figure(figsize=(7,5))
-ax = plt.gca()
-for i, ep in enumerate(type_matrix.index):
-    for j, ct in enumerate(type_matrix.columns):
-        t = type_matrix.loc[ep, ct]
-        c = cost_matrix.loc[ep, ct]  # cost at same position
-        ax.add_patch(
-            plt.Rectangle((j, i), 1, 1, color=type_to_color[t])
+        # cost annotation
+        ax.text(
+            j + 0.5, i + 0.5,
+            f"{cost:.1f}",
+            ha="center", va="center",
+            color="white",
+            fontsize=rcParams["font.size"] - 2,
+            fontweight="bold"
         )
-        # add cost value as label
-        ax.text(j+0.5, i+0.5, f"{c:.1f}",
-                ha="center", va="center", color="white", fontsize=12, fontweight="bold")
 
+# ------------------------------------------------------------
+# AXES FORMATTING
+# ------------------------------------------------------------
 ax.set_xlim(0, len(type_matrix.columns))
 ax.set_ylim(0, len(type_matrix.index))
-ax.set_xticks([x+0.5 for x in range(len(type_matrix.columns))])
-ax.set_yticks([y+0.5 for y in range(len(type_matrix.index))])
+
+ax.set_xticks(np.arange(len(type_matrix.columns)) + 0.5)
+ax.set_yticks(np.arange(len(type_matrix.index)) + 0.5)
+
 ax.set_xticklabels(type_matrix.columns)
 ax.set_yticklabels(type_matrix.index)
+
 ax.invert_yaxis()
-plt.xlabel("Carbon tax [€/tCO$_2$]")
-plt.ylabel("Electricity price [€/MWh]")
 
-# Legend outside at the top, horizontal
-patches = [mpatches.Patch(color=type_to_color[t], label=t) for t in types]
-ax.legend(handles=patches, loc="lower center",
-          bbox_to_anchor=(0.5, 1.05), ncol=len(types))
+ax.set_xlabel("Carbon tax [€/tCO$_2$]")
+ax.set_ylabel("Electricity price [€/MWh]")
 
-plt.tight_layout()
+
+legend_patches = [
+    mpatches.Patch(color=type_to_color[t], label=t) for t in types
+]
+
+ax.legend(
+    handles=legend_patches,
+    loc="lower center",
+    bbox_to_anchor=(0.5, 1.08),
+    ncol=len(types),
+    frameon=True
+)
+
+fig.tight_layout(pad=0.6)
+save_figure_for_paper(fig, "cement_tech_selection", figures_path)
+
 plt.show()
