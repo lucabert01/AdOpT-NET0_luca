@@ -235,7 +235,7 @@ for dh_ratio in explored_dh_ratio:
 
     adopt.fill_carrier_data(
         casepath,
-        value_or_data=30,
+        value_or_data=gas_price,
         columns=["Import price"],
         carriers=["gas"],
         nodes=["industrial_cluster"],

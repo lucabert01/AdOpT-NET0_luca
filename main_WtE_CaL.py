@@ -21,7 +21,7 @@ plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
 carbon_tax = 250
 gas_price = 40
 import_price_RDF = 20
-explored_el_price = [50, 75, 100,125, 150, 175] # average el prices explored in the analysis
+explored_el_price = [75, 100,125, 150, 175] # average el prices explored in the analysis
 existing_boiler_size = 250
 dh_ratio = 0.5
 wte_demand_is_averaged = 0
@@ -231,7 +231,7 @@ for av_el_price in explored_el_price:
 
     adopt.fill_carrier_data(
         casepath,
-        value_or_data=30,
+        value_or_data=gas_price,
         columns=["Import price"],
         carriers=["gas"],
         nodes=["industrial_cluster"],
