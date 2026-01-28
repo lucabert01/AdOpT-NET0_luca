@@ -18,7 +18,7 @@ adopt.create_optimization_templates(casepath)
 # General input data
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
-carbon_tax = 300
+carbon_tax = 250
 gas_price = 40
 import_price_RDF = 20
 explored_el_price = [50, 75, 100,125, 150, 175] # average el prices explored in the analysis
