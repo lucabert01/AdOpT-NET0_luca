@@ -48,18 +48,6 @@ class WasteToEnergyCaLCCS(Technology):
                 / "database/templates/technology_data/Industrial/WasteCaL_data/wasteCaL_sheet.xlsx"
         )
 
-        emission_factor_data = pd.read_excel(
-            other_data_path, sheet_name="emission_factor_waste", index_col=0
-        )
-        # TODO: make emission factor based on hourly co2 concentration
-        possible_concentrations = emission_factor_data.columns.tolist()
-        co2_concentration = self.performance_data["design_co2_concentration"]
-
-        interp = interp1d(possible_concentrations, emission_factor_data.loc["emission_factor_tco2_twaste"],
-                          kind="linear",
-                          fill_value="extrapolate")
-        emission_factor = interp(co2_concentration)
-        self.performance_data["emission_factor"] = emission_factor
 
         el_efficiency_cal_hourly = []
         th_input_cal_hourly = []
