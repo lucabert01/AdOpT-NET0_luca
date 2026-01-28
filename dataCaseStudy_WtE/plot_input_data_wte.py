@@ -7,11 +7,14 @@ import numpy as np
 from matplotlib import rcParams
 import warnings
 from scipy.interpolate import interp1d
-from utilities.process_results import save_figure_for_paper, print_h5_structure
+from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
 import seaborn as sns
+from matplotlib import rcParams
+# Set global styling for the plots
 
 colors = []
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8','#012E4D']
+figures_path = "../figures"
 
 
 json_wasteCHP = Path("./technologies_json/WasteCHP.json")
@@ -22,8 +25,8 @@ emission_factor = info_wasteCHP["Performance"]["emission_factor"]
 
 path_processed_data_cement = Path("../dataCaseStudy_Cement/dataSources/data_processed.xlsx")
 electricity_price_data = pd.read_excel(path_processed_data_cement, sheet_name="electricity_prices")
-av_el_price = electricity_price_data["el_price_itNord"].mean()
-electricity_price_norm = electricity_price_data["el_price_itNord"]/av_el_price
+max_el_price = electricity_price_data["el_price_itNord"].max()
+electricity_price_norm = electricity_price_data["el_price_itNord"]/max_el_price
 
 path_processed_data = Path("./dataSources/hourly_data_casestudy.xlsx")
 data = pd.read_excel(path_processed_data)
@@ -50,110 +53,98 @@ interp = interp1d(possible_concentrations, emission_factor_data.loc["emission_fa
 emission_factor = interp(co2_concentration)
 
 
-wasteProcessed_demand = emissions / emission_factor
+wasteProcessed_demand_norm = (emissions/emissions.max()) / emission_factor
 
 
 # Plot time series
 
+from matplotlib import rcParams
+
 rolling_window = 24  # hours
 
-fig, axs = plt.subplots(4, 1, figsize=(8, 10), sharex=True)
+# ------------------------------------------------------------
+# PAPER SETUP
+# ------------------------------------------------------------
+setup_matplotlib_for_paper("single")
 
-# --- Normalized electricity price ---
-axs[0].plot(electricity_price_norm.index,
-            electricity_price_norm,
-            color=batlow_colors[0],
-            alpha=0.4,
-            linewidth=0.8)
+rolling_window = 24  # hours
 
-axs[0].plot(electricity_price_norm.index,
-            electricity_price_norm.rolling(rolling_window).mean(),
-            color=batlow_colors[0],
-            linewidth=2)
-
-axs[0].set_title("Normalized electricity price")
-
-
-# --- Normalized heat demand ---
-axs[1].plot(norm_heat_demand.index,
-            norm_heat_demand,
-            color=batlow_colors[1],
-            alpha=0.4,
-            linewidth=0.8)
-
-axs[1].plot(norm_heat_demand.index,
-            norm_heat_demand.rolling(rolling_window).mean(),
-            color=batlow_colors[1],
-            linewidth=2)
-
-axs[1].set_title("Normalized heat demand")
-
-
-# --- Waste processed demand ---
-axs[2].plot(wasteProcessed_demand.index,
-            wasteProcessed_demand,
-            color=batlow_colors[2],
-            alpha=0.4,
-            linewidth=0.8)
-
-axs[2].plot(wasteProcessed_demand.index,
-            wasteProcessed_demand.rolling(rolling_window).mean(),
-            color=batlow_colors[2],
-            linewidth=2)
-
-axs[2].set_title("Waste processed demand")
-
-
-# --- CO₂ concentration ---
-axs[3].plot(co2_concentration.index,
-            co2_concentration,
-            color=batlow_colors[3],
-            alpha=0.4,
-            linewidth=0.8)
-
-axs[3].plot(co2_concentration.index,
-            co2_concentration.rolling(rolling_window).mean(),
-            color=batlow_colors[3],
-            linewidth=2)
-
-axs[3].set_title("CO₂ concentration")
-
-axs[-1].set_xlabel("Time")
-
-plt.tight_layout()
-
-
-# Plot cumulative distribution
+# ------------------------------------------------------------
+# ECDF helper
+# ------------------------------------------------------------
 def ecdf(series):
     x = np.sort(series.values)
     y = np.arange(1, len(x) + 1) / len(x)
     return x, y
 
+# ------------------------------------------------------------
+# DATA STRUCTURE
+# ------------------------------------------------------------
+rows = [
+    ("El. price [-]", electricity_price_norm, batlow_colors[0]),
+    ("Heat demand [-]",       norm_heat_demand,       batlow_colors[1]),
+    ("Waste input [-]",   wasteProcessed_demand_norm,  batlow_colors[2]),
+    ("CO$_2$ conc. [%]", co2_concentration*100,      batlow_colors[3]),
+]
 
+# ------------------------------------------------------------
+# FIGURE & GRID
+# ------------------------------------------------------------
+fig, axs = plt.subplots(
+    nrows=4,
+    ncols=2,
+    sharex=False,
+    sharey=False
+)
 
-fig, axs = plt.subplots(4, 1, figsize=(8, 10), sharex=False)
+# Column headers (explain the matrix once)
+axs[0, 0].set_title("Time series")
+axs[0, 1].set_title("Empirical cumulative distribution")
 
-x, y = ecdf(electricity_price_norm)
-axs[0].plot(x, y, color=batlow_colors[0])
-axs[0].set_title("ECDF – Normalized electricity price")
+# ============================================================
+# PLOTTING
+# ============================================================
+for i, (ylabel, series, color) in enumerate(rows):
 
-x, y = ecdf(norm_heat_demand)
-axs[1].plot(x, y, color=batlow_colors[1])
-axs[1].set_title("ECDF – Normalized heat demand")
+    # --- Time series (left)
+    axs[i, 0].plot(
+        series.index,
+        series,
+        color=color,
+        alpha=0.35,
+        linewidth=0.8
+    )
+    axs[i, 0].plot(
+        series.index,
+        series.rolling(rolling_window).mean(),
+        color=color,
+        linewidth=1.5
+    )
+    axs[i, 0].set_ylabel(ylabel)
 
-x, y = ecdf(wasteProcessed_demand)
-axs[2].plot(x, y, color=batlow_colors[2])
-axs[2].set_title("ECDF – Waste processed demand")
+    # --- ECDF (right)
+    x, y = ecdf(series)
+    axs[i, 1].plot(
+        x, y,
+        color=color,
+        linewidth=1.5
+    )
+    axs[i, 1].set_ylim(0, 1)
 
-x, y = ecdf(co2_concentration)
-axs[3].plot(x, y, color=batlow_colors[3])
-axs[3].set_title("ECDF – CO₂ concentration")
+# ------------------------------------------------------------
+# AXIS LABELS (only where meaningful)
+# ------------------------------------------------------------
+axs[-1, 0].set_xlabel("Time [h]")
+axs[-1, 1].set_xlabel("Value [-]")
+axs[1, 1].set_ylabel("Cumulative probability [-]")
 
-axs[-1].set_xlabel("Value")
+# ------------------------------------------------------------
+# FINALIZE & SAVE
+# ------------------------------------------------------------
+fig.tight_layout(pad=0.6)
+save_figure_for_paper(fig, "wte_timeseries_and_ecdf_inputs_matrix", figures_path)
 
-plt.tight_layout()
-
-
+plt.show()
 
 
 # ##------------------------------------ fancy visualization ---------------------------------

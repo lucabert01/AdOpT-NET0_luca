@@ -10,14 +10,15 @@ import json
 import numpy as np
 from matplotlib import rcParams
 import warnings
-from utilities.process_results import save_figure_for_paper, print_h5_structure
+from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
 from matplotlib.lines import Line2D
 import matplotlib.patches as mpatches
-
+from matplotlib import rcParams
 
 
 colors = []
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8','#012E4D']
+figures_path = "../figures"
 
 
 ## -----------------  Electricity price --------------------------
@@ -210,7 +211,8 @@ for el_price in explored_el_price_str:
 # Plot fraction CaL and load factor at the same time
 
 # Create figure
-fig, ax1 = plt.subplots(figsize=(7,5))
+setup_matplotlib_for_paper("single")
+fig, ax1 = plt.subplots()
 
 # Plot Fraction CO2 treated (circle marker)
 for i, (x, y) in enumerate(zip(el_prices, fraction_size_cal_values)):
@@ -219,7 +221,7 @@ ax1.plot(el_prices, fraction_size_cal_values, linestyle="--", color="gray", alph
 
 # Axis styling (black labels/ticks)
 ax1.set_xlabel("Electricity Price [€/MWh]", color="black")
-ax1.set_ylabel("Fraction CO₂ treated", color="black")
+ax1.set_ylabel("Size [-]", color="black")
 ax1.tick_params(axis="x", labelcolor="black")
 ax1.tick_params(axis="y", labelcolor="black")
 
@@ -230,19 +232,20 @@ for i, (x, y) in enumerate(zip(el_prices, capacity_factor_cal_values)):
     ax2.scatter(x, y, color=colors[i], marker="^", s=100, edgecolor=colors[i], zorder=3)
 ax2.plot(el_prices, capacity_factor_cal_values, linestyle="--", color="black", alpha=0.6, zorder=2)
 
-ax2.set_ylabel("CaL load factor [-]", color="black")
+ax2.set_ylabel("Load factor [-]", color="black")
 ax2.tick_params(axis="y", labelcolor="black")
 
 # Custom legend (middle left)
 legend_elements = [
-    Line2D([0], [0], marker="o", color="gray", label="Fraction CO₂ treated",
+    Line2D([0], [0], marker="o", color="gray", label="Size",
            markerfacecolor="gray", markersize=10, linestyle="None"),
-    Line2D([0], [0], marker="^", color="black", label="CaL load factor",
+    Line2D([0], [0], marker="^", color="black", label="Load factor",
            markerfacecolor="black", markersize=10, linestyle="None")
 ]
 ax1.legend(handles=legend_elements, loc="center left")
 
 fig.tight_layout()
+save_figure_for_paper(fig, "cal_load_factor_vs_size", figures_path)
 
 
 
@@ -315,19 +318,19 @@ for el_price in explored_el_price_str:
 
 
 
-# Scatter points for capture cost
-for i, (x, y) in enumerate(zip(el_prices, capture_cost)):
-    plt.scatter(x, y, color=colors[i], marker="s", s=100, edgecolor=colors[i], zorder=3, label="Capture Cost" if i == 0 else "")
-
-# Connect points with a dashed line
-plt.plot(el_prices, capture_cost, linestyle="--", color="black", alpha=0.6, zorder=2)
-
-# Labels
-plt.xlabel("Electricity Price [€/MWh]")
-plt.ylabel("Cost [€/tCO₂]")
-
-# Legend
-plt.legend()
+# # Scatter points for capture cost
+# for i, (x, y) in enumerate(zip(el_prices, capture_cost)):
+#     plt.scatter(x, y, color=colors[i], marker="s", s=100, edgecolor=colors[i], zorder=3, label="Capture Cost" if i == 0 else "")
+#
+# # Connect points with a dashed line
+# plt.plot(el_prices, capture_cost, linestyle="--", color="black", alpha=0.6, zorder=2)
+#
+# # Labels
+# plt.xlabel("Electricity Price [€/MWh]")
+# plt.ylabel("Cost [€/tCO₂]")
+#
+# # Legend
+# plt.legend()
 
 
 # BArchart
@@ -364,6 +367,7 @@ revenue_corr = -np.array(economics["revenue_el_cal"], dtype=float).ravel() * cor
 
 width = 0.35  # width of each bar
 x = np.arange(len(el_prices))
+setup_matplotlib_for_paper("single")
 
 
 def stacked_bar(ax, x_pos, capex, opex_f, opex_v, t_s, revenue, colors, return_tops=False):
@@ -392,7 +396,7 @@ def stacked_bar(ax, x_pos, capex, opex_f, opex_v, t_s, revenue, colors, return_t
         tops = bottom.copy()
         return tops
 # --- Create figure ---
-fig, ax = plt.subplots(figsize=(12, 6))
+fig, ax = plt.subplots()
 
 # Plot original bars (left)
 stacked_bar(ax, x - width/2, capex, opex_f, opex_v, t_s, revenue, item_colors)
@@ -427,7 +431,7 @@ for xi, vals_orig, vals_corr in zip(x, zip(capex, opex_f, opex_v, t_s, revenue),
 ax.axhline(0, color='black', linewidth=0.8)
 ax.set_xticks(x)
 ax.set_xticklabels(el_prices)
-ax.set_xlabel("Electricity Price [€/MWh]")
+ax.set_xlabel("Electricity price [€/MWh]")
 ax.set_ylabel("Cost breakdown [€/tCO₂]")
 
 # Legend: cost items + dashed rectangle
@@ -436,6 +440,8 @@ correct_patch = mpatches.Patch(facecolor='none', edgecolor='black', linestyle='-
 ax.legend(handles + [correct_patch], [*item_colors.keys(), 'Corrected for CO₂ avoided'], bbox_to_anchor=(1.05,1), loc='upper left')
 
 plt.tight_layout()
+save_figure_for_paper(fig, "cal_cost_breakdown", figures_path)
+
 plt.show()
 
 
