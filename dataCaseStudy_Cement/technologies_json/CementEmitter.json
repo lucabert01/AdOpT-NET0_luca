@@ -17,7 +17,7 @@
   },
   "Performance": {
     "comment": "contains fitting data on unit of input, technology types and input/output carriers",
-    "performance_function_type": 1,
+    "performance_function_type": 2,
     "main_output_carrier": "clinker",
     "output_carrier": [
       "clinker"
@@ -25,7 +25,7 @@
     "output_ratios": {
     },
     "emission_factor": 1,
-    "min_part_load": 0,
+    "min_part_load": 1,
     "ccs": {
       "possible": 1,
       "co2_concentration" : 0.20,

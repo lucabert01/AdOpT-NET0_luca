@@ -192,6 +192,13 @@ class CementHybridCCS(Technology):
             b_tec, data, set_t_full, set_t_clustered
         )
 
+
+        # add additional constraints for performance type 2 (min. part load)
+        if self.performance_function_type == 2:
+            b_tec = self._performance_function_type_2(b_tec)
+
+
+
         # Size constraint
         prod_capacity_clinker = self.performance_data[
             "prod_capacity_clinker"
@@ -635,6 +642,63 @@ class CementHybridCCS(Technology):
             == b_tec.var_opex_fixed
         )
         return b_tec
+
+    def _performance_function_type_2(self, b_tec):
+        """
+        Sets the minimum part load constraint based on output with
+        performance type 2.
+
+        :param b_tec: pyomo block with technology model
+        :return: pyomo block with technology model
+        """
+        # Transformation required
+        self.big_m_transformation_required = 1
+
+        # Performance Parameters
+        coeff_ti = self.processed_coeff.time_independent
+        rated_capacity = coeff_ti["rated_capacity"]
+        min_part_load = coeff_ti["min_part_load"]
+
+        # define disjuncts
+        s_indicators = range(0, 2)
+
+        def init_output(dis, t, ind):
+            if ind == 0:  # technology off
+
+                def init_output_off(const, car_output):
+                    return self.output[t, car_output] == 0
+
+                dis.const_output_off = pyo.Constraint(
+                    b_tec.set_output_carriers, rule=init_output_off
+                )
+
+            else:  # technology on
+
+                def init_min_partload(const):
+                    return (
+                        self.output[t, self.main_output_carrier]
+                        >= min_part_load * b_tec.var_size * rated_capacity
+                    )
+
+                dis.const_min_partload = pyo.Constraint(rule=init_min_partload)
+
+        b_tec.dis_output = gdp.Disjunct(
+            self.set_t_performance, s_indicators, rule=init_output
+        )
+
+        # Bind disjuncts
+        def bind_disjunctions(dis, t):
+            return [b_tec.dis_output[t, i] for i in s_indicators]
+
+        b_tec.disjunction_output = gdp.Disjunction(
+            self.set_t_performance, rule=bind_disjunctions
+        )
+
+        return b_tec
+
+
+
+
 
     def write_results_tec_design(self, h5_group, model_block):
         """

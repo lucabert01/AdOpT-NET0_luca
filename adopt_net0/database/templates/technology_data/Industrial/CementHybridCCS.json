@@ -50,13 +50,13 @@
   },
   "Performance": {
     "comment": "contains fitting data on unit of input, technology types and input/output carriers",
-    "performance_function_type": 1,
+    "performance_function_type": 2,
     "clinker_capacity_is_fixed": 0,
     "prod_capacity_clinker": 80,
     "co2_out_is_compressed": 1,
     "phase_of_co2_out": "gas",
     "input_carrier": [
-      "heat",
+      "extra_fuel",
       "electricity"
     ],
     "main_output_carrier": "clinker",
@@ -65,7 +65,7 @@
       "clinker"
     ],
     "emission_factor": 0,
-    "min_part_load": 0,
+    "min_part_load": 1,
     "performance": {
       "tCO2_tclinker": 0.897,
       "CCR_oxy": 0.802,
