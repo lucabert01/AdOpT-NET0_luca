@@ -61,17 +61,17 @@ class WasteToEnergyCaLCCS(Technology):
             rel_eff_variation_down_conc = offdesign_co2_conc.loc["down conc", "rel_el_eff_variation"]
             rel_eff_variation_up_conc = offdesign_co2_conc.loc["up conc", "rel_el_eff_variation"]
             el_efficiency_design = self.performance_data["el_efficiency_CaL"]
-            rel_th_input_RDF_variation_down_conc = offdesign_co2_conc.loc["down conc", "rel_rdf_input_variation"]
-            rel_th_input_RDF_variation_up_conc = offdesign_co2_conc.loc["up conc", "rel_rdf_input_variation"]
+            rel_th_input_rdf_variation_down_conc = offdesign_co2_conc.loc["down conc", "rel_rdf_input_variation"]
+            rel_th_input_rdf_variation_up_conc = offdesign_co2_conc.loc["up conc", "rel_rdf_input_variation"]
             th_input_cal_design = self.performance_data["th_input_CaL"]
 
             for t in range(len(co2_concentration)):
                 if co2_concentration.iloc[t] >= design_co2_conc:
                     var_eff = rel_eff_variation_up_conc
-                    var_th_input = rel_th_input_RDF_variation_up_conc
+                    var_th_input = rel_th_input_rdf_variation_up_conc
                 else:
                     var_eff = rel_eff_variation_down_conc
-                    var_th_input = rel_th_input_RDF_variation_down_conc
+                    var_th_input = rel_th_input_rdf_variation_down_conc
 
                 el_efficiency_cal_hourly.append(el_efficiency_design*
                                                     (1+var_eff*(co2_concentration.iloc[t]-design_co2_conc)))
