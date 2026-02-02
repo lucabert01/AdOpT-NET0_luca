@@ -1,9 +1,9 @@
 {
-  "tec_type": "CONV4",
-  "size_min": 0,
-  "size_max": 10000,
+  "tec_type": "CONV2",
+  "size_min": 102.5,
+  "size_max": 102.6,
   "size_is_int": 0,
-  "size_based_on": "output",
+  "size_based_on": "input",
   "decommission": 0,
   "Economics": {
     "comment": "capex in EUR/MW/year or as a piecewise function, opex_variable in EUR/MWh total output, opex_fixed in % of capex_annual",
@@ -18,11 +18,24 @@
   "Performance": {
     "comment": "contains fitting data on unit of input, technology types and input/output carriers",
     "performance_function_type": 2,
-    "main_output_carrier": "clinker",
+    "main_input_carrier": "limestone",
+    "input_carrier": [
+      "limestone"
+    ],
     "output_carrier": [
       "clinker"
     ],
-    "output_ratios": {
+    "performance": {
+      "in": [
+        0,
+        1
+      ],
+      "out": {
+        "clinker": [
+          0,
+          1
+        ]
+      }
     },
     "emission_factor": 1,
     "min_part_load": 1,
@@ -31,15 +44,17 @@
       "co2_concentration" : 0.20,
       "ccs_type": "MEA_medium"
     },
-    "ramping_rate": -1,
+    "ramping_time": -1,
+    "ref_size": -1,
+    "ramping_const_int": -1,
     "standby_power": -1,
-    "min_uptime": -1,
-    "min_downtime": -1,
-    "SU_time": -1,
+    "min_uptime": 168,
+    "min_downtime": 168,
+    "SU_time": 48,
     "SD_time": -1,
     "SU_load": -1,
     "SD_load": -1,
-    "max_startups": -1
+    "max_startups": 4
   },
   "Units": {
     "size": "t/h",

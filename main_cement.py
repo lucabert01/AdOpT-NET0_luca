@@ -19,8 +19,8 @@ adopt.create_optimization_templates(casepath)
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
-explored_carbon_tax = [50, 75, 100,125, 150]
-explored_el_price = [25, 50, 75, 100,125] # average el prices explored in the analysis
+explored_carbon_tax = [1000]
+explored_el_price = [100] # average el prices explored in the analysis
 distance_to_stor = 100
 
 cost_extra_fuel = 15
@@ -53,6 +53,7 @@ for carbon_tax in explored_carbon_tax:
             "extra_fuel",
             "gas",
             "clinker",
+            "limestone"
         ]
         # Investment periods:
         topology["investment_periods"] = ["period1"]
@@ -101,7 +102,7 @@ for carbon_tax in explored_carbon_tax:
             casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
         ) as json_file:
             technologies = json.load(json_file)
-        technologies["new"] = ["CementHybridCCS", "CementEmitter", "HeatPump"]
+        technologies["new"] = [ "CementEmitter", "HeatPump", "ClinkerStorage"]
 
         with open(
             casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "w"
@@ -172,6 +173,22 @@ for carbon_tax in explored_carbon_tax:
             value_or_data=5000,
             columns=["Import limit"],
             carriers=["extra_fuel"],
+            nodes=["industrial_cluster"],
+        )
+
+        adopt.fill_carrier_data(
+            casepath,
+            value_or_data=5000,
+            columns=["Import limit"],
+            carriers=["limestone"],
+            nodes=["industrial_cluster"],
+        )
+
+        adopt.fill_carrier_data(
+            casepath,
+            value_or_data=200,
+            columns=["Import price"],
+            carriers=["limestone"],
             nodes=["industrial_cluster"],
         )
         adopt.fill_carrier_data(
