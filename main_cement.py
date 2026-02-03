@@ -102,7 +102,7 @@ for carbon_tax in explored_carbon_tax:
             casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
         ) as json_file:
             technologies = json.load(json_file)
-        technologies["new"] = [ "CementEmitter", "HeatPump", "ClinkerStorage"]
+        technologies["new"] = [ "CementHybridCCS", "HeatPump", "ClinkerStorage"]
 
         with open(
             casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "w"

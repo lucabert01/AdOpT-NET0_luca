@@ -65,12 +65,23 @@
       "clinker"
     ],
     "emission_factor": 0,
-    "min_part_load": 1,
     "performance": {
       "tCO2_tclinker": 0.897,
       "CCR_oxy": 0.802,
       "CCR_mea": 0.954
-    }
+    },
+    "min_part_load": 1,
+    "ramping_time": -1,
+    "ref_size": -1,
+    "ramping_const_int": -1,
+    "standby_power": -1,
+    "min_uptime": 168,
+    "min_downtime": 168,
+    "SU_time": 48,
+    "SD_time": -1,
+    "SU_load": -1,
+    "SD_load": -1,
+    "max_startups": 4
   },
   "Units": {
     "size": "tonne/hr",
