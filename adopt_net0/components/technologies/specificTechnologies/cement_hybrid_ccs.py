@@ -659,11 +659,24 @@ class CementHybridCCS(Technology):
         rated_capacity = coeff_ti["rated_capacity"]
         min_part_load = coeff_ti["min_part_load"]
 
+        if not b_tec.find_component("var_x"):
+            b_tec.var_x = pyo.Var(
+                self.set_t_performance, domain=pyo.NonNegativeReals, bounds=(0, 1)
+            )
+
+        if min_part_load == 0:
+            warn(
+                "Having performance_function_type = 2 with no part-load usually makes no sense. Error occured for "
+                + self.name
+            )
+
         # define disjuncts
         s_indicators = range(0, 2)
 
         def init_output(dis, t, ind):
             if ind == 0:  # technology off
+
+                dis.const_x_off = pyo.Constraint(expr=b_tec.var_x[t] == 0)
 
                 def init_output_off(const, car_output):
                     return self.output[t, car_output] == 0
@@ -673,6 +686,8 @@ class CementHybridCCS(Technology):
                 )
 
             else:  # technology on
+
+                dis.const_x_on = pyo.Constraint(expr=b_tec.var_x[t] == 1)
 
                 def init_min_partload(const):
                     return (

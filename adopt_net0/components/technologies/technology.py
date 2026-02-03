@@ -503,7 +503,7 @@ class Technology(ModelComponent):
 
         # DYNAMICS
         if config["performance"]["dynamics"]["value"]:
-            technologies_modelled_with_dynamics = ["CONV1", "CONV2", "CONV3"]
+            technologies_modelled_with_dynamics = ["CONV1", "CONV2", "CONV3", "CementHybridCCS"]
             if self.technology_model in technologies_modelled_with_dynamics:
                 b_tec = self._define_dynamics(b_tec, data)
             else:
