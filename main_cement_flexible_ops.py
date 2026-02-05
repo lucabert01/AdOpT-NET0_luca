@@ -12,7 +12,7 @@ from dataCaseStudy_Cement.process_data_cement_emission import create_norm_el_pri
 casepath = Path("./CaseStudy_Cement")
 json_files_path = Path("dataCaseStudy_Cement/technologies_json")
 json_files_path_network = Path("dataCaseStudy_Cement/network_json")
-result_path = "./dataCaseStudy_Cement/raw_results"
+result_path = "./dataCaseStudy_Cement/raw_results/flexible_ops"
 
 adopt.create_optimization_templates(casepath)
 
@@ -22,8 +22,10 @@ possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
 explored_std_el = [1, 1.5, 2]
 explored_el_price = [50, 100, 150, 200] # average el prices explored in the analysis
+explored_technologies = ["mea", "hybrid"]
 distance_to_stor = 100
 carbon_tax = 150
+
 
 cost_extra_fuel = 15
 path_processed_data = Path("dataCaseStudy_Cement/dataSources/data_processed.xlsx")
@@ -37,208 +39,211 @@ clinker_demand = clinker_data[f"clinker_{plant_analyzed}"]
 
 pyhub = {}
 
-for std_el in explored_std_el:
-    name_profile = f"el_price_norm_{std_el}"
-    electricity_price_norm = generated_el_profiles[name_profile]
-    pyhub_std_el = f"std_el_{std_el}"
-    pyhub[pyhub_std_el] = {}
+for tec_name in explored_technologies:
+    ccs_tec = "CementEmitter" if tec_name == "mea" else "CementHybridCCS"
+    pyhub[tec_name] = {}
+    for std_el in explored_std_el:
+        name_profile = f"el_price_norm_{std_el}"
+        electricity_price_norm = generated_el_profiles[name_profile]
+        pyhub_std_el = f"std_el_{std_el}"
+        pyhub[tec_name][pyhub_std_el] = {}
 
-    for av_el_price in explored_el_price:
-        pyhub_el_price = f"el_price_{av_el_price}"
-        # Load json template
-        with open(casepath / "Topology.json", "r") as json_file:
-            topology = json.load(json_file)
-        # Nodes
-        topology["nodes"] = ["storage", "industrial_cluster"]
-        # Carriers:
-        topology["carriers"] = [
-            "electricity",
-            "CO2captured",
-            "heat",
-            "extra_fuel",
-            "gas",
-            "clinker",
-            "limestone"
-        ]
-        # Investment periods:
-        topology["investment_periods"] = ["period1"]
-        # Save json template
-        with open(casepath / "Topology.json", "w") as json_file:
-            json.dump(topology, json_file, indent=4)
+        for av_el_price in explored_el_price:
+            pyhub_el_price = f"el_price_{av_el_price}"
+            # Load json template
+            with open(casepath / "Topology.json", "r") as json_file:
+                topology = json.load(json_file)
+            # Nodes
+            topology["nodes"] = ["storage", "industrial_cluster"]
+            # Carriers:
+            topology["carriers"] = [
+                "electricity",
+                "CO2captured",
+                "heat",
+                "extra_fuel",
+                "gas",
+                "clinker",
+                "limestone"
+            ]
+            # Investment periods:
+            topology["investment_periods"] = ["period1"]
+            # Save json template
+            with open(casepath / "Topology.json", "w") as json_file:
+                json.dump(topology, json_file, indent=4)
 
-        end_period = 8760
-
-
-        # Load json template
-        with open(casepath / "ConfigModel.json", "r") as json_file:
-            configuration = json.load(json_file)
-        # Change objective
-        configuration["optimization"]["objective"]["value"] = "costs"
-        # Set MILP gap
-        configuration["solveroptions"]["mipgap"]["value"] = 0.02
-        # change save options
-        configuration['reporting']['save_summary_path']['value'] = result_path
-        configuration['reporting']['save_path']['value'] = result_path
-        # Save json template
-        with open(casepath / "ConfigModel.json", "w") as json_file:
-            json.dump(configuration, json_file, indent=4)
-
-        adopt.create_input_data_folder_template(casepath)
-
-        node_location = pd.read_csv(casepath / "NodeLocations.csv", sep=";", index_col=0, header=0)
-        for node in topology["nodes"]:
-            node_location.at[node, "lon"] = 10
-            node_location.at[node, "lat"] = 10
-            node_location.at[node, "alt"] = 10
-        node_location = node_location.reset_index()
-        node_location.to_csv(casepath / "NodeLocations.csv", sep=";", index=False)
+            end_period = 8760
 
 
-        # Add technologies
-        with open(casepath / "period1" / "node_data" / "storage" / "Technologies.json", "r") as json_file:
-            technologies = json.load(json_file)
-        technologies["new"] = ["PermanentStorage_CO2_simple"]
+            # Load json template
+            with open(casepath / "ConfigModel.json", "r") as json_file:
+                configuration = json.load(json_file)
+            # Change objective
+            configuration["optimization"]["objective"]["value"] = "costs"
+            # Set MILP gap
+            configuration["solveroptions"]["mipgap"]["value"] = 0.02
+            # change save options
+            configuration['reporting']['save_summary_path']['value'] = result_path
+            configuration['reporting']['save_path']['value'] = result_path
+            # Save json template
+            with open(casepath / "ConfigModel.json", "w") as json_file:
+                json.dump(configuration, json_file, indent=4)
 
-        with open(casepath / "period1" / "node_data" / "storage" / "Technologies.json", "w") as json_file:
-            json.dump(technologies, json_file, indent=4)
+            adopt.create_input_data_folder_template(casepath)
 
-
-        with open(
-            casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
-        ) as json_file:
-            technologies = json.load(json_file)
-        technologies["new"] = [ "CementHybridCCS", "HeatPump", "ClinkerStorage"]
-
-        with open(
-            casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "w"
-        ) as json_file:
-            json.dump(technologies, json_file, indent=4)
-
-        # Copy over technology files
-        adopt.copy_technology_data(casepath, json_files_path)
-
-        # Add networks
-        with open(casepath / "period1" / "Networks.json", "r") as json_file:
-            networks = json.load(json_file)
-        networks["new"] = ["CO2PipelineOnshore"]
-
-        with open(casepath / "period1" / "Networks.json", "w") as json_file:
-            json.dump(networks, json_file, indent=4)
-
-        adopt.copy_network_data(casepath, json_files_path_network)
-
-        # Make a new folder for the new network
-        os.makedirs(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore", exist_ok=True)
-        # max size arc
-        arc_size = pd.read_csv(casepath / "period1" / "network_topology" / "new" / "size_max_arcs.csv", sep=";",
-                               index_col=0)
-        arc_size.loc["industrial_cluster", "storage"] = 10000
-        arc_size.to_csv(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore" / "size_max_arcs.csv",
-                        sep=";")
-        print("Max size per arc:", arc_size)
-
-        # Use the templates, fill and save them to the respective directory
-        # Connection
-        connection = pd.read_csv(casepath / "period1" / "network_topology" / "new" / "connection.csv", sep=";", index_col=0)
-        connection.loc["industrial_cluster", "storage"] = 1
-        connection.to_csv(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore" / "connection.csv",
-                          sep=";")
-        print("Connection:", connection)
-
-        # Delete the template
-        os.remove(casepath / "period1" / "network_topology" / "new" / "connection.csv")
-
-        # Distance
-        distance = pd.read_csv(casepath / "period1" / "network_topology" / "new" / "distance.csv", sep=";", index_col=0)
-        distance.loc["industrial_cluster", "storage"] = distance_to_stor
-        distance.to_csv(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore" / "distance.csv", sep=";")
-        print("Distance:", distance)
-
-        # Delete the template
-        os.remove(casepath / "period1" / "network_topology" / "new" / "distance.csv")
-
-        # Delete the max_size_arc template
-        os.remove(casepath / "period1" / "network_topology" / "new" / "size_max_arcs.csv")
+            node_location = pd.read_csv(casepath / "NodeLocations.csv", sep=";", index_col=0, header=0)
+            for node in topology["nodes"]:
+                node_location.at[node, "lon"] = 10
+                node_location.at[node, "lat"] = 10
+                node_location.at[node, "alt"] = 10
+            node_location = node_location.reset_index()
+            node_location.to_csv(casepath / "NodeLocations.csv", sep=";", index=False)
 
 
-        # Import hourly profiles
-        electricity_price = electricity_price_norm * av_el_price
+            # Add technologies
+            with open(casepath / "period1" / "node_data" / "storage" / "Technologies.json", "r") as json_file:
+                technologies = json.load(json_file)
+            technologies["new"] = ["PermanentStorage_CO2_simple"]
 
-        # Set import limits/cost
-        adopt.fill_carrier_data(
-            casepath,
-            value_or_data=5000,
-            columns=["Import limit"],
-            carriers=["electricity"],
-            nodes=["industrial_cluster", "storage"],
-        )
-
-        adopt.fill_carrier_data(
-            casepath,
-            value_or_data=5000,
-            columns=["Import limit"],
-            carriers=["extra_fuel"],
-            nodes=["industrial_cluster"],
-        )
-
-        adopt.fill_carrier_data(
-            casepath,
-            value_or_data=5000,
-            columns=["Import limit"],
-            carriers=["limestone"],
-            nodes=["industrial_cluster"],
-        )
-
-        adopt.fill_carrier_data(
-            casepath,
-            value_or_data=200,
-            columns=["Import price"],
-            carriers=["limestone"],
-            nodes=["industrial_cluster"],
-        )
-        adopt.fill_carrier_data(
-            casepath,
-            value_or_data=cost_extra_fuel,
-            columns=["Import price"],
-            carriers=["extra_fuel"],
-            nodes=["industrial_cluster"],
-        )
+            with open(casepath / "period1" / "node_data" / "storage" / "Technologies.json", "w") as json_file:
+                json.dump(technologies, json_file, indent=4)
 
 
-        adopt.fill_carrier_data(
-            casepath,
-            value_or_data=electricity_price,
-            columns=["Import price"],
-            carriers=["electricity"],
-            nodes=["industrial_cluster"],
-        )
+            with open(
+                casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
+            ) as json_file:
+                technologies = json.load(json_file)
+            technologies["new"] = [ccs_tec, "HeatPump", "ClinkerStorage"]
 
-        adopt.fill_carrier_data(
-            casepath,
-            value_or_data=clinker_demand,
-            columns=["Demand"],
-            carriers=["clinker"],
-            nodes=["industrial_cluster"],
-        )
+            with open(
+                casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "w"
+            ) as json_file:
+                json.dump(technologies, json_file, indent=4)
+
+            # Copy over technology files
+            adopt.copy_technology_data(casepath, json_files_path)
+
+            # Add networks
+            with open(casepath / "period1" / "Networks.json", "r") as json_file:
+                networks = json.load(json_file)
+            networks["new"] = ["CO2PipelineOnshore"]
+
+            with open(casepath / "period1" / "Networks.json", "w") as json_file:
+                json.dump(networks, json_file, indent=4)
+
+            adopt.copy_network_data(casepath, json_files_path_network)
+
+            # Make a new folder for the new network
+            os.makedirs(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore", exist_ok=True)
+            # max size arc
+            arc_size = pd.read_csv(casepath / "period1" / "network_topology" / "new" / "size_max_arcs.csv", sep=";",
+                                   index_col=0)
+            arc_size.loc["industrial_cluster", "storage"] = 10000
+            arc_size.to_csv(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore" / "size_max_arcs.csv",
+                            sep=";")
+            print("Max size per arc:", arc_size)
+
+            # Use the templates, fill and save them to the respective directory
+            # Connection
+            connection = pd.read_csv(casepath / "period1" / "network_topology" / "new" / "connection.csv", sep=";", index_col=0)
+            connection.loc["industrial_cluster", "storage"] = 1
+            connection.to_csv(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore" / "connection.csv",
+                              sep=";")
+            print("Connection:", connection)
+
+            # Delete the template
+            os.remove(casepath / "period1" / "network_topology" / "new" / "connection.csv")
+
+            # Distance
+            distance = pd.read_csv(casepath / "period1" / "network_topology" / "new" / "distance.csv", sep=";", index_col=0)
+            distance.loc["industrial_cluster", "storage"] = distance_to_stor
+            distance.to_csv(casepath / "period1" / "network_topology" / "new" / "CO2PipelineOnshore" / "distance.csv", sep=";")
+            print("Distance:", distance)
+
+            # Delete the template
+            os.remove(casepath / "period1" / "network_topology" / "new" / "distance.csv")
+
+            # Delete the max_size_arc template
+            os.remove(casepath / "period1" / "network_topology" / "new" / "size_max_arcs.csv")
 
 
-        carbon_price = np.ones(8760) * carbon_tax
-        carbon_cost_path = (
-            casepath / "period1" / "node_data" / "industrial_cluster" / "CarbonCost.csv"
-        )
-        carbon_cost_template = pd.read_csv(carbon_cost_path, sep=";", index_col=0, header=0)
-        carbon_cost_template["price"] = carbon_price
-        carbon_cost_template = carbon_cost_template.reset_index()
-        carbon_cost_template.to_csv(carbon_cost_path, sep=";", index=False)
+            # Import hourly profiles
+            electricity_price = electricity_price_norm * av_el_price
 
-        # Construct and solve the model
-        pyhub[pyhub_std_el][pyhub_el_price] = adopt.ModelHub()
-        pyhub[pyhub_std_el][pyhub_el_price].read_data(casepath, start_period=0, end_period=end_period)
+            # Set import limits/cost
+            adopt.fill_carrier_data(
+                casepath,
+                value_or_data=5000,
+                columns=["Import limit"],
+                carriers=["electricity"],
+                nodes=["industrial_cluster", "storage"],
+            )
 
-        pyhub[pyhub_std_el][pyhub_el_price].data.model_config['reporting']['case_name'][
-            'value'] = f"{pyhub_std_el}_{pyhub_el_price}"
-        # pyhub[pyhub_el_price].data.time_series['full']['period1', 'industrial_cluster', 'CarrierData', 'heat', 'Demand'] = heat_demand
+            adopt.fill_carrier_data(
+                casepath,
+                value_or_data=5000,
+                columns=["Import limit"],
+                carriers=["extra_fuel"],
+                nodes=["industrial_cluster"],
+            )
 
-        pyhub[pyhub_std_el][pyhub_el_price].construct_model()
-        pyhub[pyhub_std_el][pyhub_el_price].construct_balances()
-        pyhub[pyhub_std_el][pyhub_el_price].solve()
+            adopt.fill_carrier_data(
+                casepath,
+                value_or_data=5000,
+                columns=["Import limit"],
+                carriers=["limestone"],
+                nodes=["industrial_cluster"],
+            )
+
+            adopt.fill_carrier_data(
+                casepath,
+                value_or_data=200,
+                columns=["Import price"],
+                carriers=["limestone"],
+                nodes=["industrial_cluster"],
+            )
+            adopt.fill_carrier_data(
+                casepath,
+                value_or_data=cost_extra_fuel,
+                columns=["Import price"],
+                carriers=["extra_fuel"],
+                nodes=["industrial_cluster"],
+            )
+
+
+            adopt.fill_carrier_data(
+                casepath,
+                value_or_data=electricity_price,
+                columns=["Import price"],
+                carriers=["electricity"],
+                nodes=["industrial_cluster"],
+            )
+
+            adopt.fill_carrier_data(
+                casepath,
+                value_or_data=clinker_demand,
+                columns=["Demand"],
+                carriers=["clinker"],
+                nodes=["industrial_cluster"],
+            )
+
+
+            carbon_price = np.ones(8760) * carbon_tax
+            carbon_cost_path = (
+                casepath / "period1" / "node_data" / "industrial_cluster" / "CarbonCost.csv"
+            )
+            carbon_cost_template = pd.read_csv(carbon_cost_path, sep=";", index_col=0, header=0)
+            carbon_cost_template["price"] = carbon_price
+            carbon_cost_template = carbon_cost_template.reset_index()
+            carbon_cost_template.to_csv(carbon_cost_path, sep=";", index=False)
+
+            # Construct and solve the model
+            pyhub[tec_name][pyhub_std_el][pyhub_el_price] = adopt.ModelHub()
+            pyhub[tec_name][pyhub_std_el][pyhub_el_price].read_data(casepath, start_period=0, end_period=end_period)
+
+            pyhub[tec_name][pyhub_std_el][pyhub_el_price].data.model_config['reporting']['case_name'][
+                'value'] = f"{tec_name}_{pyhub_std_el}_{pyhub_el_price}"
+            # pyhub[pyhub_el_price].data.time_series['full']['period1', 'industrial_cluster', 'CarrierData', 'heat', 'Demand'] = heat_demand
+
+            pyhub[tec_name][pyhub_std_el][pyhub_el_price].construct_model()
+            pyhub[tec_name][pyhub_std_el][pyhub_el_price].construct_balances()
+            pyhub[tec_name][pyhub_std_el][pyhub_el_price].solve()
