@@ -1,0 +1,216 @@
+import h5py
+from pathlib import Path
+from adopt_net0.result_management.read_results import (
+    print_h5_tree,
+    extract_datasets_from_h5group,
+)
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import json
+import numpy as np
+import warnings
+import seaborn as sns
+from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
+from matplotlib import rcParams
+
+
+colors = []
+batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8','#012E4D']
+figures_path = "../figures"
+
+
+## -----------------  Carbon and electricity price --------------------------
+explored_std_el = [1000]#[50, 75, 100,125, 150]
+explored_el_price = [100]#[25, 50, 75, 100,125] # average el prices explored in the analysis
+explored_tec = ["mea", "hybrid"]
+cost_extra_fuel = 15
+
+path_processed_data = Path("./dataSources/data_processed.xlsx")
+data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
+av_el_price = data["el_price_itNord"].mean()
+electricity_price_norm = data["el_price_itNord"]/av_el_price
+json_cement = Path("./technologies_json/CementEmitter.json")
+info_cement = json.loads(json_cement.read_text())
+emission_factor_clinker_baseline = info_cement["Performance"]["emission_factor"]# tCo2/tClinker, without oxyfuel calciner
+json_heat_pump = Path("./technologies_json/HeatPump.json")
+info_heat_pump = json.loads(json_heat_pump.read_text())
+cop_hp = info_heat_pump["Performance"]["performance"]["out"]["heat"][1]
+json_hybrid_ccs = Path("./technologies_json/CementHybridCCS.json")
+info_hybrid_ccs = json.loads(json_hybrid_ccs.read_text())
+emission_factor_clinker_hybrid = info_hybrid_ccs["Performance"]["performance"]["tCO2_tclinker"]
+
+num_el_prices = len(explored_el_price)
+num_std_el = len(explored_std_el)
+num_tec = len(explored_tec)
+raw_results_path = Path("./raw_results/technology_selection")
+explored_std_el_str = [str(r) for r in explored_std_el]
+explored_el_price_str = [str(r) for r in explored_el_price]
+explored_tec_str = explored_tec
+results_summary = {}
+
+for i_tec in range(0,num_tec):
+    tec = explored_tec[i_tec]
+    tec_str = explored_tec_str[i_tec]
+    results_summary[tec_str] = {}
+
+    # Get all directories that contain 'tec_str' in the name
+    tec_dirs = [d for d in raw_results_path.iterdir()
+                       if d.is_dir() and tec_str in d.name]
+
+    # Sort directories by name
+    dir_results_sorted = sorted(tec_dirs)
+
+    # Get the most recent ones
+    tec_names = [d.name for d in dir_results_sorted[-num_el_prices*num_std_el:]]
+    for j in range(0,num_std_el):
+        std_el = explored_std_el[j]
+        std_el_str = f"std_{explored_std_el_str[j]}"
+        results_summary[tec_str][std_el_str] = {}
+
+        # Get all file names that contain 'std_el_str' in the name
+        std_el_dirs = [d for d in tec_names if std_el_str in d]
+
+        # Sort them by name
+        dir_results_sorted = sorted(std_el_dirs)
+
+        # Get the most recent ones at the value of carbon tax std_el_str
+        std_el_names = [d for d in dir_results_sorted[-num_el_prices:]]
+        for i in range(0,num_el_prices):
+            el_price = explored_el_price[i] * electricity_price_norm
+
+            file_path = raw_results_path / f"{std_el_names[i]}/optimization_results.h5"
+
+            # Check if each explored_el_price[i] is in file_names[i]
+            el_price_str = f"el_price_{explored_el_price[i]}"
+            results_summary[tec_str][std_el_str][el_price_str] = {}
+            if f"el_price_{el_price_str}" in std_el_names[i]:
+                print(f"{el_price_str} found in {std_el_names[i]}")
+            else:
+                print(f"{el_price_str} NOT found in {std_el_names[i]}")
+
+        with h5py.File(file_path, 'r') as hdf_file:
+            df_operation = pd.DataFrame(extract_datasets_from_h5group(hdf_file["operation"]))
+            df_design = pd.DataFrame(extract_datasets_from_h5group(hdf_file["design/nodes/period1"]))
+            df_design_network = pd.DataFrame(extract_datasets_from_h5group(
+                hdf_file["design/networks/period1/CO2PipelineOnshore/industrial_clusterstorage"]))
+        #print(df_operation)
+
+        cement_mea_design = df_design.loc[:, ('industrial_cluster', 'CementEmitter')]
+        cement_mea_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'CementEmitter')]
+        heat_pump_design = df_design.loc[:, ('industrial_cluster', 'HeatPump')]
+        heat_pump_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'HeatPump')]
+        cement_oxy_design = df_design.loc[:, ('industrial_cluster', 'CementHybridCCS')]
+        cement_oxy_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'CementHybridCCS')]
+        co2_storage_design = df_design.loc[:, ('storage', 'PermanentStorage_CO2_simple')]
+
+        clinker_demand = df_operation.loc[:, ('energy_balance', 'period1', 'industrial_cluster','clinker', 'demand')]
+        emissions_cement = clinker_demand * emission_factor_clinker_baseline
+        pipeline_cost = df_design_network['capex'].values.flatten()[0]
+        storage_cost = co2_storage_design['opex_variable']
+        transport_stor_cost = storage_cost + pipeline_cost
+
+        # economics
+        el_price = electricity_price_norm*explored_el_price[i]
+        if cement_mea_design["size_ccs"].iloc[0] > 0:
+            type_installed = "MEA"
+            capex = cement_mea_design["capex_tot"] + heat_pump_design["capex_tot"]
+            opex_fixed = cement_mea_design["opex_fixed"]
+            opex_variable = cement_mea_design["opex_variable"]
+            energy_cost = sum(cement_mea_operation["electricity_var_input_ccs"]*el_price) + sum(cement_mea_operation["heat_var_input_ccs"]/cop_hp*el_price)
+            co2_captured = cement_mea_operation['CO2captured_var_output_ccs']
+            tot_co2_avoided = sum(cement_mea_operation["clinker_output"]*emission_factor_clinker_baseline) - sum(cement_mea_operation["emissions_pos"])
+        elif cement_oxy_design["size"].iloc[0] > 0:
+            if cement_oxy_design["size_mea"].iloc[0] > 0:
+                type_installed = "Oxyfuel + MEA"
+            else:
+                type_installed = "Partial oxyfuel"
+
+            capex = cement_oxy_design["capex_tot"]
+            opex_fixed = cement_oxy_design["opex_fixed"]
+            opex_variable = cement_oxy_design["opex_variable"]
+            co2_captured = cement_oxy_operation['CO2captured_output']
+            energy_cost = sum(cement_oxy_operation["electricity_input"]*el_price) + sum(cement_oxy_operation["extra_fuel_input"]*cost_extra_fuel)
+            tot_co2_avoided = sum(cement_oxy_operation["clinker_output"]*emission_factor_clinker_baseline) - sum(cement_oxy_operation["emissions_pos"])
+
+        else:
+            type_installed = "none"
+            capex = 0
+            opex_fixed = 0
+            opex_variable = 0
+            co2_captured = 0
+            energy_cost = 0
+            tot_co2_avoided = 0
+
+
+        tot_co2_captured = (sum(co2_captured) if not isinstance(co2_captured, int) else pd.Series([0]))
+        results_summary[tec_str][std_el_str][el_price_str]['hourly_co2_captured'] = co2_captured
+        results_summary[tec_str][std_el_str][el_price_str]['capex_tot'] = capex
+        results_summary[tec_str][std_el_str][el_price_str]['opex_fixed'] = opex_fixed
+        results_summary[tec_str][std_el_str][el_price_str]['opex_variable'] = opex_variable
+        results_summary[tec_str][std_el_str][el_price_str]['energy_cost'] = energy_cost
+        results_summary[tec_str][std_el_str][el_price_str]['transport_stor_cost'] = transport_stor_cost
+        results_summary[tec_str][std_el_str][el_price_str]['tot_co2_captured'] = tot_co2_captured
+        results_summary[tec_str][std_el_str][el_price_str]['tot_co2_avoided'] = tot_co2_avoided
+        results_summary[tec_str][std_el_str][el_price_str]['correct_for_avoided'] = tot_co2_captured/tot_co2_avoided
+        results_summary[tec_str][std_el_str][el_price_str]['cost_of_avoided'] = ((capex + opex_fixed + opex_variable + energy_cost + transport_stor_cost)
+                                                                            /tot_co2_avoided if not isinstance(co2_captured, int) else pd.Series([0]))
+        results_summary[tec_str][std_el_str][el_price_str]['type_installed'] = type_installed
+
+# ------------------------------------------------------------
+
+
+# Define types and colors once
+batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
+                 '#F7D03C', '#D491B8', '#012E4D']
+
+# Loop through each technology scenario
+for tec_str in explored_tec_str:
+    data = []
+    for ct in explored_std_el_str:
+        for ep in explored_el_price_str:
+            # Accessing the new 3-layer structure
+            entry = results_summary[tec_str][f"std_el_{ct}"][f"el_price_{ep}"]
+            data.append({
+                "std_el": ct,
+                "el_price": ep,
+                "cost_of_avoided": entry["cost_of_avoided"].iloc[0]
+            })
+
+    df = pd.DataFrame(data)
+    df["std_el"] = pd.to_numeric(df["std_el"])
+    df["el_price"] = pd.to_numeric(df["el_price"])
+
+    # Pivot to matrix for the heatmap
+    cost_matrix = df.pivot(index="el_price", columns="std_el", values="cost_of_avoided")
+    # Electricity price descending, Standard increase ascending
+    cost_matrix = cost_matrix.sort_index(ascending=False).sort_index(axis=1)
+
+    # --- PLOTTING ---
+    setup_matplotlib_for_paper("single")
+    fig, ax = plt.subplots()
+
+    # Create the heatmap
+    sns.heatmap(
+        cost_matrix,
+        annot=True,  # Adds the cost numbers in the cells
+        fmt=".1f",  # One decimal place
+        cmap="viridis",  # Perceptually uniform color map
+        linewidths=0.8,
+        linecolor="white",
+        cbar_kws={'label': 'Cost of Avoided CO$_2$ [€/tCO$_2$]'},
+        ax=ax,
+        annot_kws={"weight": "bold", "size": rcParams["font.size"] - 2}
+    )
+
+    # --- AXES FORMATTING ---
+    ax.set_xlabel("Std increase [-]")
+    ax.set_ylabel("Electricity price [€/MWh]")
+    ax.set_title(f"Scenario: {tec_str}", pad=20)
+
+    fig.tight_layout(pad=0.6)
+
+    # Save using your custom function
+    save_figure_for_paper(fig, f"cement_cost_heatmap_{tec_str}", figures_path)
+
+    plt.show()
