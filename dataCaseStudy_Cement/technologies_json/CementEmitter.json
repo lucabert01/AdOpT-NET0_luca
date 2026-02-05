@@ -37,7 +37,7 @@
         ]
       }
     },
-    "emission_factor": 1,
+    "emission_factor": 0.86,
     "min_part_load": 1,
     "ccs": {
       "possible": 1,
