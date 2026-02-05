@@ -67,7 +67,7 @@
     "emission_factor": 0,
     "performance": {
       "tCO2_tclinker": 0.943,
-      "CCR_oxy": 0.76,
+      "CCR_oxy": 0.782,
       "CCR_mea": 0.95
     },
     "min_part_load": 1,

@@ -68,7 +68,7 @@
     "min_part_load": 1,
     "performance": {
       "tCO2_tclinker": 0.944,
-      "CCR_oxy": 0.76,
+      "CCR_oxy": 0.782,
       "CCR_mea": 0.95
     }
   },
