@@ -23,7 +23,7 @@ figures_path = "../figures"
 
 ## -----------------  Electricity price --------------------------
 
-explored_el_price = [75, 100,125, 150, 175] # average el prices explored in the analysis
+explored_el_price = [100,125, 150, 175, 200] # average el prices explored in the analysis
 rolling_av_hours = 1
 import_price_RDF = 20
 
@@ -106,7 +106,7 @@ for i in range(0,len(file_names)):
     fraction_size_cal = size_cal/ (max(emissions_w2e)*ccr)
     ccs_capacity_factor = sum(co2_captured_w2e)/(size_cal*8760)
     boiler_load_factor = sum(boiler_operation['heat_output'])/ sum(heat_demand)
-
+    final_emissions = w2e_operation['emissions_pos']
     # economics
     el_price = electricity_price_norm * explored_el_price[i]
     capex_cal = w2e_design["capex_tot"]
@@ -133,7 +133,7 @@ for i in range(0,len(file_names)):
     results_summary[el_price_str]['opex_variable'] = opex_variable
     results_summary[el_price_str]['transport_stor_cost'] = transport_stor_cost
     results_summary[el_price_str]['revenue_el_cal'] = revenue_el_cal
-    results_summary[el_price_str]['tot_co2_avoided'] = sum(waste_in*emission_factor)-(sum(emissions_w2e-co2_captured_w2e))
+    results_summary[el_price_str]['tot_co2_avoided'] = sum(waste_in*emission_factor)-(sum(final_emissions))
     results_summary[el_price_str]['tot_co2_captured'] = sum(co2_captured_w2e)
 
     results_summary['hourly_boiler_heat_out'] = boiler_operation['heat_output']
@@ -353,10 +353,16 @@ for el_price in explored_el_price_str:
     # Economics (€/tCO2)
     values = {}
     for economic_param, storage_list in economics.items():
-        val = (
-            results_summary[el_price][economic_param]
-            / results_summary[el_price]["tot_co2_captured"]
-        )
+        numerator = results_summary[el_price][economic_param]
+        denominator = results_summary[el_price]["tot_co2_captured"]
+
+        # Ensure we are dealing with a single float, not a Series/Array
+        if hasattr(numerator, "__len__"):
+            numerator = numerator[0]
+        if hasattr(denominator, "__len__"):
+            denominator = denominator[0]
+
+        val = (numerator / denominator) if denominator > 0 else 0
         storage_list.append(val)
         values[economic_param] = val
 
@@ -462,28 +468,47 @@ stacked_bar(ax, x - width/2, capex, opex_f, opex_v, t_s, revenue, item_colors)
 # Plot corrected bars (right) and get top positions
 tops_corrected = stacked_bar(ax, x + width/2, capex_corr, opex_f_corr, opex_v_corr, t_s_corr, revenue_corr, item_colors, return_tops=True)
 
-# Draw dashed rectangle around corrected bars
-for xi, top, rev in zip(x, tops_corrected, revenue_corr):
-    bottom = min(0, rev)
-    rect = mpatches.Rectangle(
-        (xi + width/2 - width/2, bottom),
-        width,
-        top - bottom,
-        fill=False,
-        edgecolor='black',
-        linestyle='--',
-        linewidth=1.5
-    )
-    ax.add_patch(rect)
+# # Draw dashed rectangle around corrected bars
+# for xi, top, rev in zip(x, tops_corrected, revenue_corr):
+#     bottom = min(0, rev)
+#     rect = mpatches.Rectangle(
+#         (xi + width/2 - width/2, bottom),
+#         width,
+#         top - bottom,
+#         fill=False,
+#         edgecolor='black',
+#         linestyle='--',
+#         linewidth=1.5
+#     )
+#     ax.add_patch(rect)
 
-# --- Add black squares for total capture cost ---
-for xi, vals_orig, vals_corr in zip(x, zip(capex, opex_f, opex_v, t_s, revenue), zip(capex_corr, opex_f_corr, opex_v_corr, t_s_corr, revenue_corr)):
-    # Original
+# --- Add markers for total capture cost ---
+for xi, vals_orig, vals_corr in zip(
+    x,
+    zip(capex, opex_f, opex_v, t_s, revenue),
+    zip(capex_corr, opex_f_corr, opex_v_corr, t_s_corr, revenue_corr)
+):
+    # Original (non-corrected): circle
     total_orig = sum(vals_orig)
-    ax.scatter(xi - width/2, total_orig, color='black', marker='s', s=50, zorder=5)
-    # Corrected
+    ax.scatter(
+        xi - width/2,
+        total_orig,
+        color='black',
+        marker='o',
+        s=50,
+        zorder=5
+    )
+
+    # Corrected: square
     total_corr = sum(vals_corr)
-    ax.scatter(xi + width/2, total_corr, color='black', marker='s', s=50, zorder=5)
+    ax.scatter(
+        xi + width/2,
+        total_corr,
+        color='black',
+        marker='s',
+        s=50,
+        zorder=5
+    )
 
 # Axes and labels
 ax.axhline(0, color='black', linewidth=0.8)
@@ -493,9 +518,36 @@ ax.set_xlabel("Electricity price [€/MWh]")
 ax.set_ylabel("Cost breakdown [€/tCO$_2$]")
 
 # Legend: cost items + dashed rectangle
+# correct_patch = mpatches.Patch(facecolor='none', edgecolor='black', linestyle='--', linewidth=1.5, label='Corrected for CO$_2$ avoided')
+# handles = [mpatches.Patch(color=c, label=l) for l, c in item_colors.items()]
+# Legend handles for cost items
 handles = [mpatches.Patch(color=c, label=l) for l, c in item_colors.items()]
-correct_patch = mpatches.Patch(facecolor='none', edgecolor='black', linestyle='--', linewidth=1.5, label='Corrected for CO$_2$ avoided')
-ax.legend(handles + [correct_patch], [*item_colors.keys(), 'Corrected for CO$_2$ avoided'], bbox_to_anchor=(1.05,1), loc='upper left')
+
+# Marker legend entries
+circle_handle = plt.Line2D(
+    [0], [0],
+    marker='o',
+    color='black',
+    linestyle='None',
+    markersize=7,
+    label='Cost of capture'
+)
+
+square_handle = plt.Line2D(
+    [0], [0],
+    marker='s',
+    color='black',
+    linestyle='None',
+    markersize=7,
+    label='CAC'
+)
+
+ax.legend(
+    handles + [circle_handle, square_handle],
+    [*item_colors.keys(), 'Cost of capture', 'CAC'],
+    bbox_to_anchor=(1.05, 1),
+    loc='upper left'
+)
 
 plt.tight_layout()
 save_figure_for_paper(fig, "cal_cost_breakdown", figures_path)
