@@ -23,7 +23,7 @@ figures_path = "../figures"
 ## -----------------  Carbon and electricity price --------------------------
 explored_std_el = [1000]#[50, 75, 100,125, 150]
 explored_el_price = [100]#[25, 50, 75, 100,125] # average el prices explored in the analysis
-explored_tec = ["mea", "hybrid"]
+explored_tec = ["mea", "hybrid", "both"]
 cost_extra_fuel = 15
 
 path_processed_data = Path("./dataSources/data_processed.xlsx")
@@ -43,7 +43,7 @@ emission_factor_clinker_hybrid = info_hybrid_ccs["Performance"]["performance"]["
 num_el_prices = len(explored_el_price)
 num_std_el = len(explored_std_el)
 num_tec = len(explored_tec)
-raw_results_path = Path("./raw_results/technology_selection")
+raw_results_path = Path("./raw_results/flexible_ops")
 explored_std_el_str = [str(r) for r in explored_std_el]
 explored_el_price_str = [str(r) for r in explored_el_price]
 explored_tec_str = explored_tec
@@ -211,6 +211,6 @@ for tec_str in explored_tec_str:
     fig.tight_layout(pad=0.6)
 
     # Save using your custom function
-    save_figure_for_paper(fig, f"cement_cost_heatmap_{tec_str}", figures_path)
+    save_figure_for_paper(fig, f"flex_cement_heatmap_{tec_str}", figures_path)
 
     plt.show()

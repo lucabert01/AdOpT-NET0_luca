@@ -22,7 +22,7 @@ possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
 explored_std_el = [1, 1.5, 2]
 explored_el_price = [50, 100, 150, 200] # average el prices explored in the analysis
-explored_technologies = ["mea", "hybrid"]
+explored_technologies = ["mea", "hybrid", "both"]
 distance_to_stor = 100
 carbon_tax = 150
 
@@ -40,7 +40,13 @@ clinker_demand = clinker_data[f"clinker_{plant_analyzed}"]
 pyhub = {}
 
 for tec_name in explored_technologies:
-    ccs_tec = "CementEmitter" if tec_name == "mea" else "CementHybridCCS"
+    if tec_name == "mea":
+        ccs_tec = "CementEmitter"
+    elif tec_name =="hybrid":
+        ccs_tec = "CementHybridCCS"
+    elif tec_name == "both":
+        ccs_tec = ["CementEmitter", "CementHybridCCS"]
+
     pyhub[tec_name] = {}
     for std_el in explored_std_el:
         name_profile = f"el_price_norm_{std_el}"
