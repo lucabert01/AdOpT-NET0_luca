@@ -11,7 +11,7 @@ import os
 casepath = Path("./CaseStudy_Cement")
 json_files_path = Path("dataCaseStudy_Cement/technologies_json")
 json_files_path_network = Path("dataCaseStudy_Cement/network_json")
-result_path = "./dataCaseStudy_Cement/raw_results"
+result_path = "./dataCaseStudy_Cement/raw_results/tech_selection"
 
 adopt.create_optimization_templates(casepath)
 
