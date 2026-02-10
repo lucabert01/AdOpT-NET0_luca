@@ -41,7 +41,7 @@ emission_factor_clinker_hybrid = info_hybrid_ccs["Performance"]["performance"]["
 
 num_el_prices = len(explored_el_price)
 num_carbon_tax = len(explored_carbon_tax)
-raw_results_path = Path("./raw_results")
+raw_results_path = Path("./raw_results/tech_selection")
 explored_carbon_tax_str = [str(r) for r in explored_carbon_tax]
 explored_el_price_str = [str(r) for r in explored_el_price]
 results_summary = {}
