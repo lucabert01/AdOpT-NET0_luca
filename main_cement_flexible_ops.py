@@ -20,9 +20,9 @@ adopt.create_optimization_templates(casepath)
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
-explored_std_el = [1]#[1, 1.5, 2]
-explored_el_price = [0]#[50, 100, 150, 200] # average el prices explored in the analysis
-explored_technologies = ["mea", "hybrid", "both"]
+explored_std_el = [1, 1.5, 2]
+explored_el_price = [50, 100, 150, 200] # average el prices explored in the analysis
+explored_technologies = ["mea", "hybrid", "both", "not_flex"]
 distance_to_stor = 100
 carbon_tax = 150
 
@@ -41,12 +41,14 @@ pyhub = {}
 
 for tec_name in explored_technologies:
     if tec_name == "mea":
-        ccs_tec = "CementEmitter"
-    elif tec_name =="hybrid":
-        ccs_tec = "CementHybridCCS"
+        techs = ["CementEmitter", "HeatPump", "ClinkerStorage"]
+    elif tec_name == "hybrid":
+        techs = ["CementHybridCCS", "HeatPump", "ClinkerStorage"]
     elif tec_name == "both":
-        ccs_tec = ["CementEmitter", "CementHybridCCS"]
-
+        techs = ["CementEmitter", "CementHybridCCS", "HeatPump", "ClinkerStorage"]
+    elif tec_name == "not_flex":
+        techs = ["CementEmitter", "CementHybridCCS", "HeatPump"]
+        
     pyhub[tec_name] = {}
     for std_el in explored_std_el:
         name_profile = f"el_price_norm_{std_el}"
@@ -118,7 +120,7 @@ for tec_name in explored_technologies:
                 casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
             ) as json_file:
                 technologies = json.load(json_file)
-            technologies["new"] = [ccs_tec, "HeatPump", "ClinkerStorage"]
+            technologies["new"] = techs
 
             with open(
                 casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "w"
