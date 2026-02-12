@@ -392,7 +392,6 @@ class CementHybridCCS(Technology):
 
         return b_tec
 
-    # TODO add compressor cpu capex
     def _define_capex_variables(self, b_tec, data: dict):
         """
         Defines variables related to technology capex.
