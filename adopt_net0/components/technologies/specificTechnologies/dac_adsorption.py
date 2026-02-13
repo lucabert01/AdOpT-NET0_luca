@@ -31,6 +31,8 @@ class DacAdsorption(Technology):
     without water spraying.
     The performance data from the process model and respective metadata is located in
     database/templates/technology_data/DAC/DAC_adsorption_data
+
+    A fully linearlized model can be obtained by setting nr_segments to 1 and size_is_int to 0.
     """
 
     def __init__(self, tec_data: dict):
@@ -301,7 +303,9 @@ class DacAdsorption(Technology):
 
         # Connection thermal and electric energy demand (eq. 11)
         def init_thermal_energy(const, t):
-            return b_tec.var_input_th[t] == b_tec.var_input_tot[t] - b_tec.var_input_el[t]
+            return (
+                b_tec.var_input_th[t] == b_tec.var_input_tot[t] - b_tec.var_input_el[t]
+            )
 
         b_tec.const_thermal_energy = pyo.Constraint(
             self.set_t_performance, rule=init_thermal_energy
@@ -354,9 +358,9 @@ class DacAdsorption(Technology):
         # Input-output (eq. 2)
         def init_output(const, t):
             return (
-                    self.output[t, "CO2captured"]
-                    == alpha[t - 1, ind - 1] * b_tec.var_input_tot[t]
-                    + beta[t - 1, ind - 1] * b_tec.var_modules_on[t]
+                self.output[t, "CO2captured"]
+                == alpha[t - 1, ind - 1] * b_tec.var_input_tot[t]
+                + beta[t - 1, ind - 1] * b_tec.var_modules_on[t]
             )
 
         b_tec.const_output = pyo.Constraint(self.set_t_performance, rule=init_output)
@@ -364,28 +368,30 @@ class DacAdsorption(Technology):
         # Lower bound on the energy input (eq. 5)
         def init_input_low_bound(const, t):
             return (
-                    b_point[t - 1, ind - 1] * b_tec.var_modules_on[t]
-                    <= b_tec.var_input_tot[t]
+                b_point[t - 1, ind - 1] * b_tec.var_modules_on[t]
+                <= b_tec.var_input_tot[t]
             )
 
-        b_tec.const_input_on11 = pyo.Constraint(self.set_t_performance, rule=init_input_low_bound)
+        b_tec.const_input_on11 = pyo.Constraint(
+            self.set_t_performance, rule=init_input_low_bound
+        )
 
         # Upper bound on the energy input (eq. 5)
         def init_input_up_bound(const, t):
             return (
-                    b_tec.var_input_tot[t]
-                    <= b_point[t - 1, ind] * b_tec.var_modules_on[t]
+                b_tec.var_input_tot[t] <= b_point[t - 1, ind] * b_tec.var_modules_on[t]
             )
 
-        b_tec.const_input_on21 = pyo.Constraint(self.set_t_performance, rule=init_input_up_bound)
-
+        b_tec.const_input_on21 = pyo.Constraint(
+            self.set_t_performance, rule=init_input_up_bound
+        )
 
         # Input-output (eq. 7)
         def init_input(const, t):
             return (
-                    b_tec.var_input_el[t]
-                    == gamma[t - 1, ind - 1] * b_tec.var_input_tot[t]
-                    + delta[t - 1, ind - 1] * b_tec.var_modules_on[t]
+                b_tec.var_input_el[t]
+                == gamma[t - 1, ind - 1] * b_tec.var_input_tot[t]
+                + delta[t - 1, ind - 1] * b_tec.var_modules_on[t]
             )
 
         b_tec.const_input = pyo.Constraint(self.set_t_performance, rule=init_input)
@@ -393,21 +399,23 @@ class DacAdsorption(Technology):
         # Lower bound on the energy input (eq. 10)
         def init_input_low_bound(const, t):
             return (
-                    a_point[t - 1, ind - 1] * b_tec.var_modules_on[t]
-                    <= b_tec.var_input_tot[t]
+                a_point[t - 1, ind - 1] * b_tec.var_modules_on[t]
+                <= b_tec.var_input_tot[t]
             )
 
-        b_tec.const_input_on12 = pyo.Constraint(self.set_t_performance, rule=init_input_low_bound)
+        b_tec.const_input_on12 = pyo.Constraint(
+            self.set_t_performance, rule=init_input_low_bound
+        )
 
         # Upper bound on the energy input (eq. 10)
         def init_input_up_bound(const, t):
             return (
-                    b_tec.var_input_tot[t]
-                    <= a_point[t - 1, ind] * b_tec.var_modules_on[t]
+                b_tec.var_input_tot[t] <= a_point[t - 1, ind] * b_tec.var_modules_on[t]
             )
 
-        b_tec.const_input_on22 = pyo.Constraint(self.set_t_performance, rule=init_input_up_bound)
-
+        b_tec.const_input_on22 = pyo.Constraint(
+            self.set_t_performance, rule=init_input_up_bound
+        )
 
     def _construct_pwa_performance(self, b_tec):
         coeff_td = self.processed_coeff.time_dependent_used
@@ -426,9 +434,9 @@ class DacAdsorption(Technology):
             # Input-output (eq. 2)
             def init_output(const):
                 return (
-                        self.output[t, "CO2captured"]
-                        == alpha[t - 1, ind - 1] * b_tec.var_input_tot[t]
-                        + beta[t - 1, ind - 1] * b_tec.var_modules_on[t]
+                    self.output[t, "CO2captured"]
+                    == alpha[t - 1, ind - 1] * b_tec.var_input_tot[t]
+                    + beta[t - 1, ind - 1] * b_tec.var_modules_on[t]
                 )
 
             dis.const_output = pyo.Constraint(rule=init_output)
@@ -436,8 +444,8 @@ class DacAdsorption(Technology):
             # Lower bound on the energy input (eq. 5)
             def init_input_low_bound(const):
                 return (
-                        b_point[t - 1, ind - 1] * b_tec.var_modules_on[t]
-                        <= b_tec.var_input_tot[t]
+                    b_point[t - 1, ind - 1] * b_tec.var_modules_on[t]
+                    <= b_tec.var_input_tot[t]
                 )
 
             dis.const_input_on1 = pyo.Constraint(rule=init_input_low_bound)
@@ -445,8 +453,8 @@ class DacAdsorption(Technology):
             # Upper bound on the energy input (eq. 5)
             def init_input_up_bound(const):
                 return (
-                        b_tec.var_input_tot[t]
-                        <= b_point[t - 1, ind] * b_tec.var_modules_on[t]
+                    b_tec.var_input_tot[t]
+                    <= b_point[t - 1, ind] * b_tec.var_modules_on[t]
                 )
 
             dis.const_input_on2 = pyo.Constraint(rule=init_input_up_bound)
@@ -468,9 +476,9 @@ class DacAdsorption(Technology):
             # Input-output (eq. 7)
             def init_input(const):
                 return (
-                        b_tec.var_input_el[t]
-                        == gamma[t - 1, ind - 1] * b_tec.var_input_tot[t]
-                        + delta[t - 1, ind - 1] * b_tec.var_modules_on[t]
+                    b_tec.var_input_el[t]
+                    == gamma[t - 1, ind - 1] * b_tec.var_input_tot[t]
+                    + delta[t - 1, ind - 1] * b_tec.var_modules_on[t]
                 )
 
             dis.const_output = pyo.Constraint(rule=init_input)
@@ -478,8 +486,8 @@ class DacAdsorption(Technology):
             # Lower bound on the energy input (eq. 10)
             def init_input_low_bound(const):
                 return (
-                        a_point[t - 1, ind - 1] * b_tec.var_modules_on[t]
-                        <= b_tec.var_input_tot[t]
+                    a_point[t - 1, ind - 1] * b_tec.var_modules_on[t]
+                    <= b_tec.var_input_tot[t]
                 )
 
             dis.const_input_on1 = pyo.Constraint(rule=init_input_low_bound)
@@ -487,8 +495,8 @@ class DacAdsorption(Technology):
             # Upper bound on the energy input (eq. 10)
             def init_input_up_bound(const):
                 return (
-                        b_tec.var_input_tot[t]
-                        <= a_point[t - 1, ind] * b_tec.var_modules_on[t]
+                    b_tec.var_input_tot[t]
+                    <= a_point[t - 1, ind] * b_tec.var_modules_on[t]
                 )
 
             dis.const_input_on2 = pyo.Constraint(rule=init_input_up_bound)
