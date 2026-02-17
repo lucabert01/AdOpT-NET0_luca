@@ -21,8 +21,8 @@ objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
 explored_std_el = [1, 1.5, 2]
-explored_el_price = [50, 100, 150, 200] # average el prices explored in the analysis
-explored_technologies = ["mea", "hybrid", "both", "not_flex"]
+explored_el_price = [50, 100, 150] # average el prices explored in the analysis
+explored_technologies = ["mea","mea_inflex", "hybrid", "hybrid_inflex", "both", "both_inflex"]
 distance_to_stor = 100
 carbon_tax = 150
 
@@ -40,15 +40,19 @@ clinker_demand = clinker_data[f"clinker_{plant_analyzed}"]
 pyhub = {}
 
 for tec_name in explored_technologies:
-    if tec_name == "mea":
-        techs = ["CementEmitter", "HeatPump", "ClinkerStorage"]
-    elif tec_name == "hybrid":
-        techs = ["CementHybridCCS", "HeatPump", "ClinkerStorage"]
-    elif tec_name == "both":
-        techs = ["CementEmitter", "CementHybridCCS", "HeatPump", "ClinkerStorage"]
-    elif tec_name == "not_flex":
-        techs = ["CementEmitter", "CementHybridCCS", "HeatPump"]
-        
+
+    if "mea" in tec_name:
+        techs = ["CementEmitter"]
+    elif "hybrid" in tec_name:
+        techs = ["CementHybridCCS"]
+    elif "both" in tec_name:
+        techs = ["CementEmitter", "CementHybridCCS"]
+
+    techs += ["HeatPump"]
+
+    if "inflex" not in tec_name:
+        techs += ["ClinkerStorage"]
+
     pyhub[tec_name] = {}
     for std_el in explored_std_el:
         name_profile = f"el_price_norm_{std_el}"
