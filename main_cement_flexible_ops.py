@@ -20,7 +20,7 @@ adopt.create_optimization_templates(casepath)
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
-explored_std_el = [1, 1.5, 2]
+explored_std = [1, 1.5, 2]
 explored_el_price = [50, 100, 150] # average el prices explored in the analysis
 explored_technologies = ["mea","mea_inflex", "hybrid", "hybrid_inflex", "both", "both_inflex"]
 distance_to_stor = 100
@@ -32,7 +32,7 @@ path_processed_data = Path("dataCaseStudy_Cement/dataSources/data_processed.xlsx
 electricity_price_data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
 el_price_base = electricity_price_data["el_price_itNord"]
 generated_el_profiles = pd.read_excel(path_processed_data, sheet_name="el_prices_norm_stds")
-create_norm_el_price_profiles(el_price_base, explored_std_el)
+create_norm_el_price_profiles(el_price_base, explored_std)
 
 clinker_data = pd.read_excel(path_processed_data, sheet_name="clinker_production")
 clinker_demand = clinker_data[f"clinker_{plant_analyzed}"]
@@ -54,11 +54,11 @@ for tec_name in explored_technologies:
         techs += ["ClinkerStorage"]
 
     pyhub[tec_name] = {}
-    for std_el in explored_std_el:
-        name_profile = f"el_price_norm_{std_el}"
+    for std in explored_std:
+        name_profile = f"el_price_norm_{std}"
         electricity_price_norm = generated_el_profiles[name_profile]
-        pyhub_std_el = f"std_el_{std_el}"
-        pyhub[tec_name][pyhub_std_el] = {}
+        pyhub_std = f"std_{std}"
+        pyhub[tec_name][pyhub_std] = {}
 
         for av_el_price in explored_el_price:
             pyhub_el_price = f"el_price_{av_el_price}"
@@ -249,13 +249,13 @@ for tec_name in explored_technologies:
             carbon_cost_template.to_csv(carbon_cost_path, sep=";", index=False)
 
             # Construct and solve the model
-            pyhub[tec_name][pyhub_std_el][pyhub_el_price] = adopt.ModelHub()
-            pyhub[tec_name][pyhub_std_el][pyhub_el_price].read_data(casepath, start_period=0, end_period=end_period)
+            pyhub[tec_name][pyhub_std][pyhub_el_price] = adopt.ModelHub()
+            pyhub[tec_name][pyhub_std][pyhub_el_price].read_data(casepath, start_period=0, end_period=end_period)
 
-            pyhub[tec_name][pyhub_std_el][pyhub_el_price].data.model_config['reporting']['case_name'][
-                'value'] = f"{tec_name}_{pyhub_std_el}_{pyhub_el_price}"
+            pyhub[tec_name][pyhub_std][pyhub_el_price].data.model_config['reporting']['case_name'][
+                'value'] = f"{tec_name}_{pyhub_std}_{pyhub_el_price}"
             # pyhub[pyhub_el_price].data.time_series['full']['period1', 'industrial_cluster', 'CarrierData', 'heat', 'Demand'] = heat_demand
 
-            pyhub[tec_name][pyhub_std_el][pyhub_el_price].construct_model()
-            pyhub[tec_name][pyhub_std_el][pyhub_el_price].construct_balances()
-            pyhub[tec_name][pyhub_std_el][pyhub_el_price].solve()
+            pyhub[tec_name][pyhub_std][pyhub_el_price].construct_model()
+            pyhub[tec_name][pyhub_std][pyhub_el_price].construct_balances()
+            pyhub[tec_name][pyhub_std][pyhub_el_price].solve()
