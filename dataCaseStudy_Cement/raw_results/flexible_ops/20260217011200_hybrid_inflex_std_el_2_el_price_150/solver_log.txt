@@ -1,0 +1,69 @@
+
+Gurobi 12.0.1 (win64) logging started Tue Feb 17 01:13:16 2026
+
+Set parameter LogFile to value "dataCaseStudy_Cement\raw_results\flexible_ops\20260217011200_hybrid_inflex_std_el_2_el_price_150\solver_log.txt"
+Set parameter TimeLimit to value 36000
+Set parameter MIPGap to value 0.02
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Gold 5120 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 8 physical cores, 8 logical processors, using up to 8 threads
+
+Non-default parameters:
+TimeLimit  36000
+MIPGap  0.02
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1095049 rows, 1068772 columns and 2399290 nonzeros
+Model fingerprint: 0x14361c94
+Model has 2 SOS constraints
+Variable types: 1051250 continuous, 17522 integer (17522 binary)
+Coefficient statistics:
+  Matrix range     [1e-05, 1e+07]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+09]
+  RHS range        [1e+00, 1e+07]
+Warning: Model contains large matrix coefficient range
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+Presolve removed 1074372 rows and 1054986 columns
+Presolve time: 1.98s
+Presolved: 20677 rows, 13786 columns, 48246 nonzeros
+Variable types: 13781 continuous, 5 integer (5 binary)
+Performing another presolve...
+Presolve removed 14022 rows and 10454 columns
+Presolve time: 0.84s
+
+Root relaxation: objective 9.700889e+07, 3329 iterations, 0.06 seconds (0.06 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 9.7009e+07    0    2          - 9.7009e+07      -     -    3s
+     0     0 9.7009e+07    0    2          - 9.7009e+07      -     -    3s
+     0     0 9.7009e+07    0    2          - 9.7009e+07      -     -    3s
+     0     2 9.7009e+07    0    2          - 9.7009e+07      -     -    4s
+*    1     2               1    9.894186e+07 9.7010e+07  1.95%   0.0    4s
+
+Explored 3 nodes (3334 simplex iterations) in 4.47 seconds (0.89 work units)
+Thread count was 8 (of 8 available processors)
+
+Solution count 1: 9.89419e+07 
+
+Optimal solution found (tolerance 2.00e-02)
+Warning: max constraint violation (8.5859e-06) exceeds tolerance
+Best objective 9.894185558981e+07, best bound 9.701621384343e+07, gap 1.9462%
