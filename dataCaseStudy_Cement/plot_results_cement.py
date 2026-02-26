@@ -100,7 +100,7 @@ for j in range(0,num_carbon_tax):
 
         elif cement_oxy_design["size"].iloc[0] > 0:
             if cement_oxy_design["size_mea"].iloc[0] > 0:
-                type_installed = "Oxyfuel + MEA"
+                type_installed = "Oxyfuel + PCC"
             else:
                 type_installed = "Partial oxyfuel"
 
@@ -176,7 +176,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
 # plt.show()
 
 # --- Plot 2: Grid of installed type (categorical) ---
-# types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + MEA"]
+# types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + PCC"]
 # type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 #
 # plt.figure(figsize=(7,5))
@@ -214,7 +214,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
 # ------------------------------------------------------------
 setup_matplotlib_for_paper("single")
 
-types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + MEA"]
+types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + PCC"]
 type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
 # ------------------------------------------------------------
@@ -235,7 +235,7 @@ for i, ep in enumerate(type_matrix.index):
             plt.Rectangle(
                 (j, i), 1, 1,
                 facecolor=type_to_color[tech],
-                edgecolor="white",
+                edgecolor="black",
                 linewidth=0.8
             )
         )
@@ -275,9 +275,9 @@ legend_patches = [
 ax.legend(
     handles=legend_patches,
     loc="lower center",
-    bbox_to_anchor=(0.5, 1.08),
+    bbox_to_anchor=(0.5, 1.0),
     ncol=len(types),
-    frameon=True
+    frameon=False
 )
 
 fig.tight_layout(pad=0.6)
