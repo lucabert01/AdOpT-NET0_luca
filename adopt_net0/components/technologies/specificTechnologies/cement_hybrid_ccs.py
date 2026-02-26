@@ -71,7 +71,6 @@ class CementHybridCCS(Technology):
             performance_data_path, sheet_name="energy_oxy_mea", index_col=0
         )
 
-        # TODO: make a function that cleans data (cement output either 0 or at full capacity), converts CO2 to clinker and daily to hourly
 
         self.processed_coeff.time_independent["alpha_oxy"] = (
             performance_data_oxy_mea.loc["alpha_oxy", "value"]
