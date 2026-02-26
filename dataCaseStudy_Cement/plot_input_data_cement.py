@@ -17,11 +17,11 @@ possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
 path_processed_data = Path("./dataSources/data_processed.xlsx")
 electricity_price_data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
-av_el_price = electricity_price_data["el_price_itNord"].mean()
+av_el_price = electricity_price_data["el_price_itNord"].max()
 electricity_price_norm = electricity_price_data["el_price_itNord"]/av_el_price
 
 clinker_data = pd.read_excel(path_processed_data, sheet_name="clinker_production")
-clinker_demand_norm = clinker_data[f"clinker_{plant_analyzed}"]/ clinker_data[f"clinker_{plant_analyzed}"].mean()
+clinker_demand_norm = clinker_data[f"clinker_{plant_analyzed}"]/ clinker_data[f"clinker_{plant_analyzed}"].max()
 
 # ------------------------------------------------------------
 # PAPER SETUP
@@ -73,7 +73,7 @@ axs[0, 0].plot(
 )
 
 axs[0, 0].set_ylabel("Normalized price [-]")
-panel_label(axs[0, 0], "(a)", "Electricity price – time series")
+panel_label(axs[0, 0], "(a)", "Time series")
 
 # ============================================================
 # (b) ELECTRICITY PRICE — ECDF
@@ -104,7 +104,9 @@ axs[1, 0].plot(
 
 axs[1, 0].set_xlabel("Time [h]")
 axs[1, 0].set_ylabel("Clinker demand [-]")
-panel_label(axs[1, 0], "(c)", "Clinker demand – time series")
+# Column headers (explain the matrix once)
+axs[0, 0].set_title("Time series")
+axs[0, 1].set_title("Cumulative distribution")
 
 # ============================================================
 # (d) CLINKER DEMAND — ECDF
@@ -115,11 +117,7 @@ axs[1, 1].plot(x, y, color=batlow_colors[2], linewidth=1.5)
 axs[1, 1].set_xlabel("Clinker demand [-]")
 axs[1, 1].set_ylabel("Cumulative probability [-]")
 axs[1, 1].set_ylim(0, 1)
-panel_label(
-    axs[1, 1],
-    "(d)",
-    f"Clinker demand – ECDF ({plant_analyzed})"
-)
+
 
 # ------------------------------------------------------------
 # FINALIZE & SAVE

@@ -99,7 +99,7 @@ fig, axs = plt.subplots(
 
 # Column headers (explain the matrix once)
 axs[0, 0].set_title("Time series")
-axs[0, 1].set_title("Empirical cumulative distribution")
+axs[0, 1].set_title("Cumulative distribution")
 
 # ============================================================
 # PLOTTING

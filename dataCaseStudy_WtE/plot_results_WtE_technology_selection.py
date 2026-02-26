@@ -297,7 +297,13 @@ for dh in explored_dh_ratio_str:
             c = cost_matrix[dh_ratio_str].loc[ep, ct]
 
             ax.add_patch(
-                plt.Rectangle((j, i), 1, 1, color=type_to_color[t])
+                plt.Rectangle(
+                    (j, i),  # position
+                    1, 1,  # width, height
+                    facecolor=type_to_color[t],  # fill color
+                    edgecolor="black",  # border color
+                    linewidth=0.8  # border thickness
+                )
             )
 
             # Cost label (auto-scaled font)

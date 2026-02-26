@@ -210,10 +210,11 @@ for el_price in explored_el_price_str:
 
 # Plot fraction CaL and load factor at the same time
 
+
 # ------------------------------------------------------------
 # PAPER SETUP
 # ------------------------------------------------------------
-setup_matplotlib_for_paper("single")
+setup_matplotlib_for_paper()
 
 # ------------------------------------------------------------
 # FIGURE
@@ -226,10 +227,10 @@ fig, ax1 = plt.subplots()
 for i, (x, y) in enumerate(zip(el_prices, fraction_size_cal_values)):
     ax1.scatter(
         x, y,
-        color=colors[i],
+        color=colors[1],
         marker="o",
-        s=90,
-        edgecolor=colors[i],
+        s=50,
+        edgecolor=colors[1],
         zorder=3
     )
 
@@ -243,7 +244,9 @@ ax1.plot(
 )
 
 ax1.set_xlabel("Electricity price [€/MWh]")
-ax1.set_ylabel("CaL size [-]")
+ax1.set_ylabel("CaL size [-]", color=colors[1])
+ax1.set_ylim(0.85, 0.95)
+ax1.tick_params(axis='y', labelcolor=colors[1])
 
 # ============================================================
 # RIGHT AXIS — CaL load factor
@@ -253,10 +256,10 @@ ax2 = ax1.twinx()
 for i, (x, y) in enumerate(zip(el_prices, capacity_factor_cal_values)):
     ax2.scatter(
         x, y,
-        color=colors[i],
+        color=colors[2],
         marker="^",
-        s=90,
-        edgecolor=colors[i],
+        s=50,
+        edgecolor=colors[2],
         zorder=3
     )
 
@@ -269,30 +272,49 @@ ax2.plot(
     zorder=2
 )
 
-ax2.set_ylabel("CaL load factor [-]")
+ax2.set_ylabel("CaL load factor [-]", color=colors[2])
+ax2.set_ylim(0.85, 0.95)
+ax2.tick_params(axis='y', labelcolor=colors[2])
 
 # ============================================================
-# LEGEND — explains symbol meaning only
+# ANNOTATIONS (Replacing Legend)
 # ============================================================
-legend_elements = [
-    Line2D([0], [0],
-           marker="o",
-           linestyle="None",
-           color="gray",
-           label="CaL size",
-           markersize=9),
-    Line2D([0], [0],
-           marker="^",
-           linestyle="None",
-           color="black",
-           label="CaL load factor",
-           markersize=9)
-]
 
-ax1.legend(
-    handles=legend_elements,
-    loc="center left",
-    frameon=True
+# 1. Size - Pointing to the 2nd point (index 1)
+# xytext adjusted to be slightly further left (-15) and higher (+0.025)
+# to ensure it sits clear of the point and the dashed line.
+ax1.annotate(
+    "Size",
+    xy=(el_prices[1], fraction_size_cal_values[1]),
+    xytext=(el_prices[1] - 15, fraction_size_cal_values[1] + 0.025),
+    color=colors[1],
+    fontweight='bold',
+    arrowprops=dict(
+        arrowstyle="->",
+        color=colors[1],
+        lw=1.2,
+        connectionstyle="arc3,rad=.2",
+        shrinkA=3,  # Buffer at the text end
+        shrinkB=5   # Buffer at the point end to prevent overlap
+    )
+)
+
+# 2. Load factor - Pointing to the 4th point (index 3)
+# xytext adjusted to be to the right (+10) and slightly below (-0.02)
+ax2.annotate(
+    "Load factor",
+    xy=(el_prices[3], capacity_factor_cal_values[3]),
+    xytext=(el_prices[3] + 10, capacity_factor_cal_values[3] - 0.02),
+    color=colors[2],
+    fontweight='bold',
+    arrowprops=dict(
+        arrowstyle="->",
+        color=colors[2],
+        lw=1.2,
+        connectionstyle="arc3,rad=-.2",
+        shrinkA=3,
+        shrinkB=5
+    )
 )
 
 # ------------------------------------------------------------
@@ -301,7 +323,7 @@ ax1.legend(
 fig.tight_layout(pad=0.6)
 save_figure_for_paper(fig, "cal_load_factor_vs_size", figures_path)
 
-plt.show()
+
 
 
 
@@ -402,15 +424,15 @@ labels = [
     "CAPEX",
     "OPEX fixed",
     "OPEX variable",
-    "Transport & Storage",
-    "Electricity revenue",
+    "Transport & storage",
+    "El. revenues",
 ]
 item_colors = {
     "CAPEX": batlow_colors[0],
     "OPEX fixed": batlow_colors[1],
     "OPEX variable": batlow_colors[2],
-    "Transport & Storage": batlow_colors[3],
-    "Electricity revenue": batlow_colors[4],
+    "Transport & storage": batlow_colors[3],
+    "El. revenues": batlow_colors[4],
 }
 
 
@@ -429,127 +451,122 @@ t_s_corr     = np.array(economics["transport_stor_cost"], dtype=float).ravel() *
 revenue_corr = -np.array(economics["revenue_el_cal"], dtype=float).ravel() * correct_factor
 
 
-width = 0.35  # width of each bar
+width = 0.35
 x = np.arange(len(el_prices))
 setup_matplotlib_for_paper("single")
 
+def stacked_bar(ax, x_pos, capex, opex_f, opex_v, t_s, revenue,
+                colors, hatch_pattern=None, return_tops=False):
 
-def stacked_bar(ax, x_pos, capex, opex_f, opex_v, t_s, revenue, colors, return_tops=False):
-    """
-    Plots a stacked bar correctly handling negative revenues.
-    """
     bottom = np.zeros(len(x_pos), dtype=float)
 
-    ax.bar(x_pos, capex, width, bottom=bottom, color=colors["CAPEX"], linewidth=0)
+    # Positive cost stack
+    ax.bar(x_pos, capex, width, bottom=bottom,
+           facecolor=colors["CAPEX"], edgecolor='black', linewidth=0.8, hatch=hatch_pattern)
     bottom += capex
 
-    ax.bar(x_pos, opex_f, width, bottom=bottom, color=colors["OPEX fixed"], linewidth=0)
+    ax.bar(x_pos, opex_f, width, bottom=bottom,
+           facecolor=colors["OPEX fixed"], edgecolor='black', linewidth=0.8, hatch=hatch_pattern)
     bottom += opex_f
 
-    ax.bar(x_pos, opex_v, width, bottom=bottom, color=colors["OPEX variable"], linewidth=0)
+    ax.bar(x_pos, opex_v, width, bottom=bottom,
+           facecolor=colors["OPEX variable"], edgecolor='black', linewidth=0.8, hatch=hatch_pattern)
     bottom += opex_v
 
-    ax.bar(x_pos, t_s, width, bottom=bottom, color=colors["Transport & Storage"], linewidth=0)
+    ax.bar(x_pos, t_s, width, bottom=bottom,
+           facecolor=colors["Transport & storage"], edgecolor='black', linewidth=0.8, hatch=hatch_pattern)
     bottom += t_s
 
-    # Plot revenue separately as negative height
-    ax.bar(x_pos, revenue, width, bottom=np.zeros(len(x_pos)), color=colors["Electricity revenue"], linewidth=0)
+    # Revenue plotted relative to zero
+    ax.bar(x_pos, revenue, width, bottom=0,
+           facecolor=colors["El. revenues"],
+           edgecolor='black',
+           linewidth=0.8,
+           hatch=hatch_pattern)
 
     if return_tops:
-        # top coordinate includes revenue only if positive; for negative revenue, top = total cost
-        tops = bottom.copy()
-        return tops
-# --- Create figure ---
-fig, ax = plt.subplots()
+        return bottom + revenue  # TRUE total including revenue
 
-# Plot original bars (left)
-stacked_bar(ax, x - width/2, capex, opex_f, opex_v, t_s, revenue, item_colors)
+# --- Plot figure ---
+fig_width, fig_height = setup_matplotlib_for_paper(column="single")
+fig, ax = plt.subplots(figsize=(fig_width, fig_height))  # slightly bigger figure if needed
 
-# Plot corrected bars (right) and get top positions
-tops_corrected = stacked_bar(ax, x + width/2, capex_corr, opex_f_corr, opex_v_corr, t_s_corr, revenue_corr, item_colors, return_tops=True)
+# Corrected bars: LEFT, solid
+tops_corrected = stacked_bar(ax, x - width/2,
+                             capex_corr, opex_f_corr, opex_v_corr, t_s_corr, revenue_corr,
+                             item_colors,
+                             hatch_pattern=None,
+                             return_tops=True)
 
-# # Draw dashed rectangle around corrected bars
-# for xi, top, rev in zip(x, tops_corrected, revenue_corr):
-#     bottom = min(0, rev)
-#     rect = mpatches.Rectangle(
-#         (xi + width/2 - width/2, bottom),
-#         width,
-#         top - bottom,
-#         fill=False,
-#         edgecolor='black',
-#         linestyle='--',
-#         linewidth=1.5
-#     )
-#     ax.add_patch(rect)
+# Non-corrected bars: RIGHT, hatch
+stacked_bar(ax, x + width/2,
+            capex, opex_f, opex_v, t_s, revenue,
+            item_colors,
+            hatch_pattern='////')
 
-# --- Add markers for total capture cost ---
-for xi, vals_orig, vals_corr in zip(
-    x,
-    zip(capex, opex_f, opex_v, t_s, revenue),
-    zip(capex_corr, opex_f_corr, opex_v_corr, t_s_corr, revenue_corr)
-):
-    # Original (non-corrected): circle
-    total_orig = sum(vals_orig)
-    ax.scatter(
-        xi - width/2,
-        total_orig,
-        color='black',
-        marker='o',
-        s=50,
-        zorder=5
-    )
-
-    # Corrected: square
+# Marker for CO2 capture cost: dot for all bars
+for xi, vals_corr, vals_orig in zip(x, zip(capex_corr, opex_f_corr, opex_v_corr, t_s_corr, revenue_corr),
+                                    zip(capex, opex_f, opex_v, t_s, revenue)):
     total_corr = sum(vals_corr)
-    ax.scatter(
-        xi + width/2,
-        total_corr,
-        color='black',
-        marker='s',
-        s=50,
-        zorder=5
-    )
+    total_orig = sum(vals_orig)
+    ax.scatter(xi - width/2, total_corr, color='black', marker='o', s=50, zorder=5)
+    ax.scatter(xi + width/2, total_orig, color='black', marker='o', s=50, zorder=5)
 
-# Axes and labels
+# Axes
 ax.axhline(0, color='black', linewidth=0.8)
 ax.set_xticks(x)
 ax.set_xticklabels(el_prices)
 ax.set_xlabel("Electricity price [€/MWh]")
-ax.set_ylabel("Cost breakdown [€/tCO$_2$]")
+ax.set_ylabel("Cost [€/tCO$_2$]")
 
-# Legend: cost items + dashed rectangle
-# correct_patch = mpatches.Patch(facecolor='none', edgecolor='black', linestyle='--', linewidth=1.5, label='Corrected for CO$_2$ avoided')
-# handles = [mpatches.Patch(color=c, label=l) for l, c in item_colors.items()]
-# Legend handles for cost items
-handles = [mpatches.Patch(color=c, label=l) for l, c in item_colors.items()]
+# Expand y-limit for legend space
+all_totals = np.concatenate([
+    capex + opex_f + opex_v + t_s + revenue,
+    capex_corr + opex_f_corr + opex_v_corr + t_s_corr + revenue_corr
+])
 
-# Marker legend entries
-circle_handle = plt.Line2D(
-    [0], [0],
-    marker='o',
-    color='black',
-    linestyle='None',
-    markersize=7,
-    label='Cost of capture'
-)
+ymax = all_totals.max() * 1.15
+ymin = min(all_totals.min() * 1.15, 0)
 
-square_handle = plt.Line2D(
-    [0], [0],
-    marker='s',
-    color='black',
-    linestyle='None',
-    markersize=7,
-    label='CAC'
-)
+ax.set_ylim(-230, 400)
 
-ax.legend(
-    handles + [circle_handle, square_handle],
-    [*item_colors.keys(), 'Cost of capture', 'CAC'],
-    bbox_to_anchor=(1.05, 1),
-    loc='upper left'
-)
+ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
+ax.set_axisbelow(True)
 
-plt.tight_layout()
+# -----------------------------
+# Legends (bottom)
+# -----------------------------
+
+# Legend 1: Cost component legend (colors) - bottom-left
+handles_components = [mpatches.Patch(facecolor=c, edgecolor='black', label=l) for l, c in item_colors.items()]
+labels_components = [l for l in item_colors.keys()]
+
+legend1 = ax.legend(handles_components,
+                    labels_components,
+                    ncol=2,
+                    frameon=False,
+                    loc='lower left',
+                    bbox_to_anchor=(0.02, 0.02),
+                    borderaxespad=0.0)
+ax.add_artist(legend1)
+
+# Legend 2: Scenario + Net Cost marker - bottom-right
+scenario_handles = [
+    mpatches.Patch(facecolor='white', edgecolor='black', hatch=None, label='CO$_2$ avoidance cost'),
+    mpatches.Patch(facecolor='white', edgecolor='black', hatch='////', label='CO$_2$ capture cost'),
+    # Add the Circle marker here
+    Line2D([0], [0], marker='o', color='none', label='Net cost',
+           markerfacecolor='black', markeredgecolor='white',
+           markeredgewidth=0.5, markersize=8)
+]
+
+legend2 = ax.legend(handles=scenario_handles,
+                    frameon=False,
+                    loc='lower right',
+                    bbox_to_anchor=(0.98, 0.02),
+                    borderaxespad=0.0)
+
+plt.tight_layout(pad=0.6)
 save_figure_for_paper(fig, "cal_cost_breakdown", figures_path)
 
 plt.show()
