@@ -20,9 +20,9 @@ adopt.create_optimization_templates(casepath)
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
-explored_std = [1, 2]
-explored_el_price = [50, 150] # average el prices explored in the analysis
-explored_technologies = ["mea","mea_inflex", "hybrid", "hybrid_inflex", "b", "b_inflex"]
+explored_std = [1, 1.5, 2]
+explored_el_price = [50, 100, 150] # average el prices explored in the analysis
+explored_technologies = ["mea","mea_inflex", "oxy", "oxy_inflex", "both", "both_inflex"]
 distance_to_stor = 100
 carbon_tax = 150
 
@@ -43,7 +43,7 @@ for tec_name in explored_technologies:
 
     if "mea" in tec_name:
         techs = ["CementEmitter"]
-    elif "hybrid" in tec_name:
+    elif "oxy" in tec_name:
         techs = ["CementHybridCCS"]
     elif "both" in tec_name:
         techs = ["CementEmitter", "CementHybridCCS"]
