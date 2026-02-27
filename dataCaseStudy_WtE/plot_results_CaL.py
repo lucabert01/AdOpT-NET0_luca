@@ -63,20 +63,8 @@ for i in range(0,len(file_names)):
     # Check if each explored_el_price[i] is in file_names[i]
     el_price_str = explored_el_price_str[i]
     results_summary[el_price_str] = {}
-    if f"{el_price_str}" in file_names[i]:
-        print(f"{el_price_str} found in {file_names[i]}")
-    else:
-        print(f"{el_price_str} NOT found in {file_names[i]}")
 
 
-    def print_structure(name, obj):
-        indent = "  " * name.count('/')
-        obj_type = "Group" if isinstance(obj, h5py.Group) else "Dataset"
-        print(f"{indent}{name} ({obj_type})")
-
-
-    with h5py.File(file_path, 'r') as hdf_file:
-        hdf_file.visititems(print_structure)
 
 
     with h5py.File(file_path, 'r') as hdf_file:
@@ -112,6 +100,7 @@ for i in range(0,len(file_names)):
     capex_cal = w2e_design["capex_tot"]
     opex_fixed = w2e_design["opex_fixed"]
     opex_variable = w2e_design["opex_variable"] + sum(waste_in_rdf*import_price_RDF)
+    rdf_cost =sum(waste_in_rdf*import_price_RDF)
     revenue_el_cal = sum(w2e_operation['el_cal']*el_price)
     pipeline_cost = df_design_network['capex'].values.flatten()[0]
     storage_cost = co2_storage_design['opex_variable']
@@ -131,6 +120,7 @@ for i in range(0,len(file_names)):
     results_summary[el_price_str]['capex_tot'] = capex_cal
     results_summary[el_price_str]['opex_fixed'] = opex_fixed
     results_summary[el_price_str]['opex_variable'] = opex_variable
+    results_summary[el_price_str]['rdf_cost'] = rdf_cost
     results_summary[el_price_str]['transport_stor_cost'] = transport_stor_cost
     results_summary[el_price_str]['revenue_el_cal'] = revenue_el_cal
     results_summary[el_price_str]['tot_co2_avoided'] = sum(waste_in*emission_factor)-(sum(final_emissions))
@@ -229,7 +219,7 @@ for i, (x, y) in enumerate(zip(el_prices, fraction_size_cal_values)):
         x, y,
         color=colors[1],
         marker="o",
-        s=50,
+        s=30,
         edgecolor=colors[1],
         zorder=3
     )
@@ -247,6 +237,7 @@ ax1.set_xlabel("Electricity price [€/MWh]")
 ax1.set_ylabel("CaL size [-]", color=colors[1])
 ax1.set_ylim(0.85, 0.95)
 ax1.tick_params(axis='y', labelcolor=colors[1])
+ax1.set_xticks(el_prices)  # set ticks at exactly your x data points
 
 # ============================================================
 # RIGHT AXIS — CaL load factor
@@ -258,7 +249,7 @@ for i, (x, y) in enumerate(zip(el_prices, capacity_factor_cal_values)):
         x, y,
         color=colors[2],
         marker="^",
-        s=50,
+        s=30,
         edgecolor=colors[2],
         zorder=3
     )
@@ -286,13 +277,12 @@ ax2.tick_params(axis='y', labelcolor=colors[2])
 ax1.annotate(
     "Size",
     xy=(el_prices[1], fraction_size_cal_values[1]),
-    xytext=(el_prices[1] - 15, fraction_size_cal_values[1] + 0.025),
+    xytext=(el_prices[1] - 15, fraction_size_cal_values[1] + 0.022),
     color=colors[1],
-    fontweight='bold',
     arrowprops=dict(
         arrowstyle="->",
         color=colors[1],
-        lw=1.2,
+        lw=0.8,
         connectionstyle="arc3,rad=.2",
         shrinkA=3,  # Buffer at the text end
         shrinkB=5   # Buffer at the point end to prevent overlap
@@ -304,13 +294,12 @@ ax1.annotate(
 ax2.annotate(
     "Load factor",
     xy=(el_prices[3], capacity_factor_cal_values[3]),
-    xytext=(el_prices[3] + 10, capacity_factor_cal_values[3] - 0.02),
+    xytext=(el_prices[3] - 10, capacity_factor_cal_values[3] - 0.04),
     color=colors[2],
-    fontweight='bold',
     arrowprops=dict(
         arrowstyle="->",
         color=colors[2],
-        lw=1.2,
+        lw=0.8,
         connectionstyle="arc3,rad=-.2",
         shrinkA=3,
         shrinkB=5
@@ -509,13 +498,13 @@ for xi, vals_corr, vals_orig in zip(x, zip(capex_corr, opex_f_corr, opex_v_corr,
                                     zip(capex, opex_f, opex_v, t_s, revenue)):
     total_corr = sum(vals_corr)
     total_orig = sum(vals_orig)
-    ax.scatter(xi - width/2, total_corr, color='black', marker='o', s=50, zorder=5)
-    ax.scatter(xi + width/2, total_orig, color='black', marker='o', s=50, zorder=5)
+    ax.scatter(xi - width/2, total_corr, color='black', marker='o', s=16, zorder=5)
+    ax.scatter(xi + width/2, total_orig, color='black', marker='o', s=16, zorder=5)
 
 # Axes
 ax.axhline(0, color='black', linewidth=0.8)
 ax.set_xticks(x)
-ax.set_xticklabels(el_prices)
+ax.set_xticklabels([str(int(price)) for price in el_prices])
 ax.set_xlabel("Electricity price [€/MWh]")
 ax.set_ylabel("Cost [€/tCO$_2$]")
 
@@ -528,7 +517,7 @@ all_totals = np.concatenate([
 ymax = all_totals.max() * 1.15
 ymin = min(all_totals.min() * 1.15, 0)
 
-ax.set_ylim(-230, 400)
+ax.set_ylim(-300, 400)
 
 ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
 ax.set_axisbelow(True)
@@ -557,7 +546,7 @@ scenario_handles = [
     # Add the Circle marker here
     Line2D([0], [0], marker='o', color='none', label='Net cost',
            markerfacecolor='black', markeredgecolor='white',
-           markeredgewidth=0.5, markersize=8)
+           markeredgewidth=0.5, markersize=6)
 ]
 
 legend2 = ax.legend(handles=scenario_handles,

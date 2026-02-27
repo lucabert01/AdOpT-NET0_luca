@@ -24,8 +24,8 @@ figures_path = "../figures"
 
 ## -----------------  Carbon and electricity price --------------------------
 explored_carbon_tax = [100, 150, 200, 250]
-explored_el_price = [50, 100, 150, 200, 250]  # average el prices explored in the analysis
-explored_dh_ratio = [0.5, 1]
+explored_el_price = [50, 100, 150, 200, 250, 300, 350]  # average el prices explored in the analysis
+explored_dh_ratio = [0.5]
 gas_price = 40
 import_price_RDF = 20
 
@@ -81,10 +81,6 @@ for i_dh in range(0,num_dh_ratio):
             # Check if each explored_el_price[i] is in file_names[i]
             el_price_str = f"el_price_{explored_el_price[i]}"
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str] = {}
-            if f"el_price_{el_price_str}" in carbon_tax_names[i]:
-                print(f"{el_price_str} found in {carbon_tax_names[i]}")
-            else:
-                print(f"{el_price_str} NOT found in {carbon_tax_names[i]}")
 
             with h5py.File(file_path, 'r') as hdf_file:
                 df_operation = pd.DataFrame(extract_datasets_from_h5group(hdf_file["operation"]))
@@ -314,7 +310,7 @@ for dh in explored_dh_ratio_str:
                 ha="center",
                 va="center",
                 color="white",
-                fontsize=rcParams["axes.labelsize"],
+                fontsize=rcParams["axes.labelsize"]-2,
                 fontweight="bold"
             )
 
@@ -335,19 +331,7 @@ for dh in explored_dh_ratio_str:
     ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
     ax.set_ylabel("Electricity price [€/MWh]")
 
-    # ------------------------------------------------------------
-    # PANEL LABEL (NOT plt.title)
-    # ------------------------------------------------------------
-    ax.text(
-        0.5,
-        1.08,
-        f"DH ratio = {dh_ratio_str}",
-        transform=ax.transAxes,
-        ha="center",
-        va="bottom",
-        fontsize=rcParams["axes.titlesize"],
-        fontweight="bold"
-    )
+
 
     # ------------------------------------------------------------
     # LEGEND (TOP, HORIZONTAL, SCALED)
@@ -359,7 +343,7 @@ for dh in explored_dh_ratio_str:
     ax.legend(
         handles=patches,
         loc="lower center",
-        bbox_to_anchor=(0.5, 1.18),
+        bbox_to_anchor=(0.5, 1),
         ncol=len(types),
         fontsize=rcParams["legend.fontsize"],
         frameon=False

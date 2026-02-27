@@ -396,16 +396,16 @@ for idx, name_sim in enumerate(simulations):
     ax.bar(x + offset, eco["loss_el"],
            width=bar_width,
            bottom=eco["capex"] + eco["opex_f"] + eco["transport"],
-           color=batlow_colors[5],
+           color=batlow_colors[4],
            edgecolor=edgecolor,
            linewidth=linewidth,
            hatch=hatch,
-           label="Lost electricity revenues" if idx == 0 else "")
+           label="Lost el. revenues" if idx == 0 else "")
 
     ax.bar(x + offset, eco["boiler"],
            width=bar_width,
            bottom=eco["capex"] + eco["opex_f"] + eco["transport"] + eco["loss_el"],
-           color=batlow_colors[4],
+           color=batlow_colors[5],
            edgecolor=edgecolor,
            linewidth=linewidth,
            hatch=hatch,
@@ -427,7 +427,7 @@ ax.set_xticks(x)
 ax.set_xticklabels([str(r) for r in explored_dh_ratio])
 ax.set_xlabel("District heating demand ratio [-]")
 ax.set_ylabel("CO$_2$ avoidance cost [€/tCO$_2$]")
-ax.set_ylim(0, 130)
+ax.set_ylim(0, 150)
 
 ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
 ax.set_axisbelow(True)

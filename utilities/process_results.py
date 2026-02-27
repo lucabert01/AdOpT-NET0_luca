@@ -20,7 +20,7 @@ def save_figure_for_paper(fig, filename, folder):
     fig.savefig(folder / f"{filename}.jpg", dpi=300, bbox_inches='tight')
 
 
-def setup_matplotlib_for_paper(column="double"):
+def setup_matplotlib_for_paper(column="single"):
     text_width_pt = 469.75539
     inches_per_pt = 1 / 72.27
 
@@ -37,20 +37,22 @@ def setup_matplotlib_for_paper(column="double"):
         "figure.figsize": (fig_width_in, fig_height_in),
         "figure.dpi": 300,
         "text.usetex": False,
-        "mathtext.fontset": "stix",
-        "font.family": "STIXGeneral",
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+        "mathtext.fontset": "dejavusans", # Matches math symbols to the text
         "font.size": fs,
-        "axes.labelsize": fs,
+        "axes.labelsize": fs-1,
         "axes.titlesize": fs + 1,
         "xtick.labelsize": fs - 1,
         "ytick.labelsize": fs - 1,
-        "legend.fontsize": fs - 1,
+        "legend.fontsize": fs - 3,
         "legend.title_fontsize": fs,
         "legend.frameon": True,
         "legend.framealpha": 0.8,
+        "legend.labelspacing": 0.3,  # CRITICAL: Shrinks vertical gap between entries
         "legend.edgecolor": "0.8",  # Light border is less "heavy"
-        "legend.handletextpad": 0.4,  # Tighten space
-        "legend.columnspacing": 1.0,
+        "legend.handletextpad": 0.2,  # Tighten space
+        "legend.columnspacing": 0.8,
         "axes.linewidth": 0.8,
         "grid.linewidth": 0.5,
         "figure.constrained_layout.use": True,  # CRITICAL: Auto-adjusts for legends

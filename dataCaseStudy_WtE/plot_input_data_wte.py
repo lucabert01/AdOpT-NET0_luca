@@ -65,7 +65,7 @@ rolling_window = 24  # hours
 # ------------------------------------------------------------
 # PAPER SETUP
 # ------------------------------------------------------------
-setup_matplotlib_for_paper("single")
+setup_matplotlib_for_paper("double")
 
 rolling_window = 24  # hours
 
