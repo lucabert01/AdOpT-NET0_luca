@@ -26,7 +26,7 @@ clinker_demand_norm = clinker_data[f"clinker_{plant_analyzed}"]/ clinker_data[f"
 # ------------------------------------------------------------
 # PAPER SETUP
 # ------------------------------------------------------------
-setup_matplotlib_for_paper("single")
+setup_matplotlib_for_paper(column="double")
 
 # ------------------------------------------------------------
 # ECDF helper
@@ -44,16 +44,11 @@ fig, axs = plt.subplots(
     ncols=2
 )
 
-# Panel lettering helper
-def panel_label(ax, label, title):
-    ax.text(
-        0.02, 0.95,
-        f"{label}  {title}",
-        transform=ax.transAxes,
-        ha="left", va="top",
-        fontsize=rcParams["axes.titlesize"],
-        fontweight="bold"
-    )
+# Column headers (explain the matrix once)
+axs[0, 0].set_title("Time series")
+axs[0, 1].set_title("Cumulative distribution")
+
+
 
 # ============================================================
 # (a) ELECTRICITY PRICE — TIME SERIES
@@ -72,8 +67,7 @@ axs[0, 0].plot(
     linewidth=1.5
 )
 
-axs[0, 0].set_ylabel("Normalized price [-]")
-panel_label(axs[0, 0], "(a)", "Time series")
+axs[0, 0].set_ylabel("El. price [-]")
 
 # ============================================================
 # (b) ELECTRICITY PRICE — ECDF
@@ -83,7 +77,6 @@ axs[0, 1].plot(x, y, color=batlow_colors[0], linewidth=1.5)
 
 axs[0, 1].set_ylabel("Cumulative probability [-]")
 axs[0, 1].set_ylim(0, 1)
-panel_label(axs[0, 1], "(b)", "Electricity price – ECDF")
 
 # ============================================================
 # (c) CLINKER DEMAND — TIME SERIES
@@ -104,9 +97,7 @@ axs[1, 0].plot(
 
 axs[1, 0].set_xlabel("Time [h]")
 axs[1, 0].set_ylabel("Clinker demand [-]")
-# Column headers (explain the matrix once)
-axs[0, 0].set_title("Time series")
-axs[0, 1].set_title("Cumulative distribution")
+
 
 # ============================================================
 # (d) CLINKER DEMAND — ECDF
