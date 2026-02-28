@@ -25,7 +25,7 @@ explored_el_price = [50, 150] # average el prices explored in the analysis
 explored_technologies = ["mea","mea_inflex", "oxy", "oxy_inflex"]
 distance_to_stor = 100
 carbon_tax = 150
-
+dymanics_on = 1
 
 cost_extra_fuel = 15
 path_processed_data = Path("dataCaseStudy_Cement/dataSources/data_processed.xlsx")
@@ -93,6 +93,8 @@ for tec_name in explored_technologies:
             configuration["optimization"]["objective"]["value"] = "costs"
             # Set MILP gap
             configuration["solveroptions"]["mipgap"]["value"] = 0.02
+            # Dymanics on/off
+            configuration["performance"]["dynamics"]["value"] = dymanics_on
             # change save options
             configuration['reporting']['save_summary_path']['value'] = result_path
             configuration['reporting']['save_path']['value'] = result_path

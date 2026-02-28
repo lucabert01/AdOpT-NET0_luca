@@ -22,6 +22,7 @@ plant_analyzed = "Vernasca"
 explored_carbon_tax = [1000]
 explored_el_price = [100] # average el prices explored in the analysis
 distance_to_stor = 100
+dymanics_on = 0
 
 cost_extra_fuel = 15
 path_processed_data = Path("dataCaseStudy_Cement/dataSources/data_processed.xlsx")
@@ -71,6 +72,7 @@ for carbon_tax in explored_carbon_tax:
         configuration["optimization"]["objective"]["value"] = "costs"
         # Set MILP gap
         configuration["solveroptions"]["mipgap"]["value"] = 0.02
+        configuration["performance"]["dynamics"]["value"] = dymanics_on
         # change save options
         configuration['reporting']['save_summary_path']['value'] = result_path
         configuration['reporting']['save_path']['value'] = result_path
