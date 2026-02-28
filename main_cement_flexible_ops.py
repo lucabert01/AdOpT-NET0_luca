@@ -92,7 +92,7 @@ for tec_name in explored_technologies:
             # Change objective
             configuration["optimization"]["objective"]["value"] = "costs"
             # Set MILP gap
-            configuration["solveroptions"]["mipgap"]["value"] = 0.02
+            configuration["solveroptions"]["mipgap"]["value"] = 0.03
             # Dymanics on/off
             configuration["performance"]["dynamics"]["value"] = dymanics_on
             # change save options
