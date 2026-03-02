@@ -23,9 +23,9 @@ figures_path = "../figures"
 
 
 ## -----------------  Carbon and electricity price --------------------------
-explored_std_el = [1, 1.5, 2]
-explored_el_price = [50, 100, 150] # average el prices explored in the analysis
-explored_tec = ["mea","mea_inflex", "oxy", "oxy_inflex", "both", "both_inflex"]
+explored_std_el = [1, 2]
+explored_el_price = [50, 150] # average el prices explored in the analysis
+explored_tec = ["mea","mea_inflex", "oxy", "oxy_inflex"]
 cost_extra_fuel = 15
 
 path_processed_data = Path("./dataSources/data_processed.xlsx")
@@ -67,7 +67,7 @@ for i_tec in range(0,num_tec):
     tec_names = [d.name for d in dir_results_sorted[-num_el_prices*num_std_el:]]
     for j in range(0,num_std_el):
         std_el = explored_std_el[j]
-        std_el_str = f"std_el_{explored_std_el_str[j]}"
+        std_el_str = f"std_{explored_std_el_str[j]}"
         results_summary[tec_str][std_el_str] = {}
 
         # Get all file names that contain 'std_el_str' in the name
@@ -235,7 +235,7 @@ for tec_str in explored_tec_str:
     for ct in explored_std_el_str:
         for ep in explored_el_price_str:
             # Accessing the 3-layer structure
-            entry = results_summary[tec_str][f"std_el_{ct}"][f"el_price_{ep}"]
+            entry = results_summary[tec_str][f"std_{ct}"][f"el_price_{ep}"]
 
             # Determine cost (handling both Series and scalar)
             cost_val = entry["cost_of_avoided"]
@@ -246,7 +246,7 @@ for tec_str in explored_tec_str:
             type_scalar = type_val.iloc[0] if hasattr(type_val, "iloc") else type_val
 
             data.append({
-                "std_el": float(ct),
+                "std": float(ct),
                 "el_price": float(ep),
                 "cost_of_avoided": cost_scalar,
                 "type_installed": type_scalar
@@ -255,23 +255,14 @@ for tec_str in explored_tec_str:
     df = pd.DataFrame(data)
 
     # Pivot both metrics into matrices
-    cost_matrix[tec_str] = df.pivot(index="el_price", columns="std_el", values="cost_of_avoided")
-    type_matrix[tec_str] = df.pivot(index="el_price", columns="std_el", values="type_installed")
+    cost_matrix[tec_str] = df.pivot(index="el_price", columns="std", values="cost_of_avoided")
+    type_matrix[tec_str] = df.pivot(index="el_price", columns="std", values="type_installed")
 
     # Sort indices: Electricity price (y) usually high to low, Std (x) low to high
     cost_matrix[tec_str] = cost_matrix[tec_str].sort_index(ascending=False)
     type_matrix[tec_str] = type_matrix[tec_str].sort_index(ascending=False)
     cost_matrix[tec_str] = cost_matrix[tec_str].sort_index(axis=1, ascending=True)
     type_matrix[tec_str] = type_matrix[tec_str].sort_index(axis=1, ascending=True)
-
-# # Delta of CAC computed and assigned to the flexbile cases
-# for tec_str in explored_tec_str:
-#     # Only process flexible technologies
-#     if not tec_str.endswith("_inflex"):
-#         inflex_tec = f"{tec_str}_inflex"
-#         cost_difference_matrix[tec_str] = (
-#                 cost_matrix[tec_str] - cost_matrix[inflex_tec]
-#         )
 
 # ------- PLOTTING ----------
 
@@ -339,7 +330,6 @@ for tec_str in explored_tec_str:
 
     fig.tight_layout(pad=0.6)
     save_figure_for_paper(fig, f"flex_tech_selection_{tec_str}", figures_path)
-plt.show()
 
 
 #-------------Plot time series ---------------------------
@@ -357,7 +347,7 @@ for tec_str in explored_tec_str:
     for i, ep in enumerate(reversed(explored_el_price_str)):
         for j, ct in enumerate(explored_std_el_str):
             ax = axes[i, j]
-            entry = results_summary[tec_str][f"std_el_{ct}"][f"el_price_{ep}"]
+            entry = results_summary[tec_str][f"std_{ct}"][f"el_price_{ep}"]
 
             # Plotting only the Clinker Data
             ax.fill_between(time_axis, entry['hourly_clinker_demand'],
