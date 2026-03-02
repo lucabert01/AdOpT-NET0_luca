@@ -498,8 +498,8 @@ for xi, vals_corr, vals_orig in zip(x, zip(capex_corr, opex_f_corr, opex_v_corr,
                                     zip(capex, opex_f, opex_v, t_s, revenue)):
     total_corr = sum(vals_corr)
     total_orig = sum(vals_orig)
-    ax.scatter(xi - width/2, total_corr, color='black', marker='o', s=16, zorder=5)
-    ax.scatter(xi + width/2, total_orig, color='black', marker='o', s=16, zorder=5)
+    ax.scatter(xi - width/2, total_corr, color=batlow_colors[5], marker='o', edgecolors='black', linewidths=0.5,s=8.5, zorder=5)
+    ax.scatter(xi + width/2, total_orig, color=batlow_colors[5], edgecolors='black', linewidths=0.5,marker='o', s=8.5, zorder=5)
 
 # Axes
 ax.axhline(0, color='black', linewidth=0.8)
@@ -545,8 +545,7 @@ scenario_handles = [
     mpatches.Patch(facecolor='white', edgecolor='black', hatch='////', label='CO$_2$ capture cost'),
     # Add the Circle marker here
     Line2D([0], [0], marker='o', color='none', label='Net cost',
-           markerfacecolor='black', markeredgecolor='white',
-           markeredgewidth=0.5, markersize=6)
+           markerfacecolor=batlow_colors[5],  markersize=4,markeredgecolor='black', markeredgewidth=0.5)
 ]
 
 legend2 = ax.legend(handles=scenario_handles,
