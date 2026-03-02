@@ -1,0 +1,100 @@
+
+Gurobi 12.0.1 (win64) logging started Mon Mar  2 16:12:52 2026
+
+Set parameter LogFile to value "dataCaseStudy_Cement\raw_results\tech_selection\20260302161111_carbon_tax_50_el_price_50\solver_log.txt"
+Set parameter TimeLimit to value 86400
+Set parameter MIPGap to value 0.02
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Gold 5120 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 8 physical cores, 8 logical processors, using up to 8 threads
+
+Non-default parameters:
+TimeLimit  86400
+MIPGap  0.02
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1121335 rows, 1095059 columns and 2470443 nonzeros
+Model fingerprint: 0x34f86e72
+Model has 2 SOS constraints
+Variable types: 1077537 continuous, 17522 integer (17522 binary)
+Coefficient statistics:
+  Matrix range     [1e-06, 1e+07]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [6e-01, 1e+09]
+  RHS range        [1e+00, 1e+07]
+Warning: Model contains large matrix coefficient range
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+Presolve removed 972401 rows and 1016208 columns
+Presolve time: 1.90s
+Presolved: 148934 rows, 78851 columns, 350431 nonzeros
+Variable types: 61325 continuous, 17526 integer (17526 binary)
+Performing another presolve...
+Presolve removed 48952 rows and 31428 columns
+Presolve time: 1.60s
+
+Deterministic concurrent LP optimizer: primal and dual simplex (primal and dual model)
+Showing primal log only...
+
+Root relaxation presolved: 99979 rows, 47421 columns, 261282 nonzeros
+
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    2.7581256e+07   1.380520e+06   1.166480e+11      6s
+   30963    6.9333876e+07   0.000000e+00   2.173312e+06     10s
+   32663    6.9333810e+07   0.000000e+00   2.960663e+06     15s
+   34343    6.9333751e+07   0.000000e+00   5.238842e+05     20s
+   35943    6.9333682e+07   0.000000e+00   2.469390e+06     25s
+   37513    6.9333618e+07   0.000000e+00   1.884463e+06     30s
+   39113    6.9333389e+07   0.000000e+00   4.924792e+06     35s
+   40713    6.9332906e+07   0.000000e+00   2.512771e+06     40s
+   42343    6.9320919e+07   0.000000e+00   2.769347e+06     45s
+   43743    6.9320815e+07   0.000000e+00   2.214453e+06     50s
+   45033    6.9320762e+07   0.000000e+00   1.112228e+06     55s
+   46333    6.9320731e+07   0.000000e+00   2.271119e+06     60s
+   47653    6.9320705e+07   0.000000e+00   2.865288e+06     65s
+   49113    6.9320675e+07   0.000000e+00   2.299666e+06     70s
+   50513    6.9320510e+07   0.000000e+00   1.549583e+06     75s
+   51893    6.9104406e+07   0.000000e+00   1.727610e+06     80s
+   53113    6.8761777e+07   0.000000e+00   1.306810e+06     85s
+   54613    6.8604318e+07   0.000000e+00   2.090025e+05     90s
+Concurrent spin time: 17.88s (can be avoided by choosing Method=3)
+
+Solved with dual simplex
+
+Root relaxation: objective 6.818470e+07, 47451 iterations, 104.90 seconds (75.16 work units)
+Total elapsed time = 110.36s (DegenMoves)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 6.8185e+07    0 8701          - 6.8185e+07      -     -  117s
+     0     0 6.8185e+07    0 8701          - 6.8185e+07      -     -  192s
+H    0     0                    7.044672e+07 6.8185e+07  3.21%     -  215s
+H    0     0                    6.951476e+07 6.8185e+07  1.91%     -  216s
+
+Explored 1 nodes (47925 simplex iterations) in 216.48 seconds (161.60 work units)
+Thread count was 8 (of 8 available processors)
+
+Solution count 1: 6.95148e+07 
+
+Optimal solution found (tolerance 2.00e-02)
+Warning: max constraint violation (1.0760e-06) exceeds tolerance
+Best objective 6.951476094785e+07, best bound 6.818501044875e+07, gap 1.9129%
