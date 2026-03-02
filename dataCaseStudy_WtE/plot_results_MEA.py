@@ -411,14 +411,7 @@ for idx, name_sim in enumerate(simulations):
            hatch=hatch,
            label="Extra boiler cost" if idx == 0 else "")
 
-    # --- Total cost marker ---
-    ax.plot(x + offset,
-            eco["total"],
-            marker="o",
-            linestyle="none",
-            color="black",
-            markersize=4,
-            zorder=5)
+
 
 # -----------------------------
 # Axis formatting
