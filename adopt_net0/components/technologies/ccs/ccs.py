@@ -40,7 +40,11 @@ def fit_ccs_coeff(tech_data: dict, ccs_data: dict, tech_name: str, climate_data:
     """
 
     molar_mass_CO2 = 44.01
-    design_co2_concentration = tech_data["co2_concentration"]
+    if tech_data.get("co2_concentration_is_hourly", False):
+        design_co2_concentration = max(climate_data["co2_concentration_"+tech_name].values)
+    else:
+        design_co2_concentration = tech_data["co2_concentration"]
+
     # convert kmol/s of fluegas to ton/h of molar_mass_CO2 = 44.01
     convert2t_per_h = molar_mass_CO2 * design_co2_concentration * 3.6
     capture_rate = ccs_data["Performance"]["capture_rate"]

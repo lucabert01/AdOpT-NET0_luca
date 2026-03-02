@@ -279,7 +279,7 @@ for dh_ratio in explored_dh_ratio:
     )
     climate_data = pd.read_csv(climate_data_file)
     for tech in tech_with_hourly_co2_concentration:
-        climate_data["co2_concentration_" + tech] = co2_concentration.values
+        climate_data["co2_concentration_" + tech] = np.ones(len(co2_concentration)) * co2_concentration.mean()
     climate_data.to_csv(climate_data_file, index=False, sep=";")
 
     carbon_price = np.ones(8760) * carbon_tax
