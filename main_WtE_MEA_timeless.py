@@ -16,6 +16,8 @@ th_efficiency = info_wasteCHP["Performance"]["th_efficiency"]
 el_efficiency = info_wasteCHP["Performance"]["el_efficiency"]
 emission_factor = info_wasteCHP["Performance"]["emission_factor"]
 path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestudy.xlsx")
+info_wasteCHP["Performance"]["ccs"]["possible"] = 1
+json_wasteCHP.write_text(json.dumps(info_wasteCHP, indent=4))
 data = pd.read_excel(path_processed_data)
 
 

@@ -21,8 +21,9 @@ lhv = info_wasteCHP["Performance"]["LHV"]
 th_efficiency = info_wasteCHP["Performance"]["th_efficiency"]
 el_efficiency = info_wasteCHP["Performance"]["el_efficiency"]
 emission_factor = info_wasteCHP["Performance"]["emission_factor"]
-info_wasteCHP["Performance"]["ccs"]["possible"] = 1
+info_wasteCHP["Performance"]["ccs"]["possible"] = 0
 json_wasteCHP.write_text(json.dumps(info_wasteCHP, indent=4))
+
 path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestudy.xlsx")
 data = pd.read_excel(path_processed_data)
 
@@ -30,7 +31,7 @@ data = pd.read_excel(path_processed_data)
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 explored_carbon_tax = [100, 150, 200, 250]
 explored_el_price = [50, 100, 150, 200, 250, 300, 350, 400] # average el prices explored in the analysis
-explored_dh_ratio = [0.5, 1]
+explored_dh_ratio = [0.5]
 plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
 gas_price = 40
 import_price_RDF = 20
@@ -119,7 +120,7 @@ for dh_ratio in explored_dh_ratio:
                     casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
             ) as json_file:
                 technologies = json.load(json_file)
-            technologies["new"] = ["WasteCHP", "WasteCaL_CCS"]  # ,"WasteCHP"
+            technologies["new"] = ["WasteCHP"]  # ,"WasteCHP"
             technologies["existing"] = {"Boiler_Industrial_NG": existing_boiler_size}
 
             with open(
