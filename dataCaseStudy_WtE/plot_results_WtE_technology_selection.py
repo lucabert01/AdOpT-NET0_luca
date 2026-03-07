@@ -1,30 +1,47 @@
 import h5py
+import json
+import pprint
+import warnings
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from pathlib import Path
+from matplotlib import rcParams
 from adopt_net0.result_management.read_results import (
     print_h5_tree,
     extract_datasets_from_h5group,
 )
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import json
-import numpy as np
-import warnings
-import pprint
 from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
-from matplotlib import rcParams
+import io
+from pptx import Presentation
+from pptx.util import Inches
+
 # Set global styling for the plots
-
-
-
 colors = []
-batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8','#012E4D']
+batlow_colors = [
+    "#222A6A",
+    "#4B708A",
+    "#6FBC7B",
+    "#B1E87E",
+    "#F7D03C",
+    "#D491B8",
+    "#012E4D",
+]
 figures_path = "../figures"
 
-
-## -----------------  Carbon and electricity price --------------------------
+## ----------------- Carbon and electricity price --------------------------
 explored_carbon_tax = [100, 150, 200, 250]
-explored_el_price = [50, 100, 150, 200, 250, 300, 350]  # average el prices explored in the analysis
+explored_el_price = [
+    50,
+    100,
+    150,
+    200,
+    250,
+    300,
+    350,
+    400,
+]  # average el prices explored in the analysis
 explored_dh_ratio = [0.5]
 gas_price = 40
 import_price_RDF = 20
@@ -32,10 +49,103 @@ import_price_RDF = 20
 path_processed_data = Path("../dataCaseStudy_Cement/dataSources/data_processed.xlsx")
 data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
 av_el_price = data["el_price_itNord"].mean()
-electricity_price_norm = data["el_price_itNord"]/av_el_price
+electricity_price_norm = data["el_price_itNord"] / av_el_price
 
 
+def extract_no_ccs_results(
+    raw_results_path,
+    explored_carbon_tax,
+    explored_el_price,
+    explored_dh_ratio,
+    electricity_price_norm,
+):
+    """
+    Reads simulations from a path without CCS and extracts boiler output and el. revenues.
+    """
+    results_no_ccs = {}
 
+    # Standardize string lists for path searching
+    explored_carbon_tax_str = [str(r) for r in explored_carbon_tax]
+    explored_el_price_str = [str(r) for r in explored_el_price]
+    explored_dh_ratio_str = [str(r) for r in explored_dh_ratio]
+
+    num_el_prices = len(explored_el_price)
+    num_carbon_tax = len(explored_carbon_tax)
+
+    for i_dh in range(len(explored_dh_ratio)):
+        dh_ratio_str = f"dh_{explored_dh_ratio_str[i_dh]}"
+        results_no_ccs[dh_ratio_str] = {}
+
+        # Filter directories by DH ratio
+        dh_ratio_dirs = sorted(
+            [
+                d
+                for d in raw_results_path.iterdir()
+                if d.is_dir() and dh_ratio_str in d.name
+            ]
+        )
+
+        # Get the most recent batch based on total expected simulations
+        dh_ratio_names = [d.name for d in dh_ratio_dirs[-num_el_prices * num_carbon_tax :]]
+
+        for j in range(num_carbon_tax):
+            ctax_str_key = f"ctax_{explored_carbon_tax_str[j]}"
+            results_no_ccs[dh_ratio_str][ctax_str_key] = {}
+
+            # Filter by carbon tax string
+            carbon_tax_names = sorted([d for d in dh_ratio_names if ctax_str_key in d])
+            current_batch = carbon_tax_names[-num_el_prices:]
+
+            for i in range(num_el_prices):
+                # Calculate the hourly price vector for this specific simulation
+                current_el_price_vector = explored_el_price[i] * electricity_price_norm
+
+                el_price_key = f"el_price_{explored_el_price_str[i]}"
+                file_path = (
+                    raw_results_path / current_batch[i] / "optimization_results.h5"
+                )
+
+                with h5py.File(file_path, "r") as hdf_file:
+                    df_op = pd.DataFrame(extract_datasets_from_h5group(hdf_file["operation"]))
+
+                # --- Extraction ---
+                # Boiler output
+                boiler_op = df_op.loc[
+                    :,
+                    (
+                        "technology_operation",
+                        "period1",
+                        "industrial_cluster",
+                        "Boiler_Industrial_NG_existing",
+                    ),
+                ]
+                # W2E operation
+                w2e_op = df_op.loc[
+                    :, ("technology_operation", "period1", "industrial_cluster", "WasteCHP")
+                ]
+
+                # --- Calculations ---
+                el_out = w2e_op["electricity_output"]
+                boiler_heat_out = boiler_op["heat_output"]
+
+                results_no_ccs[dh_ratio_str][ctax_str_key][el_price_key] = {
+                    "electricity_revenues": sum(el_out * current_el_price_vector),
+                    "tot_boiler_out": sum(boiler_heat_out),
+                    "el_out": el_out,  # keeping hourly for potential plots
+                    "boiler_heat_output": boiler_heat_out,
+                }
+
+    return results_no_ccs
+
+
+path_no_ccs = Path("./raw_results/WtE_withoutCCS")
+no_ccs_summary = extract_no_ccs_results(
+    path_no_ccs,
+    explored_carbon_tax,
+    explored_el_price,
+    explored_dh_ratio,
+    electricity_price_norm,
+)
 
 num_el_prices = len(explored_el_price)
 num_carbon_tax = len(explored_carbon_tax)
@@ -46,21 +156,24 @@ explored_el_price_str = [str(r) for r in explored_el_price]
 explored_dh_ratio_str = [str(r) for r in explored_dh_ratio]
 results_summary = {}
 
-for i_dh in range(0,num_dh_ratio):
+for i_dh in range(0, num_dh_ratio):
     dh_ratio = explored_dh_ratio[i_dh]
     dh_ratio_str = f"dh_{explored_dh_ratio_str[i_dh]}"
     results_summary[dh_ratio_str] = {}
 
     # Get all directories that contain 'dh_ratio_str' in the name
-    dh_ratio_dirs = [d for d in raw_results_path.iterdir()
-                       if d.is_dir() and dh_ratio_str in d.name]
+    dh_ratio_dirs = [
+        d for d in raw_results_path.iterdir() if d.is_dir() and dh_ratio_str in d.name
+    ]
 
     # Sort directories by name
     dir_results_sorted = sorted(dh_ratio_dirs)
 
     # Get the most recent ones
-    dh_ratio_names = [d.name for d in dir_results_sorted[-num_el_prices*num_carbon_tax:]]
-    for j in range(0,num_carbon_tax):
+    dh_ratio_names = [
+        d.name for d in dir_results_sorted[-num_el_prices * num_carbon_tax :]
+    ]
+    for j in range(0, num_carbon_tax):
         carbon_tax = explored_carbon_tax[j]
         carbon_tax_str = f"ctax_{explored_carbon_tax_str[j]}"
         results_summary[dh_ratio_str][carbon_tax_str] = {}
@@ -73,7 +186,7 @@ for i_dh in range(0,num_dh_ratio):
 
         # Get the most recent ones at the value of carbon tax carbon_tax_str
         carbon_tax_names = [d for d in dir_results_sorted[-num_el_prices:]]
-        for i in range(0,num_el_prices):
+        for i in range(0, num_el_prices):
             el_price = explored_el_price[i] * electricity_price_norm
 
             file_path = raw_results_path / f"{carbon_tax_names[i]}/optimization_results.h5"
@@ -82,72 +195,123 @@ for i_dh in range(0,num_dh_ratio):
             el_price_str = f"el_price_{explored_el_price[i]}"
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str] = {}
 
-            with h5py.File(file_path, 'r') as hdf_file:
-                df_operation = pd.DataFrame(extract_datasets_from_h5group(hdf_file["operation"]))
-                df_design = pd.DataFrame(extract_datasets_from_h5group(hdf_file["design/nodes/period1"]))
-                df_design_network = pd.DataFrame(extract_datasets_from_h5group(
-                    hdf_file["design/networks/period1/CO2PipelineOnshore/industrial_clusterstorage"]))
-            #print(df_operation)
+            with h5py.File(file_path, "r") as hdf_file:
+                df_operation = pd.DataFrame(
+                    extract_datasets_from_h5group(hdf_file["operation"])
+                )
+                df_design = pd.DataFrame(
+                    extract_datasets_from_h5group(hdf_file["design/nodes/period1"])
+                )
+                df_design_network = pd.DataFrame(
+                    extract_datasets_from_h5group(
+                        hdf_file[
+                            "design/networks/period1/CO2PipelineOnshore/industrial_clusterstorage"
+                        ]
+                    )
+                )
+                df_summary = pd.DataFrame(extract_datasets_from_h5group(hdf_file["summary"]))
 
-            boiler_design = df_design.loc[:, ('industrial_cluster', 'Boiler_Industrial_NG_existing')]
-            heat_demand = df_operation.loc[:, ('energy_balance', 'period1', 'industrial_cluster', 'heat', 'demand')]
-            boiler_output = df_operation.loc[:,
-                            ('technology_operation', 'period1', 'industrial_cluster', 'Boiler_Industrial_NG_existing')]
+            net_emissions = df_summary["emissions_pos"]
+            boiler_design = df_design.loc[
+                :, ("industrial_cluster", "Boiler_Industrial_NG_existing")
+            ]
+            heat_demand = df_operation.loc[
+                :, ("energy_balance", "period1", "industrial_cluster", "heat", "demand")
+            ]
+            waste_in = df_operation.loc[
+                :,
+                (
+                    "energy_balance",
+                    "period1",
+                    "industrial_cluster",
+                    "wasteProcessed",
+                    "demand",
+                ),
+            ]
+            boiler_output = df_operation.loc[
+                :,
+                (
+                    "technology_operation",
+                    "period1",
+                    "industrial_cluster",
+                    "Boiler_Industrial_NG_existing",
+                ),
+            ]
 
-            w2e_design = df_design.loc[:, ('industrial_cluster', 'WasteCHP')]
-            co2_storage_design = df_design.loc[:, ('storage', 'PermanentStorage_CO2_simple')]
-            w2e_CaL_design = df_design.loc[:, ('industrial_cluster', 'WasteCaL_CCS')]
+            w2e_design = df_design.loc[:, ("industrial_cluster", "WasteCHP")]
+            co2_storage_design = df_design.loc[:, ("storage", "PermanentStorage_CO2_simple")]
+            w2e_CaL_design = df_design.loc[:, ("industrial_cluster", "WasteCaL_CCS")]
+            json_boiler = Path("./technologies_json/Boiler_Industrial_NG.json")
+            info_boiler = json.loads(json_boiler.read_text())
+            th_efficiency_boiler = info_boiler["Performance"]["performance"]["out"]["heat"][
+                1
+            ]
+            emission_factor_boiler = info_boiler["Performance"]["emission_factor"]
 
+            # El. production if CCS didn't exist
+            json_wasteCHP = Path("./technologies_json/WasteCHP.json")
+            info_wasteCHP = json.loads(json_wasteCHP.read_text())
+            lhv = info_wasteCHP["Performance"]["LHV"]
+            th_efficiency = info_wasteCHP["Performance"]["th_efficiency"]
+            el_efficiency = info_wasteCHP["Performance"]["el_efficiency"]
+            emission_factor = info_wasteCHP["Performance"]["emission_factor"]
+            no_ccs_entry = no_ccs_summary[dh_ratio_str][carbon_tax_str][el_price_str]
+            revenues_no_ccs = no_ccs_entry["electricity_revenues"]
+            tot_boiler_out_no_ccs = no_ccs_entry["tot_boiler_out"]
+            emission_baseline = (
+                sum(waste_in * emission_factor)
+                + tot_boiler_out_no_ccs / th_efficiency_boiler * emission_factor_boiler
+            )
 
-
-            if w2e_design["size"].iloc[0]>0 and w2e_design["size_ccs"].iloc[0]>0:
-                json_wasteCHP = Path("./technologies_json/WasteCHP.json")
-                info_wasteCHP = json.loads(json_wasteCHP.read_text())
-                lhv = info_wasteCHP["Performance"]["LHV"]
-                th_efficiency = info_wasteCHP["Performance"]["th_efficiency"]
-                el_efficiency = info_wasteCHP["Performance"]["el_efficiency"]
-                emission_factor = info_wasteCHP["Performance"]["emission_factor"]
-                w2e_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'WasteCHP')]
-                w2e_output = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'WasteCHP')]
-                json_boiler = Path("./technologies_json/Boiler_Industrial_NG.json")
-                info_boiler = json.loads(json_boiler.read_text())
-                th_efficiency_boiler = info_boiler["Performance"]["performance"]["out"]["heat"][1]
-                emission_factor_boiler = info_boiler["Performance"]["emission_factor"]
-                waste_in = w2e_operation['wasteIn_input']
-                el_out = w2e_operation['electricity_output']
+            if w2e_design["size"].iloc[0] > 0 and w2e_design["size_ccs"].iloc[0] > 0:
+                w2e_operation = df_operation.loc[
+                    :, ("technology_operation", "period1", "industrial_cluster", "WasteCHP")
+                ]
+                w2e_output = df_operation.loc[
+                    :, ("technology_operation", "period1", "industrial_cluster", "WasteCHP")
+                ]
+                waste_in = w2e_operation["wasteIn_input"]
+                el_out = w2e_operation["electricity_output"]
                 emissions_w2e = waste_in * emission_factor
-                co2_captured_w2e = w2e_output['CO2captured_var_output_ccs']
+                co2_captured_w2e = w2e_output["CO2captured_var_output_ccs"]
+                emissions_boiler = (
+                    sum(boiler_output["heat_output"])
+                    / th_efficiency_boiler
+                    * emission_factor_boiler
+                )
+                size_ccs = w2e_design["size_ccs"]
 
-                pipeline_cost = df_design_network['capex'].values.flatten()[0]
-                storage_cost = co2_storage_design['opex_variable']
+                pipeline_cost = df_design_network["capex"].values.flatten()[0]
+                storage_cost = co2_storage_design["opex_variable"]
 
                 # Compute and retrieve necessary parameters
-                # El. production if CCS didn't exist
-                baseline_el_prod = ((waste_in * lhv - heat_demand / th_efficiency) * el_efficiency).where(
-                    (waste_in * lhv - heat_demand / th_efficiency) > 0, 0)
-                baseline_boiler_prod = (heat_demand - waste_in * lhv * th_efficiency).where(
-                    (heat_demand - waste_in * lhv * th_efficiency) > 0, 0)
-
-                loss_el_revenues = sum((baseline_el_prod-el_out)*el_price)
-                extra_cost_boiler = sum(
-                    boiler_output['heat_output'] - baseline_boiler_prod) / th_efficiency_boiler * (
-                                                                                 emission_factor_boiler * carbon_tax + gas_price)
-
-                extra_usage_boiler = sum(boiler_output['heat_output'] - baseline_boiler_prod) / th_efficiency_boiler
-
+                loss_el_revenues = revenues_no_ccs - sum(el_out * el_price)
+                extra_gas_usage_boiler = (
+                    sum(boiler_output["heat_output"]) - tot_boiler_out_no_ccs
+                ) / th_efficiency_boiler
+                extra_cost_boiler = extra_gas_usage_boiler * gas_price
                 # Relevant KPIs for economics
                 type_installed = "MEA"
                 capex = w2e_design["capex_ccs"]
                 opex_fixed = w2e_design["opex_fixed_ccs"]
-                #TODO change to opex_variable_ccs
+                # TODO change to opex_variable_ccs
                 opex_variable = w2e_design["opex_variable"]
-                energy_cost = loss_el_revenues + extra_cost_boiler
-                co2_captured = w2e_operation['CO2captured_var_output_ccs']
-                tot_co2_avoided = sum(emissions_w2e) - (sum(emissions_w2e - co2_captured_w2e) + extra_usage_boiler * emission_factor_boiler)
+                energy_cost = (
+                    loss_el_revenues
+                    + extra_cost_boiler
+                    + (sum(emissions_w2e - co2_captured_w2e) + emissions_boiler) * carbon_tax
+                )
+                co2_captured = w2e_operation["CO2captured_var_output_ccs"]
+                tot_co2_avoided = emission_baseline - (
+                    sum(emissions_w2e - co2_captured_w2e) + emissions_boiler
+                )
                 transport_stor_cost = storage_cost + pipeline_cost
+                load_factor_ccs = sum(co2_captured)/(size_ccs*8760)
 
-
-            elif w2e_CaL_design["size"].iloc[0] > 0 and w2e_CaL_design["size_cal"].iloc[0]>0:
+            elif (
+                w2e_CaL_design["size"].iloc[0] > 0
+                and w2e_CaL_design["size_cal"].iloc[0] > 0
+            ):
                 json_WasteCaL_CCS = Path("./technologies_json/WasteCaL_CCS.json")
                 info_WasteCaL_CCS = json.loads(json_WasteCaL_CCS.read_text())
                 lhv = info_WasteCaL_CCS["Performance"]["LHV"]
@@ -156,27 +320,43 @@ for i_dh in range(0,num_dh_ratio):
                 el_efficiency = info_WasteCaL_CCS["Performance"]["el_efficiency"]
                 emission_factor = info_WasteCaL_CCS["Performance"]["emission_factor"]
                 emission_factor_rdf = info_WasteCaL_CCS["Performance"]["emission_factor_RDF"]
-                w2e_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'WasteCaL_CCS')]
-                waste_in = w2e_operation['wasteIn_input']
-                co2_captured_w2e = w2e_operation['CO2captured_output']
-                waste_in_rdf = w2e_operation['wasteInRDF_input']
+                w2e_cal_operation = df_operation.loc[
+                    :,
+                    ("technology_operation", "period1", "industrial_cluster", "WasteCaL_CCS"),
+                ]
+                waste_in = w2e_cal_operation["wasteIn_input"]
+                co2_captured_w2e = w2e_cal_operation["CO2captured_output"]
+                waste_in_rdf = w2e_cal_operation["wasteInRDF_input"]
+                size_ccs = w2e_CaL_design["size_cal"]
+                emissions_w2e = (
+                    waste_in * emission_factor + waste_in_rdf * emission_factor_rdf
+                )
+                revenue_el_cal = sum(w2e_cal_operation["el_cal"] * el_price)
 
-                emissions_w2e = waste_in * emission_factor + waste_in_rdf * emission_factor_rdf
-                revenue_el_cal = sum(w2e_operation['el_cal'] * el_price)
-
-                pipeline_cost = df_design_network['capex'].values.flatten()[0]
-                storage_cost = co2_storage_design['opex_variable']
+                pipeline_cost = df_design_network["capex"].values.flatten()[0]
+                storage_cost = co2_storage_design["opex_variable"]
+                tot_co2_captured = sum(co2_captured_w2e)
+                tot_co2_avoided = sum(waste_in * emission_factor) - (
+                    sum(emissions_w2e - co2_captured_w2e)
+                )
 
                 type_installed = "CaL"
                 capex = w2e_CaL_design["capex_tot"]
                 opex_fixed = w2e_CaL_design["opex_fixed"]
                 opex_variable = w2e_CaL_design["opex_variable"]
-                co2_captured = w2e_operation['CO2captured_output']
-                tot_co2_avoided =  sum(waste_in * emission_factor) - (sum(emissions_w2e - co2_captured_w2e))
-                energy_cost = revenue_el_cal + sum(w2e_operation["wasteInRDF_input"]*import_price_RDF)
+                co2_captured = w2e_cal_operation["CO2captured_output"]
+                energy_cost = (
+                    -revenue_el_cal
+                    + sum(w2e_cal_operation["wasteInRDF_input"] * import_price_RDF)
+                    + (sum(emissions_w2e - co2_captured_w2e)) * carbon_tax
+                )
                 transport_stor_cost = storage_cost + pipeline_cost
+                load_factor_ccs = sum(co2_captured_w2e)/(size_ccs*8760)
 
             else:
+                no_ccs_entry = no_ccs_summary[dh_ratio_str][carbon_tax_str][el_price_str]
+                revenues_no_ccs = no_ccs_entry["electricity_revenues"]
+                tot_boiler_out_no_ccs = no_ccs_entry["tot_boiler_out"]
                 type_installed = "none"
                 capex = 0
                 opex_fixed = 0
@@ -185,32 +365,36 @@ for i_dh in range(0,num_dh_ratio):
                 tot_co2_avoided = 0
                 energy_cost = 0
                 transport_stor_cost = 0
+                load_factor_ccs = 0
+                size_ccs = 0
 
-            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]['hourly_co2_captured'] = co2_captured
-            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]['capex_tot'] = capex
-            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]['opex_fixed'] = opex_fixed
-            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]['opex_variable'] = opex_variable
-            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]['energy_cost'] = energy_cost
-            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]['transport_stor_cost'] = transport_stor_cost
-            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]['tot_co2_captured'] = (sum(co2_captured) if not isinstance(co2_captured, int) else pd.Series([0]))
-            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]['tot_co2_avoided'] = (tot_co2_avoided if not isinstance(co2_captured, int) else pd.Series([0]))
-            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]['cost_of_capture'] = \
-                ((capex + opex_fixed + opex_variable + energy_cost+ transport_stor_cost)/sum(co2_captured) if not isinstance(co2_captured, int) else pd.Series([0]))
-            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]['type_installed'] = type_installed
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["hourly_co2_captured"] = co2_captured
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["capex_tot"] = capex
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str][ "opex_fixed"] = opex_fixed
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str][
+                "opex_variable"] = opex_variable
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str][
+                "energy_cost"] = energy_cost
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str][
+                "transport_stor_cost"] = transport_stor_cost
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str][
+                "tot_co2_captured"] = (sum(co2_captured) if not isinstance(co2_captured, int) else pd.Series([0]))
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str][
+                "tot_co2_avoided"] = (
+                tot_co2_avoided if not isinstance(co2_captured, int) else pd.Series([0])
+            )
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str][
+                "cost_of_avoided"] = (
+                (capex + opex_fixed + opex_variable + energy_cost + transport_stor_cost)
+                / tot_co2_avoided
+                if not isinstance(co2_captured, int)
+                else pd.Series([0])
+            )
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["type_installed"] = type_installed
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["net_emissions"] = net_emissions
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["load_factor_ccs"] = load_factor_ccs
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["size_ccs"] = size_ccs
 
-
-# for carbon_tax_str, el_dict in results_summary.items():
-#     print(f"\n=== Carbon tax: {carbon_tax_str} ===")
-#
-#     for el_price_str, vals in el_dict.items():
-#         print(f"\n  Electricity price: {el_price_str}")
-#         print("  ------------------------------")
-#         print(f"    Capture type:        {vals.get('type_installed')}")
-#         print(f"    CapEx total:        {vals.get('capex_tot')}")
-#         print(f"    OpEx fixed:         {vals.get('opex_fixed')}")
-#         print(f"    OpEx variable:      {vals.get('opex_variable')}")
-#         print(f"    Energy cost:        {vals.get('energy_cost')}")
-#         print(f"    Total CO₂ captured: {vals.get('tot_co2_captured')}")
 
 # Initialize dictionaries to store the final matrices, keyed by dh
 cost_matrix = {}
@@ -224,67 +408,57 @@ for dh in explored_dh_ratio_str:
     for ct in explored_carbon_tax_str:
         for ep in explored_el_price_str:
             entry = results_summary[f"dh_{dh}"][f"ctax_{ct}"][f"el_price_{ep}"]
-            dh_data_rows.append({
-                "carbon_tax": ct,
-                "el_price": ep,
-                "cost_of_capture": entry["cost_of_capture"].iloc[0],
-                "type_installed": entry["type_installed"]
-            })
+            dh_data_rows.append(
+                {
+                    "carbon_tax": ct,
+                    "el_price": ep,
+                    "cost_of_avoided": entry["cost_of_avoided"].iloc[0],
+                    "type_installed": entry["type_installed"],
+                }
+            )
 
     # 3. Create a DataFrame from the current list of rows
-    df = pd.DataFrame(dh_data_rows) # Use the list of dicts for the current dh
+    df = pd.DataFrame(dh_data_rows)  # Use the list of dicts for the current dh
 
     # Convert columns (as before)
     df["carbon_tax"] = pd.to_numeric(df["carbon_tax"])
-    df["el_price"]   = pd.to_numeric(df["el_price"])
+    df["el_price"] = pd.to_numeric(df["el_price"])
 
     # 4. Pivot and store the results in the final dictionaries
-    cost_matrix_temporary = df.pivot(index="el_price", columns="carbon_tax", values="cost_of_capture")
-    type_matrix_temporary = df.pivot(index="el_price", columns="carbon_tax", values="type_installed")
+    cost_matrix_temporary = df.pivot(
+        index="el_price", columns="carbon_tax", values="cost_of_avoided"
+    )
+    type_matrix_temporary = df.pivot(
+        index="el_price", columns="carbon_tax", values="type_installed"
+    )
 
     # 5. Sort indices and store them in the result dictionaries
-    # We rename the variables to avoid confusion with the single matrix object
-    cost_matrix[f"dh_{dh}"] = cost_matrix_temporary.sort_index(ascending=False).sort_index(axis=1)
-    type_matrix[f"dh_{dh}"] = type_matrix_temporary.sort_index(ascending=False).sort_index(axis=1)
-
-# The results are now in final_cost_matrices and final_type_matrices
-
-
+    cost_matrix[f"dh_{dh}"] = cost_matrix_temporary.sort_index(
+        ascending=False
+    ).sort_index(axis=1)
+    type_matrix[f"dh_{dh}"] = type_matrix_temporary.sort_index(
+        ascending=False
+    ).sort_index(axis=1)
 
 # --- Define batlow colors ---
-batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
-                 '#F7D03C', '#D491B8', '#012E4D']
+batlow_colors = [
+    "#222A6A",
+    "#4B708A",
+    "#6FBC7B",
+    "#B1E87E",
+    "#F7D03C",
+    "#D491B8",
+    "#012E4D",
+]
 
 for dh in explored_dh_ratio_str:
     dh_ratio_str = f"dh_{dh}"
-    # # --- Plot 1: Heatmap of costs (continuous) ---
-    # plt.figure(figsize=(7,5))
-    # im = plt.imshow(cost_matrix[dh_ratio_str].values.astype(float),
-    #                 cmap=plt.cm.colors.ListedColormap(batlow_colors),
-    #                 aspect="auto")
-    #
-    # # add text annotations
-    # for i in range(cost_matrix[dh_ratio_str].shape[0]):
-    #     for j in range(cost_matrix[dh_ratio_str].shape[1]):
-    #         plt.text(j, i, f"{cost_matrix[dh_ratio_str].iloc[i, j]:.1f}",
-    #                  ha="center", va="center", color="white", fontsize=8)
-    #
-    # plt.xticks(range(len(cost_matrix[dh_ratio_str].columns)), cost_matrix[dh_ratio_str].columns)
-    # plt.yticks(range(len(cost_matrix[dh_ratio_str].index)), cost_matrix[dh_ratio_str].index)
-    # plt.xlabel("Carbon tax [€/tCO$_2$]")
-    # plt.ylabel("Electricity price [€/MWh]")
-    # plt.colorbar(im, label="LCOC [€/tCO$_2$]")
-    # plt.title(f"{dh_ratio_str}")
-
-    # ------------------------------------------------------------
     # Plot 2: Grid of installed type (categorical)
-    # ------------------------------------------------------------
     types = ["none", "MEA", "CaL"]
     type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
     # SINGLE-COLUMN FIGURE
     setup_matplotlib_for_paper("single")
-
     fig, ax = plt.subplots()
 
     for i, ep in enumerate(type_matrix[dh_ratio_str].index):
@@ -294,11 +468,12 @@ for dh in explored_dh_ratio_str:
 
             ax.add_patch(
                 plt.Rectangle(
-                    (j, i),  # position
-                    1, 1,  # width, height
-                    facecolor=type_to_color[t],  # fill color
-                    edgecolor="black",  # border color
-                    linewidth=0.8  # border thickness
+                    (j, i),
+                    1,
+                    1,
+                    facecolor=type_to_color[t],
+                    edgecolor="black",
+                    linewidth=0.8,
                 )
             )
 
@@ -310,49 +485,169 @@ for dh in explored_dh_ratio_str:
                 ha="center",
                 va="center",
                 color="white",
-                fontsize=rcParams["axes.labelsize"]-2,
-                fontweight="bold"
+                fontsize=rcParams["axes.labelsize"] - 2,
+                fontweight="bold",
             )
 
-    # ------------------------------------------------------------
     # AXES FORMATTING
-    # ------------------------------------------------------------
     ax.set_xlim(0, len(type_matrix[dh_ratio_str].columns))
     ax.set_ylim(0, len(type_matrix[dh_ratio_str].index))
-
     ax.set_xticks([x + 0.5 for x in range(len(type_matrix[dh_ratio_str].columns))])
     ax.set_yticks([y + 0.5 for y in range(len(type_matrix[dh_ratio_str].index))])
-
     ax.set_xticklabels(type_matrix[dh_ratio_str].columns)
     ax.set_yticklabels(type_matrix[dh_ratio_str].index)
-
     ax.invert_yaxis()
-
     ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
     ax.set_ylabel("Electricity price [€/MWh]")
 
-
-
-    # ------------------------------------------------------------
     # LEGEND (TOP, HORIZONTAL, SCALED)
-    # ------------------------------------------------------------
-    patches = [
-        mpatches.Patch(color=type_to_color[t], label=t) for t in types
-    ]
-
+    patches = [mpatches.Patch(color=type_to_color[t], label=t) for t in types]
     ax.legend(
         handles=patches,
         loc="lower center",
         bbox_to_anchor=(0.5, 1),
         ncol=len(types),
         fontsize=rcParams["legend.fontsize"],
-        frameon=False
+        frameon=False,
     )
 
-    # ------------------------------------------------------------
-    # SAVE
-    # ------------------------------------------------------------
     fig.tight_layout(pad=0.6)
     save_figure_for_paper(fig, f"wte_tech_selection_{dh_ratio_str}", figures_path)
 
-    plt.show()
+
+
+# --- PLOT SECONDARY VARIABLES ---
+
+
+# --- 1. Standardized Plotting Function ---
+def plot_heatmap(df, title, label, filename, cmap, vmin=None, vmax=None, is_pct=False, save_pdf=True):
+    fig, ax = plt.subplots(layout="constrained")
+    data = df.to_numpy()
+    im = ax.imshow(data, cmap=cmap, aspect="auto", vmin=vmin, vmax=vmax)
+
+    # Annotations - Standardized to 1 decimal point
+    for i in range(len(df.index)):
+        for j in range(len(df.columns)):
+            val = df.iloc[i, j]
+            txt = f"{val:.1%}" if is_pct else f"{val:.1f}"
+
+            # Contrast logic for text visibility
+            curr_vmin = vmin if vmin is not None else data.min()
+            curr_vmax = vmax if vmax is not None else data.max()
+            rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
+            color = "white" if rel_val > 0.6 else "black"
+            ax.text(j, i, txt, ha="center", va="center", color=color, fontsize=8)
+
+    ax.set_title(title)
+    ax.set_xticks(range(len(df.columns)))
+    ax.set_xticklabels(df.columns)
+    ax.set_yticks(range(len(df.index)))
+    ax.set_yticklabels(df.index)
+    ax.set_xlabel("Carbon tax [€/tCO$_2$]")
+    ax.set_ylabel("Electricity price [€/MWh]")
+    plt.colorbar(im, ax=ax, label=label)
+
+    # Clean filename (removes slashes that break Windows file saving)
+    safe_filename = filename.replace("/", "_").replace("\\", "_")
+
+    if save_pdf:
+        save_figure_for_paper(fig, safe_filename, figures_path)
+
+    return fig
+
+
+# --- 2. Data Preparation ---
+results_data = {
+    "rev_no_ccs": {}, "boiler_out_no_ccs": {}, "boiler_em_no_ccs": {},
+    "net_em_ccs": {}, "load_factor_ccs": {}, "size_ccs": {}
+}
+
+for dh in explored_dh_ratio_str:
+    dh_ratio_key = f"dh_{dh}"
+    rows_no_ccs = []
+    rows_ccs = []
+
+    for ct in explored_carbon_tax_str:
+        ct_key = f"ctax_{ct}"
+        for ep in explored_el_price_str:
+            ep_key = f"el_price_{ep}"
+
+            # --- No-CCS Data ---
+            d_no = no_ccs_summary[dh_ratio_key][ct_key][ep_key]
+            rev_meur = d_no["electricity_revenues"] / 1e6
+            b_em = (d_no["tot_boiler_out"] / th_efficiency_boiler * emission_factor_boiler / 1000)
+
+            rows_no_ccs.append({
+                "ct": int(ct), "ep": int(ep),
+                "rev": rev_meur, "out": d_no["tot_boiler_out"], "em": b_em
+            })
+
+            # --- CCS Data (Fixed Depreciation Warnings) ---
+            d_ccs = results_summary[dh_ratio_key][ct_key][ep_key]
+
+
+            # Helper to safely extract scalar from Series or single value
+            def get_val(item):
+                return float(item.iloc[0]) if hasattr(item, 'iloc') else float(item)
+
+
+            em_val = get_val(d_ccs['net_emissions'])
+            lf_val = get_val(d_ccs['load_factor_ccs'])
+            sz_val = get_val(d_ccs['size_ccs'])
+
+            rows_ccs.append({
+                "ct": int(ct), "ep": int(ep),
+                "net_em": em_val / 1000, "lf": lf_val, "sz": sz_val
+            })
+
+
+    def pivot_data(rows, val_col):
+        return pd.DataFrame(rows).pivot(index="ep", columns="ct", values=val_col).sort_index(ascending=False).astype(
+            float)
+
+
+    results_data["rev_no_ccs"][dh_ratio_key] = pivot_data(rows_no_ccs, "rev")
+    results_data["boiler_out_no_ccs"][dh_ratio_key] = pivot_data(rows_no_ccs, "out")
+    results_data["boiler_em_no_ccs"][dh_ratio_key] = pivot_data(rows_no_ccs, "em")
+    results_data["net_em_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "net_em")
+    results_data["load_factor_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "lf")
+    results_data["size_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "sz")
+
+# --- 3. Generate PDFs and PowerPoint ---
+setup_matplotlib_for_paper("single")
+prs = Presentation()
+
+for dh in explored_dh_ratio_str:
+    dh_key = f"dh_{dh}"
+
+    # List: (Data, Title, Colorbar Label, Filename, Colormap, Is_Percentage)
+    metrics = [
+        (results_data["rev_no_ccs"][dh_key], "Revenues Without CCS [M€]", "M€", f"rev_no_ccs_{dh_key}", "YlGn", False),
+        (results_data["boiler_out_no_ccs"][dh_key], "Total Boiler Output No-CCS [MWh]", "MWh", f"boiler_out_{dh_key}",
+         "OrRd", False),
+        (results_data["boiler_em_no_ccs"][dh_key], "Total Boiler Emissions No-CCS [kt]", "kt", f"boiler_em_{dh_key}",
+         "OrRd", False),
+        (results_data["net_em_ccs"][dh_key], "Net Emissions CCS [kt]", "kt", f"net_emissions_{dh_key}", "RdBu_r",
+         False),
+        (results_data["load_factor_ccs"][dh_key], "CCS Load Factor", "Ratio", f"ccs_lf_{dh_key}", "YlGn", True),
+        (results_data["size_ccs"][dh_key], "CCS Capacity [t/h]", "t/h", f"ccs_size_{dh_key}", "Purples", False)
+    ]
+
+    for df, title, label, fname, cmap, is_pct in metrics:
+        # Generate the plot and save as PDF (using your utility)
+        fig = plot_heatmap(df, title, label, fname, cmap, is_pct=is_pct, save_pdf=True)
+
+        # Save to PowerPoint
+        img_buffer = io.BytesIO()
+        fig.savefig(img_buffer, format='png', dpi=300)
+        img_buffer.seek(0)
+
+        slide = prs.slides.add_slide(prs.slide_layouts[5])
+        slide.shapes.title.text = f"{title} (DH Ratio: {dh})"
+        slide.shapes.add_picture(img_buffer, Inches(0.5), Inches(1.5), width=Inches(9))
+
+        plt.close(fig)
+
+# --- 4. Save PowerPoint ---
+prs.save("WtE_Analysis_Results.pptx")
+print("All figures saved to PDF and PowerPoint generated successfully.")
