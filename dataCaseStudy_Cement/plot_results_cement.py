@@ -21,7 +21,7 @@ figures_path = "../figures"
 
 
 ## -----------------  Carbon and electricity price --------------------------
-explored_carbon_tax = [50, 100, 150]
+explored_carbon_tax = [50, 100]
 explored_el_price = [50, 100, 150, 200] # average el prices explored in the analysis
 cost_extra_fuel = 15
 
@@ -31,11 +31,13 @@ av_el_price = data["el_price_itNord"].mean()
 electricity_price_norm = data["el_price_itNord"]/av_el_price
 json_cement = Path("./technologies_json/CementEmitter.json")
 info_cement = json.loads(json_cement.read_text())
-emission_factor = info_cement["Performance"]["emission_factor"]
+emission_factor_clinker_baseline = info_cement["Performance"]["emission_factor"]# tCo2/tClinker, without oxyfuel calciner
 json_heat_pump = Path("./technologies_json/HeatPump.json")
 info_heat_pump = json.loads(json_heat_pump.read_text())
 cop_hp = info_heat_pump["Performance"]["performance"]["out"]["heat"][1]
-
+json_oxy_ccs = Path("./technologies_json/CementHybridCCS.json")
+info_oxy_ccs = json.loads(json_oxy_ccs.read_text())
+emission_factor_clinker_oxy = info_oxy_ccs["Performance"]["performance"]["tCO2_tclinker"]
 
 num_el_prices = len(explored_el_price)
 num_carbon_tax = len(explored_carbon_tax)
@@ -85,8 +87,7 @@ for j in range(0,num_carbon_tax):
 
 
         clinker_demand = df_operation.loc[:, ('energy_balance', 'period1', 'industrial_cluster','clinker', 'demand')]
-        emissions_cement = clinker_demand * emission_factor
-
+        emissions_cement_baseline = clinker_demand * emission_factor_clinker_baseline
 
         # economics
         el_price = electricity_price_norm*explored_el_price[i]
@@ -97,6 +98,8 @@ for j in range(0,num_carbon_tax):
             opex_variable = cement_mea_design["opex_variable"]
             energy_cost = sum(cement_mea_operation["electricity_var_input_ccs"]*el_price) + sum(cement_mea_operation["heat_var_input_ccs"]/cop_hp*el_price)
             co2_captured = cement_mea_operation['CO2captured_var_output_ccs']
+            tot_co2_avoided = sum(cement_mea_operation["clinker_output"] * emission_factor_clinker_baseline) - sum(
+                cement_mea_operation["emissions_pos"])
 
         elif cement_oxy_design["size"].iloc[0] > 0:
             if cement_oxy_design["size_mea"].iloc[0] > 0:
@@ -109,6 +112,8 @@ for j in range(0,num_carbon_tax):
             opex_variable = cement_oxy_design["opex_variable"]
             co2_captured = cement_oxy_operation['CO2captured_output']
             energy_cost = sum(cement_oxy_operation["electricity_input"]*el_price) + sum(cement_oxy_operation["extra_fuel_input"]*cost_extra_fuel)
+            tot_co2_avoided = sum(cement_oxy_operation["clinker_output"] * emission_factor_clinker_baseline) - sum(
+            cement_oxy_operation["emissions_pos"])
 
         else:
             type_installed = "none"
@@ -116,6 +121,8 @@ for j in range(0,num_carbon_tax):
             opex_variable = 0
             co2_captured = 0
             energy_cost = 0
+            tot_co2_avoided = 0
+            capex = 0
 
         results_summary[carbon_tax_str][el_price_str]['hourly_co2_captured'] = co2_captured
         results_summary[carbon_tax_str][el_price_str]['capex_tot'] = capex
@@ -123,7 +130,7 @@ for j in range(0,num_carbon_tax):
         results_summary[carbon_tax_str][el_price_str]['opex_variable'] = opex_variable
         results_summary[carbon_tax_str][el_price_str]['energy_cost'] = energy_cost
         results_summary[carbon_tax_str][el_price_str]['tot_co2_captured'] = (sum(co2_captured) if not isinstance(co2_captured, int) else pd.Series([0]))
-        results_summary[carbon_tax_str][el_price_str]['cost_of_capture'] = ((capex + opex_fixed + opex_variable + energy_cost)/sum(co2_captured) if not isinstance(co2_captured, int) else pd.Series([0]))
+        results_summary[carbon_tax_str][el_price_str]['cost_of_capture'] = ((capex + opex_fixed + opex_variable + energy_cost)/tot_co2_avoided if not isinstance(co2_captured, int) else pd.Series([0]))
         results_summary[carbon_tax_str][el_price_str]['type_installed'] = type_installed
 
 
