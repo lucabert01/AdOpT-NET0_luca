@@ -1,6 +1,6 @@
 {
   "tec_type": "CONV2",
-  "size_min": 0,
+  "size_min": 102.5,
   "size_max": 102.6,
   "size_is_int": 0,
   "size_based_on": "input",
