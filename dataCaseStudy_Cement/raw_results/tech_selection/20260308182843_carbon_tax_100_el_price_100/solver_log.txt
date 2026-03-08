@@ -1,0 +1,80 @@
+
+Gurobi 12.0.1 (win64) logging started Sun Mar  8 18:31:16 2026
+
+Set parameter LogFile to value "dataCaseStudy_Cement\raw_results\tech_selection\20260308182843_carbon_tax_100_el_price_100\solver_log.txt"
+Set parameter TimeLimit to value 86400
+Set parameter MIPGap to value 0.02
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Gold 5120 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 8 physical cores, 8 logical processors, using up to 8 threads
+
+Non-default parameters:
+TimeLimit  86400
+MIPGap  0.02
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1235225 rows, 1138864 columns and 2715743 nonzeros
+Model fingerprint: 0xafb52933
+Model has 2 SOS constraints
+Variable types: 1103820 continuous, 35044 integer (35044 binary)
+Coefficient statistics:
+  Matrix range     [1e-05, 2e+07]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+09]
+  RHS range        [1e+00, 2e+07]
+Warning: Model contains large matrix coefficient range
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+Presolve removed 1034927 rows and 1049978 columns
+Presolve time: 1.96s
+Presolved: 200298 rows, 88886 columns, 452560 nonzeros
+Variable types: 53839 continuous, 35047 integer (35047 binary)
+Performing another presolve...
+Presolve removed 145910 rows and 67945 columns
+Presolve time: 2.35s
+Found heuristic solution: objective 8.230410e+07
+
+Deterministic concurrent LP optimizer: primal and dual simplex (primal and dual model)
+Showing primal log only...
+
+Root relaxation presolved: 45988 rows, 16739 columns, 108709 nonzeros
+
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    2.0410695e+08   2.456138e+01   7.562960e+09      7s
+Concurrent spin time: 0.01s
+
+Solved with primal simplex
+
+Root relaxation: interrupted, 9734 iterations, 0.54 seconds (0.16 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0          -    0      8.2304e+07 8.2212e+07  0.11%     -    7s
+
+Explored 1 nodes (9734 simplex iterations) in 7.60 seconds (3.50 work units)
+Thread count was 8 (of 8 available processors)
+
+Solution count 1: 8.23041e+07 
+
+Optimal solution found (tolerance 2.00e-02)
+Warning: max constraint violation (2.5234e-06) exceeds tolerance
+Best objective 8.230409898368e+07, best bound 8.221159056822e+07, gap 0.1124%
