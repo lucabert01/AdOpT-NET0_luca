@@ -38,7 +38,7 @@
       }
     },
     "emission_factor": 0.86,
-    "min_part_load": 1,
+    "min_part_load": 0,
     "ccs": {
       "possible": 1,
       "co2_concentration" : 0.20,

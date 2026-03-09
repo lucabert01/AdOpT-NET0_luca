@@ -20,7 +20,9 @@ objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
 explored_carbon_tax = [50, 100, 150, 200]
+explored_carbon_tax = [50]
 explored_el_price = [50, 100, 150, 200] # average el prices explored in the analysis
+explored_el_price = [50] # average el prices explored in the analysis
 distance_to_stor = 100
 dymanics_on = 0
 
@@ -104,7 +106,7 @@ for carbon_tax in explored_carbon_tax:
             casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
         ) as json_file:
             technologies = json.load(json_file)
-        technologies["new"] = [ "CementHybridCCS", "CementEmitter", "HeatPump"]
+        technologies["new"] = [ "CementEmitter", "HeatPump"]
 
         with open(
             casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "w"
@@ -186,13 +188,7 @@ for carbon_tax in explored_carbon_tax:
             nodes=["industrial_cluster"],
         )
 
-        adopt.fill_carrier_data(
-            casepath,
-            value_or_data=0,
-            columns=["Import price"],
-            carriers=["limestone"],
-            nodes=["industrial_cluster"],
-        )
+
         adopt.fill_carrier_data(
             casepath,
             value_or_data=cost_extra_fuel,

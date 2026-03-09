@@ -21,7 +21,7 @@ figures_path = "../figures"
 
 
 ## -----------------  Carbon and electricity price --------------------------
-explored_carbon_tax = [50, 100]
+explored_carbon_tax = [50, 100, 150, 200]
 explored_el_price = [50, 100, 150, 200] # average el prices explored in the analysis
 cost_extra_fuel = 15
 
