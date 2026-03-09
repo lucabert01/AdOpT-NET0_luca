@@ -299,7 +299,6 @@ for i_dh in range(0, num_dh_ratio):
                 energy_cost = (
                     loss_el_revenues
                     + extra_cost_boiler
-                    + (sum(emissions_w2e - co2_captured_w2e) + emissions_boiler) * carbon_tax
                 )
                 co2_captured = w2e_operation["CO2captured_var_output_ccs"]
                 tot_co2_avoided = emission_baseline - (
@@ -348,7 +347,7 @@ for i_dh in range(0, num_dh_ratio):
                 energy_cost = (
                     -revenue_el_cal
                     + sum(w2e_cal_operation["wasteInRDF_input"] * import_price_RDF)
-                    + (sum(emissions_w2e - co2_captured_w2e)) * carbon_tax
+
                 )
                 transport_stor_cost = storage_cost + pipeline_cost
                 load_factor_ccs = sum(co2_captured_w2e)/(size_ccs*8760)
@@ -514,52 +513,20 @@ for dh in explored_dh_ratio_str:
     fig.tight_layout(pad=0.6)
     save_figure_for_paper(fig, f"wte_tech_selection_{dh_ratio_str}", figures_path)
 
-
+plt.show()
 
 # --- PLOT SECONDARY VARIABLES ---
 
 
-# --- 1. Standardized Plotting Function ---
-def plot_heatmap(df, title, label, filename, cmap, vmin=None, vmax=None, is_pct=False, save_pdf=True):
-    fig, ax = plt.subplots(layout="constrained")
-    data = df.to_numpy()
-    im = ax.imshow(data, cmap=cmap, aspect="auto", vmin=vmin, vmax=vmax)
-
-    # Annotations - Standardized to 1 decimal point
-    for i in range(len(df.index)):
-        for j in range(len(df.columns)):
-            val = df.iloc[i, j]
-            txt = f"{val:.1%}" if is_pct else f"{val:.1f}"
-
-            # Contrast logic for text visibility
-            curr_vmin = vmin if vmin is not None else data.min()
-            curr_vmax = vmax if vmax is not None else data.max()
-            rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
-            color = "white" if rel_val > 0.6 else "black"
-            ax.text(j, i, txt, ha="center", va="center", color=color, fontsize=8)
-
-    ax.set_title(title)
-    ax.set_xticks(range(len(df.columns)))
-    ax.set_xticklabels(df.columns)
-    ax.set_yticks(range(len(df.index)))
-    ax.set_yticklabels(df.index)
-    ax.set_xlabel("Carbon tax [€/tCO$_2$]")
-    ax.set_ylabel("Electricity price [€/MWh]")
-    plt.colorbar(im, ax=ax, label=label)
-
-    # Clean filename (removes slashes that break Windows file saving)
-    safe_filename = filename.replace("/", "_").replace("\\", "_")
-
-    if save_pdf:
-        save_figure_for_paper(fig, safe_filename, figures_path)
-
-    return fig
-
-
-# --- 2. Data Preparation ---
+# --- 1. DATA PREPARATION ---
+# Initialize dictionary to store the matrices
 results_data = {
-    "rev_no_ccs": {}, "boiler_out_no_ccs": {}, "boiler_em_no_ccs": {},
-    "net_em_ccs": {}, "load_factor_ccs": {}, "size_ccs": {}
+    "rev_no_ccs": {},
+    "boiler_out_no_ccs": {},
+    "boiler_em_no_ccs": {},
+    "net_em_ccs": {},
+    "load_factor_ccs": {},
+    "size_ccs": {}
 }
 
 for dh in explored_dh_ratio_str:
@@ -572,9 +539,10 @@ for dh in explored_dh_ratio_str:
         for ep in explored_el_price_str:
             ep_key = f"el_price_{ep}"
 
-            # --- No-CCS Data ---
+            # --- No-CCS Data Extraction ---
             d_no = no_ccs_summary[dh_ratio_key][ct_key][ep_key]
             rev_meur = d_no["electricity_revenues"] / 1e6
+            # Calculation for boiler emissions
             b_em = (d_no["tot_boiler_out"] / th_efficiency_boiler * emission_factor_boiler / 1000)
 
             rows_no_ccs.append({
@@ -582,30 +550,33 @@ for dh in explored_dh_ratio_str:
                 "rev": rev_meur, "out": d_no["tot_boiler_out"], "em": b_em
             })
 
-            # --- CCS Data (Fixed Depreciation Warnings) ---
+            # --- CCS Data Extraction (Including net_emissions and size) ---
             d_ccs = results_summary[dh_ratio_key][ct_key][ep_key]
 
 
-            # Helper to safely extract scalar from Series or single value
+            # Helper to safely handle pandas Series vs scalar floats
             def get_val(item):
                 return float(item.iloc[0]) if hasattr(item, 'iloc') else float(item)
 
 
-            em_val = get_val(d_ccs['net_emissions'])
+            # Net emissions (converted to kt), Load Factor, and Size (t/h)
+            em_val = get_val(d_ccs['net_emissions']) / 1000
             lf_val = get_val(d_ccs['load_factor_ccs'])
             sz_val = get_val(d_ccs['size_ccs'])
 
             rows_ccs.append({
                 "ct": int(ct), "ep": int(ep),
-                "net_em": em_val / 1000, "lf": lf_val, "sz": sz_val
+                "net_em": em_val, "lf": lf_val, "sz": sz_val
             })
 
 
+    # Helper function to pivot lists into heatmaps
     def pivot_data(rows, val_col):
-        return pd.DataFrame(rows).pivot(index="ep", columns="ct", values=val_col).sort_index(ascending=False).astype(
-            float)
+        df_temp = pd.DataFrame(rows)
+        return df_temp.pivot(index="ep", columns="ct", values=val_col).sort_index(ascending=False).astype(float)
 
 
+    # Store all matrices
     results_data["rev_no_ccs"][dh_ratio_key] = pivot_data(rows_no_ccs, "rev")
     results_data["boiler_out_no_ccs"][dh_ratio_key] = pivot_data(rows_no_ccs, "out")
     results_data["boiler_em_no_ccs"][dh_ratio_key] = pivot_data(rows_no_ccs, "em")
@@ -613,41 +584,61 @@ for dh in explored_dh_ratio_str:
     results_data["load_factor_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "lf")
     results_data["size_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "sz")
 
-# --- 3. Generate PDFs and PowerPoint ---
-setup_matplotlib_for_paper("single")
-prs = Presentation()
 
+# --- 2. STANDARDIZED PLOTTING FUNCTION ---
+def plot_heatmap(df, label, filename, cmap, is_pct=False):
+    setup_matplotlib_for_paper("single")
+    fig, ax = plt.subplots(layout="constrained")
+
+    data = df.to_numpy()
+    im = ax.imshow(data, cmap=cmap, aspect="auto")
+
+    # Annotations
+    for i in range(len(df.index)):
+        for j in range(len(df.columns)):
+            val = df.iloc[i, j]
+            txt = f"{val:.1%}" if is_pct else f"{val:.1f}"
+
+            # Contrast logic
+            curr_vmin, curr_vmax = data.min(), data.max()
+            rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
+            color = "white" if rel_val > 0.6 else "black"
+
+            ax.text(j, i, txt, ha="center", va="center", color=color,
+                    fontsize=rcParams["axes.labelsize"] - 2, fontweight="bold")
+
+    # Axes Setup
+    ax.set_xticks(range(len(df.columns)))
+    ax.set_xticklabels(df.columns)
+    ax.set_yticks(range(len(df.index)))
+    ax.set_yticklabels(df.index)
+    ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
+    ax.set_ylabel("Electricity price [€/MWh]")
+
+    plt.colorbar(im, ax=ax, label=label)
+    save_figure_for_paper(fig, filename, figures_path)
+    plt.close(fig)
+
+
+# --- 3. EXECUTION LOOP ---
 for dh in explored_dh_ratio_str:
     dh_key = f"dh_{dh}"
 
-    # List: (Data, Title, Colorbar Label, Filename, Colormap, Is_Percentage)
+    if dh_key not in results_data["rev_no_ccs"]:
+        continue
+
+    # All metrics including the previously missing ones
     metrics = [
-        (results_data["rev_no_ccs"][dh_key], "Revenues Without CCS [M€]", "M€", f"rev_no_ccs_{dh_key}", "YlGn", False),
-        (results_data["boiler_out_no_ccs"][dh_key], "Total Boiler Output No-CCS [MWh]", "MWh", f"boiler_out_{dh_key}",
-         "OrRd", False),
-        (results_data["boiler_em_no_ccs"][dh_key], "Total Boiler Emissions No-CCS [kt]", "kt", f"boiler_em_{dh_key}",
-         "OrRd", False),
-        (results_data["net_em_ccs"][dh_key], "Net Emissions CCS [kt]", "kt", f"net_emissions_{dh_key}", "RdBu_r",
-         False),
-        (results_data["load_factor_ccs"][dh_key], "CCS Load Factor", "Ratio", f"ccs_lf_{dh_key}", "YlGn", True),
-        (results_data["size_ccs"][dh_key], "CCS Capacity [t/h]", "t/h", f"ccs_size_{dh_key}", "Purples", False)
+        (results_data["rev_no_ccs"][dh_key], "Revenues [M€/y]", "rev_no_ccs", "YlGn", False),
+        (results_data["boiler_out_no_ccs"][dh_key]/1000, "Boiler output [GWh/y]", "boiler_out", "OrRd", False),
+        (results_data["boiler_em_no_ccs"][dh_key], r"Boiler emissions [ktCO$_2$/y]", "boiler_em", "OrRd", False),
+        (results_data["net_em_ccs"][dh_key], r"Net emissions [ktCO$_2$/y]", "net_emissions", "RdBu_r", False),
+        (results_data["load_factor_ccs"][dh_key], "CCS load factor [-]", "ccs_lf", "YlGn", True),
+        (results_data["size_ccs"][dh_key], "CCS size [t/h]", "ccs_size", "Purples", False)
     ]
 
-    for df, title, label, fname, cmap, is_pct in metrics:
-        # Generate the plot and save as PDF (using your utility)
-        fig = plot_heatmap(df, title, label, fname, cmap, is_pct=is_pct, save_pdf=True)
+    for df, label, suffix, cmap, is_pct in metrics:
+        full_name = f"wte_secondary_{suffix}_{dh_key}"
+        plot_heatmap(df, label, full_name, cmap, is_pct)
 
-        # Save to PowerPoint
-        img_buffer = io.BytesIO()
-        fig.savefig(img_buffer, format='png', dpi=300)
-        img_buffer.seek(0)
-
-        slide = prs.slides.add_slide(prs.slide_layouts[5])
-        slide.shapes.title.text = f"{title} (DH Ratio: {dh})"
-        slide.shapes.add_picture(img_buffer, Inches(0.5), Inches(1.5), width=Inches(9))
-
-        plt.close(fig)
-
-# --- 4. Save PowerPoint ---
-prs.save("WtE_Analysis_Results.pptx")
-print("All figures saved to PDF and PowerPoint generated successfully.")
+print("All secondary plots (including Net Emissions and CCS Size) have been saved.")
