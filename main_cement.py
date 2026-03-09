@@ -19,8 +19,8 @@ adopt.create_optimization_templates(casepath)
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
-explored_carbon_tax = [50]#, 100, 150, 200]
-explored_el_price = [50]#, 100, 150, 200] # average el prices explored in the analysis
+explored_carbon_tax = [50, 100, 150, 200]
+explored_el_price = [50, 100, 150, 200] # average el prices explored in the analysis
 distance_to_stor = 100
 dymanics_on = 0
 
