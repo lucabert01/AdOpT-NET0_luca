@@ -51,20 +51,30 @@ explored_el_price_str = [str(r) for r in explored_el_price]
 explored_tec_str = explored_tec
 results_summary = {}
 
-for i_tec in range(0,num_tec):
-    tec = explored_tec[i_tec]
-    tec_str = explored_tec_str[i_tec]
+for i_tec in range(0, num_tec):
+    tec_str = explored_tec[i_tec]
     results_summary[tec_str] = {}
 
-    # Get all directories that contain 'tec_str' in the name
-    tec_dirs = [d for d in raw_results_path.iterdir()
-                       if d.is_dir() and tec_str in d.name]
+    # Logic to separate "standard" from "inflex" versions
+    tec_dirs = []
+    for d in raw_results_path.iterdir():
+        if not d.is_dir():
+            continue
 
-    # Sort directories by name
+        # Case 1: Searching for "inflex" (e.g., "mea_inflex")
+        if "_inflex" in tec_str:
+            if tec_str in d.name:
+                tec_dirs.append(d)
+
+        # Case 2: Searching for standard (e.g., "mea" or "oxy")
+        # We check if it contains the tech name BUT NOT the _inflex suffix
+        else:
+            if tec_str in d.name and f"{tec_str}_inflex" not in d.name:
+                tec_dirs.append(d)
+
+    # Sort and slice as you did before
     dir_results_sorted = sorted(tec_dirs)
-
-    # Get the most recent ones
-    tec_names = [d.name for d in dir_results_sorted[-num_el_prices*num_std_el:]]
+    tec_names = [d.name for d in dir_results_sorted[-num_el_prices * num_std_el:]]
     for j in range(0,num_std_el):
         std_el = explored_std_el[j]
         std_el_str = f"std_{explored_std_el_str[j]}"
