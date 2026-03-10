@@ -21,8 +21,8 @@ figures_path = "../figures"
 
 
 ## -----------------  Carbon and electricity price --------------------------
-explored_carbon_tax = [50, 100, 150, 200]
-explored_el_price = [50, 100, 150, 200] # average el prices explored in the analysis
+explored_carbon_tax = [100, 150, 200, 250, 300]
+explored_el_price = [50, 100, 150, 200, 250] # average el prices explored in the analysis
 cost_extra_fuel = 15
 
 path_processed_data = Path("./dataSources/data_processed.xlsx")
