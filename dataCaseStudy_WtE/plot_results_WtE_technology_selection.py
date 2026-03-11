@@ -16,9 +16,13 @@ from utilities.process_results import save_figure_for_paper, setup_matplotlib_fo
 import io
 from pptx import Presentation
 from pptx.util import Inches
+from matplotlib.colors import LinearSegmentedColormap
 
 # Set global styling for the plots
 colors = []
+pink_cmap = LinearSegmentedColormap.from_list(
+    "white_pink", ["#FAF0F6","#D491B8"]
+)
 batlow_colors = [
     "#222A6A",
     "#4B708A",
@@ -306,6 +310,7 @@ for i_dh in range(0, num_dh_ratio):
                 )
                 transport_stor_cost = storage_cost + pipeline_cost
                 load_factor_ccs = sum(co2_captured)/(size_ccs*8760)
+                fraction_avoided = tot_co2_avoided/emission_baseline
 
             elif (
                 w2e_CaL_design["size"].iloc[0] > 0
@@ -351,6 +356,7 @@ for i_dh in range(0, num_dh_ratio):
                 )
                 transport_stor_cost = storage_cost + pipeline_cost
                 load_factor_ccs = sum(co2_captured_w2e)/(size_ccs*8760)
+                fraction_avoided = tot_co2_avoided/emission_baseline
 
             else:
                 no_ccs_entry = no_ccs_summary[dh_ratio_str][carbon_tax_str][el_price_str]
@@ -366,6 +372,7 @@ for i_dh in range(0, num_dh_ratio):
                 transport_stor_cost = 0
                 load_factor_ccs = 0
                 size_ccs = 0
+                fraction_avoided = 0
 
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["hourly_co2_captured"] = co2_captured
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["capex_tot"] = capex
@@ -393,6 +400,7 @@ for i_dh in range(0, num_dh_ratio):
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["net_emissions"] = net_emissions
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["load_factor_ccs"] = load_factor_ccs
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["size_ccs"] = size_ccs
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["fraction_avoided"] = fraction_avoided
 
 
 # Initialize dictionaries to store the final matrices, keyed by dh
@@ -513,7 +521,6 @@ for dh in explored_dh_ratio_str:
     fig.tight_layout(pad=0.6)
     save_figure_for_paper(fig, f"wte_tech_selection_{dh_ratio_str}", figures_path)
 
-plt.show()
 
 # --- PLOT SECONDARY VARIABLES ---
 
@@ -526,7 +533,8 @@ results_data = {
     "boiler_em_no_ccs": {},
     "net_em_ccs": {},
     "load_factor_ccs": {},
-    "size_ccs": {}
+    "size_ccs": {},
+    "fraction_avoided_ccs": {}
 }
 
 for dh in explored_dh_ratio_str:
@@ -563,10 +571,11 @@ for dh in explored_dh_ratio_str:
             em_val = get_val(d_ccs['net_emissions']) / 1000
             lf_val = get_val(d_ccs['load_factor_ccs'])
             sz_val = get_val(d_ccs['size_ccs'])
+            fa_val = get_val(d_ccs['fraction_avoided'])
 
             rows_ccs.append({
                 "ct": int(ct), "ep": int(ep),
-                "net_em": em_val, "lf": lf_val, "sz": sz_val
+                "net_em": em_val, "lf": lf_val, "sz": sz_val, "fa": fa_val
             })
 
 
@@ -583,42 +592,75 @@ for dh in explored_dh_ratio_str:
     results_data["net_em_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "net_em")
     results_data["load_factor_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "lf")
     results_data["size_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "sz")
+    results_data["fraction_avoided_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "fa")
 
 
 # --- 2. STANDARDIZED PLOTTING FUNCTION ---
-def plot_heatmap(df, label, filename, cmap, is_pct=False):
+def plot_heatmap(df, label, filename, cmap, is_pct=False, zero_color="lightgrey"):
     setup_matplotlib_for_paper("single")
-    fig, ax = plt.subplots(layout="constrained")
+    fig, ax = plt.subplots()
 
     data = df.to_numpy()
-    im = ax.imshow(data, cmap=cmap, aspect="auto")
+    n_rows, n_cols = data.shape
 
-    # Annotations
-    for i in range(len(df.index)):
-        for j in range(len(df.columns)):
+    nonzero = data[data != 0]
+    curr_vmin = np.nanmin(nonzero) if len(nonzero) > 0 else 0
+    curr_vmax = np.nanmax(nonzero) if len(nonzero) > 0 else 1
+    norm = plt.Normalize(vmin=curr_vmin, vmax=curr_vmax)
+    cmap_obj = plt.get_cmap(cmap)
+
+    for i in range(n_rows):
+        for j in range(n_cols):
             val = df.iloc[i, j]
+
+            # Zero cells get a neutral color
+            if val == 0:
+                facecolor = zero_color
+                text_color = "black"
+            else:
+                facecolor = cmap_obj(norm(val))
+                rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
+                text_color = "white" if rel_val > 0.6 else "black"
+
+            ax.add_patch(
+                plt.Rectangle(
+                    (j, i), 1, 1,
+                    facecolor=facecolor,
+                    edgecolor="black",
+                    linewidth=0.8,
+                )
+            )
+
             txt = f"{val:.1%}" if is_pct else f"{val:.1f}"
+            ax.text(
+                j + 0.5, i + 0.5, txt,
+                ha="center", va="center",
+                color=text_color,
+                fontsize=rcParams["axes.labelsize"] - 2,
+                fontweight="bold",
+            )
 
-            # Contrast logic
-            curr_vmin, curr_vmax = data.min(), data.max()
-            rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
-            color = "white" if rel_val > 0.6 else "black"
-
-            ax.text(j, i, txt, ha="center", va="center", color=color,
-                    fontsize=rcParams["axes.labelsize"] - 2, fontweight="bold")
-
-    # Axes Setup
-    ax.set_xticks(range(len(df.columns)))
+    ax.set_xlim(0, n_cols)
+    ax.set_ylim(0, n_rows)
+    ax.set_xticks([x + 0.5 for x in range(n_cols)])
+    ax.set_yticks([y + 0.5 for y in range(n_rows)])
     ax.set_xticklabels(df.columns)
-    ax.set_yticks(range(len(df.index)))
     ax.set_yticklabels(df.index)
+    ax.invert_yaxis()
     ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
     ax.set_ylabel("Electricity price [€/MWh]")
 
-    plt.colorbar(im, ax=ax, label=label)
-    save_figure_for_paper(fig, filename, figures_path)
-    plt.close(fig)
+    fig.tight_layout(pad=0.6)
 
+    sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, label=label)
+
+    if is_pct:
+        from matplotlib.ticker import FuncFormatter
+        cbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0%}"))
+
+    save_figure_for_paper(fig, filename, figures_path)
 
 # --- 3. EXECUTION LOOP ---
 for dh in explored_dh_ratio_str:
@@ -633,12 +675,14 @@ for dh in explored_dh_ratio_str:
         (results_data["boiler_out_no_ccs"][dh_key]/1000, "Boiler output [GWh/y]", "boiler_out", "OrRd", False),
         (results_data["boiler_em_no_ccs"][dh_key], r"Boiler emissions [ktCO$_2$/y]", "boiler_em", "OrRd", False),
         (results_data["net_em_ccs"][dh_key], r"Net emissions [ktCO$_2$/y]", "net_emissions", "RdBu_r", False),
-        (results_data["load_factor_ccs"][dh_key], "CCS load factor [-]", "ccs_lf", "YlGn", True),
-        (results_data["size_ccs"][dh_key], "CCS size [t/h]", "ccs_size", "Purples", False)
+        (results_data["load_factor_ccs"][dh_key], "CCS load factor [%]", "ccs_lf", "YlGn", True),
+        (results_data["size_ccs"][dh_key], "CCS size [t/h]", "ccs_size", "Purples", False),
+        (results_data["fraction_avoided_ccs"][dh_key], "CO$_2$ avoided [%]", "fraction_avoided",  pink_cmap, True),
+
     ]
 
     for df, label, suffix, cmap, is_pct in metrics:
         full_name = f"wte_secondary_{suffix}_{dh_key}"
         plot_heatmap(df, label, full_name, cmap, is_pct)
-
+plt.show()
 print("All secondary plots (including Net Emissions and CCS Size) have been saved.")
