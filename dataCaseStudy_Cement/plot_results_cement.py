@@ -410,7 +410,7 @@ metrics = [
 ]
 
 for df, label, suffix, cmap, is_pct in metrics:
-    plot_heatmap(df, label, f"wte_{suffix}", cmap, is_pct)
+    plot_heatmap(df, label, f"cement_{suffix}", cmap, is_pct)
 
 print("All CCS plots (Net Emissions, Load Factor, CCS Size, Fraction Avoided) have been saved.")
 plt.show()
