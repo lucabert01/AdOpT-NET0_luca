@@ -336,6 +336,7 @@ for i_dh in range(0, num_dh_ratio):
                     waste_in * emission_factor + waste_in_rdf * emission_factor_rdf
                 )
                 revenue_el_cal = sum(w2e_cal_operation["el_cal"] * el_price)
+                revenue_el_wte = sum(w2e_cal_operation["electricity_output"] * el_price)
 
                 pipeline_cost = df_design_network["capex"].values.flatten()[0]
                 storage_cost = co2_storage_design["opex_variable"]
@@ -357,7 +358,9 @@ for i_dh in range(0, num_dh_ratio):
                 transport_stor_cost = storage_cost + pipeline_cost
                 load_factor_ccs = sum(co2_captured_w2e)/(size_ccs*8760)
                 fraction_avoided = tot_co2_avoided/emission_baseline
-
+                extra_gas_usage_boiler = (sum(boiler_output["heat_output"]) - tot_boiler_out_no_ccs
+                                         ) / th_efficiency_boiler
+                loss_el_revenues = revenues_no_ccs - (revenue_el_cal+revenue_el_wte)
             else:
                 no_ccs_entry = no_ccs_summary[dh_ratio_str][carbon_tax_str][el_price_str]
                 revenues_no_ccs = no_ccs_entry["electricity_revenues"]
@@ -373,6 +376,8 @@ for i_dh in range(0, num_dh_ratio):
                 load_factor_ccs = 0
                 size_ccs = 0
                 fraction_avoided = 0
+                extra_gas_usage_boiler = 0
+                loss_el_revenues = 0
 
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["hourly_co2_captured"] = co2_captured
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["capex_tot"] = capex
@@ -401,6 +406,8 @@ for i_dh in range(0, num_dh_ratio):
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["load_factor_ccs"] = load_factor_ccs
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["size_ccs"] = size_ccs
             results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["fraction_avoided"] = fraction_avoided
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["extra_gas_usage_boiler"] = extra_gas_usage_boiler
+            results_summary[dh_ratio_str][carbon_tax_str][el_price_str]["loss_el_revenues"] = loss_el_revenues
 
 
 # Initialize dictionaries to store the final matrices, keyed by dh
@@ -524,9 +531,7 @@ for dh in explored_dh_ratio_str:
 
 # --- PLOT SECONDARY VARIABLES ---
 
-
 # --- 1. DATA PREPARATION ---
-# Initialize dictionary to store the matrices
 results_data = {
     "rev_no_ccs": {},
     "boiler_out_no_ccs": {},
@@ -534,7 +539,9 @@ results_data = {
     "net_em_ccs": {},
     "load_factor_ccs": {},
     "size_ccs": {},
-    "fraction_avoided_ccs": {}
+    "fraction_avoided_ccs": {},
+    "extra_gas_ccs": {},
+    "loss_el_revenues_ccs": {},
 }
 
 for dh in explored_dh_ratio_str:
@@ -550,7 +557,6 @@ for dh in explored_dh_ratio_str:
             # --- No-CCS Data Extraction ---
             d_no = no_ccs_summary[dh_ratio_key][ct_key][ep_key]
             rev_meur = d_no["electricity_revenues"] / 1e6
-            # Calculation for boiler emissions
             b_em = (d_no["tot_boiler_out"] / th_efficiency_boiler * emission_factor_boiler / 1000)
 
             rows_no_ccs.append({
@@ -558,41 +564,38 @@ for dh in explored_dh_ratio_str:
                 "rev": rev_meur, "out": d_no["tot_boiler_out"], "em": b_em
             })
 
-            # --- CCS Data Extraction (Including net_emissions and size) ---
+            # --- CCS Data Extraction ---
             d_ccs = results_summary[dh_ratio_key][ct_key][ep_key]
 
-
-            # Helper to safely handle pandas Series vs scalar floats
             def get_val(item):
                 return float(item.iloc[0]) if hasattr(item, 'iloc') else float(item)
 
-
-            # Net emissions (converted to kt), Load Factor, and Size (t/h)
-            em_val = get_val(d_ccs['net_emissions']) / 1000
-            lf_val = get_val(d_ccs['load_factor_ccs'])
-            sz_val = get_val(d_ccs['size_ccs'])
-            fa_val = get_val(d_ccs['fraction_avoided'])
+            em_val  = get_val(d_ccs['net_emissions']) / 1000
+            lf_val  = get_val(d_ccs['load_factor_ccs'])
+            sz_val  = get_val(d_ccs['size_ccs'])
+            fa_val  = get_val(d_ccs['fraction_avoided'])
+            gas_val = get_val(d_ccs['extra_gas_usage_boiler']) / 1e3
+            lel_val = get_val(d_ccs['loss_el_revenues']) / 1e6
 
             rows_ccs.append({
                 "ct": int(ct), "ep": int(ep),
-                "net_em": em_val, "lf": lf_val, "sz": sz_val, "fa": fa_val
+                "net_em": em_val, "lf": lf_val, "sz": sz_val, "fa": fa_val,
+                "gas": gas_val, "lel": lel_val,
             })
 
-
-    # Helper function to pivot lists into heatmaps
     def pivot_data(rows, val_col):
         df_temp = pd.DataFrame(rows)
         return df_temp.pivot(index="ep", columns="ct", values=val_col).sort_index(ascending=False).astype(float)
 
-
-    # Store all matrices
-    results_data["rev_no_ccs"][dh_ratio_key] = pivot_data(rows_no_ccs, "rev")
-    results_data["boiler_out_no_ccs"][dh_ratio_key] = pivot_data(rows_no_ccs, "out")
-    results_data["boiler_em_no_ccs"][dh_ratio_key] = pivot_data(rows_no_ccs, "em")
-    results_data["net_em_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "net_em")
-    results_data["load_factor_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "lf")
-    results_data["size_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "sz")
-    results_data["fraction_avoided_ccs"][dh_ratio_key] = pivot_data(rows_ccs, "fa")
+    results_data["rev_no_ccs"][dh_ratio_key]            = pivot_data(rows_no_ccs, "rev")
+    results_data["boiler_out_no_ccs"][dh_ratio_key]     = pivot_data(rows_no_ccs, "out")
+    results_data["boiler_em_no_ccs"][dh_ratio_key]      = pivot_data(rows_no_ccs, "em")
+    results_data["net_em_ccs"][dh_ratio_key]            = pivot_data(rows_ccs, "net_em")
+    results_data["load_factor_ccs"][dh_ratio_key]       = pivot_data(rows_ccs, "lf")
+    results_data["size_ccs"][dh_ratio_key]              = pivot_data(rows_ccs, "sz")
+    results_data["fraction_avoided_ccs"][dh_ratio_key]  = pivot_data(rows_ccs, "fa")
+    results_data["extra_gas_ccs"][dh_ratio_key]         = pivot_data(rows_ccs, "gas")
+    results_data["loss_el_revenues_ccs"][dh_ratio_key]  = pivot_data(rows_ccs, "lel")
 
 
 # --- 2. STANDARDIZED PLOTTING FUNCTION ---
@@ -613,7 +616,6 @@ def plot_heatmap(df, label, filename, cmap, is_pct=False, zero_color="lightgrey"
         for j in range(n_cols):
             val = df.iloc[i, j]
 
-            # Zero cells get a neutral color
             if val == 0:
                 facecolor = zero_color
                 text_color = "black"
@@ -662,6 +664,7 @@ def plot_heatmap(df, label, filename, cmap, is_pct=False, zero_color="lightgrey"
 
     save_figure_for_paper(fig, filename, figures_path)
 
+
 # --- 3. EXECUTION LOOP ---
 for dh in explored_dh_ratio_str:
     dh_key = f"dh_{dh}"
@@ -669,20 +672,21 @@ for dh in explored_dh_ratio_str:
     if dh_key not in results_data["rev_no_ccs"]:
         continue
 
-    # All metrics including the previously missing ones
     metrics = [
-        (results_data["rev_no_ccs"][dh_key], "Revenues [M€/y]", "rev_no_ccs", "YlGn", False),
-        (results_data["boiler_out_no_ccs"][dh_key]/1000, "Boiler output [GWh/y]", "boiler_out", "OrRd", False),
-        (results_data["boiler_em_no_ccs"][dh_key], r"Boiler emissions [ktCO$_2$/y]", "boiler_em", "OrRd", False),
-        (results_data["net_em_ccs"][dh_key], r"Net emissions [ktCO$_2$/y]", "net_emissions", "RdBu_r", False),
-        (results_data["load_factor_ccs"][dh_key], "CCS load factor [%]", "ccs_lf", "YlGn", True),
-        (results_data["size_ccs"][dh_key], "CCS size [t/h]", "ccs_size", "Purples", False),
-        (results_data["fraction_avoided_ccs"][dh_key], "CO$_2$ avoided [%]", "fraction_avoided",  pink_cmap, True),
-
+        (results_data["rev_no_ccs"][dh_key],              "Revenues [M€/y]",                 "rev_no_ccs",         "YlGn",    False),
+        (results_data["boiler_out_no_ccs"][dh_key]/1000,   "Boiler output [GWh/y]",           "boiler_out",         "OrRd",    False),
+        (results_data["boiler_em_no_ccs"][dh_key],        r"Boiler emissions [ktCO$_2$/y]",   "boiler_em",          "OrRd",    False),
+        (results_data["net_em_ccs"][dh_key],              r"Net emissions [ktCO$_2$/y]",      "net_emissions",      "RdBu_r",  False),
+        (results_data["load_factor_ccs"][dh_key],          "CCS load factor [%]",             "ccs_lf",             "YlGn",    True),
+        (results_data["size_ccs"][dh_key],                 "CCS size [t/h]",                  "ccs_size",           "Purples", False),
+        (results_data["fraction_avoided_ccs"][dh_key],    r"CO$_2$ avoided [%]",             "fraction_avoided",   pink_cmap, True),
+        (results_data["extra_gas_ccs"][dh_key],            "Extra gas usage boiler [GWh/y]",  "extra_gas_boiler",   "Blues",   False),
+        (results_data["loss_el_revenues_ccs"][dh_key],     "Loss el. revenues [M€/y]",        "loss_el_revenues",   "OrRd",    False),
     ]
 
     for df, label, suffix, cmap, is_pct in metrics:
         full_name = f"wte_secondary_{suffix}_{dh_key}"
         plot_heatmap(df, label, full_name, cmap, is_pct)
+
 plt.show()
 print("All secondary plots (including Net Emissions and CCS Size) have been saved.")
