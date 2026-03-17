@@ -277,7 +277,6 @@ for i_dh in range(0, num_dh_ratio):
                 waste_in = w2e_operation["wasteIn_input"]
                 el_out = w2e_operation["electricity_output"]
                 emissions_w2e = waste_in * emission_factor
-                co2_captured_w2e = w2e_output["CO2captured_var_output_ccs"]
                 emissions_boiler = (
                     sum(boiler_output["heat_output"])
                     / th_efficiency_boiler
@@ -306,7 +305,7 @@ for i_dh in range(0, num_dh_ratio):
                 )
                 co2_captured = w2e_operation["CO2captured_var_output_ccs"]
                 tot_co2_avoided = emission_baseline - (
-                    sum(emissions_w2e - co2_captured_w2e) + emissions_boiler
+                    sum(emissions_w2e - co2_captured) + emissions_boiler
                 )
                 transport_stor_cost = storage_cost + pipeline_cost
                 load_factor_ccs = sum(co2_captured)/(size_ccs*8760)
@@ -600,7 +599,7 @@ for dh in explored_dh_ratio_str:
 
 # --- 2. STANDARDIZED PLOTTING FUNCTION ---
 def plot_heatmap(df, label, filename, cmap, is_pct=False, zero_color="lightgrey"):
-    setup_matplotlib_for_paper("single")
+    setup_matplotlib_for_paper("double")
     fig, ax = plt.subplots()
 
     data = df.to_numpy()
@@ -664,6 +663,73 @@ def plot_heatmap(df, label, filename, cmap, is_pct=False, zero_color="lightgrey"
 
     save_figure_for_paper(fig, filename, figures_path)
 
+# --- COMBINED 2x2 CCS METRICS FIGURE ---
+def plot_combined_heatmap(dfs_labels, filename, zero_color="lightgrey"):
+    """
+    Plot a 2x2 grid of heatmaps.
+    dfs_labels: list of (df, label, cmap, is_pct) tuples, exactly 4 entries.
+    """
+    setup_matplotlib_for_paper("double")  # wider figure for 2 columns
+    fig, axes = plt.subplots(2, 2, layout="constrained")
+    for ax, (df, label, cmap, is_pct) in zip(axes.flat, dfs_labels):
+        data = df.to_numpy()
+        n_rows, n_cols = data.shape
+
+        nonzero = data[data != 0]
+        curr_vmin = np.nanmin(nonzero) if len(nonzero) > 0 else 0
+        curr_vmax = np.nanmax(nonzero) if len(nonzero) > 0 else 1
+        norm = plt.Normalize(vmin=curr_vmin, vmax=curr_vmax)
+        cmap_obj = plt.get_cmap(cmap)
+
+        for i in range(n_rows):
+            for j in range(n_cols):
+                val = df.iloc[i, j]
+
+                if val == 0:
+                    facecolor = zero_color
+                    text_color = "black"
+                else:
+                    facecolor = cmap_obj(norm(val))
+                    rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
+                    text_color = "white" if rel_val > 0.6 else "black"
+
+                ax.add_patch(
+                    plt.Rectangle(
+                        (j, i), 1, 1,
+                        facecolor=facecolor,
+                        edgecolor="black",
+                        linewidth=0.8,
+                    )
+                )
+
+                txt = f"{val:.1%}" if is_pct else f"{val:.1f}"
+                ax.text(
+                    j + 0.5, i + 0.5, txt,
+                    ha="center", va="center",
+                    color=text_color,
+                    fontsize=rcParams["axes.labelsize"] - 2,
+                    fontweight="bold",
+                )
+
+        ax.set_xlim(0, n_cols)
+        ax.set_ylim(0, n_rows)
+        ax.set_xticks([x + 0.5 for x in range(n_cols)])
+        ax.set_yticks([y + 0.5 for y in range(n_rows)])
+        ax.set_xticklabels(df.columns)
+        ax.set_yticklabels(df.index)
+        ax.invert_yaxis()
+        ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
+        ax.set_ylabel("Electricity price [€/MWh]")
+
+        sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, ax=ax, label=label)
+
+        if is_pct:
+            from matplotlib.ticker import FuncFormatter
+            cbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0%}"))
+
+    save_figure_for_paper(fig, filename, figures_path)
 
 # --- 3. EXECUTION LOOP ---
 for dh in explored_dh_ratio_str:
@@ -687,6 +753,25 @@ for dh in explored_dh_ratio_str:
     for df, label, suffix, cmap, is_pct in metrics:
         full_name = f"wte_secondary_{suffix}_{dh_key}"
         plot_heatmap(df, label, full_name, cmap, is_pct)
+
+    # NEW: combined 2x2 CCS figure
+    combined_metrics = [
+        (results_data["size_ccs"][dh_key],              "CCS size [t/h]",                 "Purples", False),
+        (results_data["load_factor_ccs"][dh_key],        "CCS load factor [%]",            "YlGn",    True),
+        (results_data["loss_el_revenues_ccs"][dh_key],   "Loss el. revenues [M€/y]",       "OrRd",    False),
+        (results_data["extra_gas_ccs"][dh_key],          "Extra gas usage boiler [GWh/y]", "Blues",   False),
+    ]
+
+    plot_combined_heatmap(
+        combined_metrics,
+        filename=f"wte_ccs_combined_{dh_key}",
+    )
+
+
+
+
+
+
 
 plt.show()
 print("All secondary plots (including Net Emissions and CCS Size) have been saved.")
