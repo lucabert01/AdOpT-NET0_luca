@@ -11,6 +11,7 @@ import warnings
 from matplotlib import rcParams
 from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
 from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 
 
 # ======================================================
@@ -102,6 +103,8 @@ for name_sim in simulations:
                                              'Boiler_Industrial_NG_existing')]
         heat_demand = df_operation.loc[:, ('energy_balance', 'period1',
                                            'industrial_cluster', 'heat', 'demand')]
+        size_ccs = w2e_design["size_ccs"]
+        co2_captured = w2e_output["CO2captured_var_output_ccs"]
 
         waste_in = w2e_output['wasteIn_input']
         el_out = w2e_output['electricity_output']
@@ -122,6 +125,7 @@ for name_sim in simulations:
 
         extra_usage_boiler = sum(
             boiler_output['heat_output'] - baseline_boiler_prod) / th_efficiency_boiler
+        load_factor_ccs = sum(co2_captured) / (size_ccs * 8760)
 
         # Store results
         results_summary[name_sim][dh_ratio_str]['hourly_wasteProcessed'] = w2e_output['wasteProcessed_output']
@@ -147,6 +151,8 @@ for name_sim in simulations:
         results_summary[name_sim][dh_ratio_str]['tot_co2_avoided'] = float(
             sum(emissions_w2e) - (sum(emissions_w2e - co2_captured_w2e)
                                   + extra_usage_boiler * emission_factor_boiler))
+        results_summary[name_sim][dh_ratio_str]['size_ccs'] = size_ccs
+        results_summary[name_sim][dh_ratio_str]['load_factor_ccs'] = load_factor_ccs
 
 
 # ======================================================
@@ -361,7 +367,7 @@ for idx, name_sim in enumerate(simulations):
     eco = economics_all[name_sim]
 
     # Scenario styling
-    hatch = None if idx == 0 else "////"
+    hatch = None if idx == 0 else "oo"
     edgecolor = "black"
     linewidth = 0.6
 
@@ -449,7 +455,7 @@ scenario_handles = [
 
     Patch(facecolor="white",
           edgecolor="black",
-          hatch="////",
+          hatch="oo",
           label="Static")
 ]
 
@@ -465,4 +471,70 @@ save_figure_for_paper(
     figures_path
 )
 
+# ======================================================
+# PLOT #3 (CCS SIZE & LOAD FACTOR vs DH RATIO)
+# ======================================================
+
+fig_width, fig_height = setup_matplotlib_for_paper(column="single")
+fig, ax1 = plt.subplots(figsize=(fig_width, fig_height))
+
+ax2 = ax1.twinx()
+
+x = np.arange(len(explored_dh_ratio), dtype=float)
+
+for idx, name_sim in enumerate(simulations):
+
+    size_ccs_vals = np.array([
+        float(np.squeeze(results_summary[name_sim][dh_ratio_str]['size_ccs']))
+        for dh_ratio_str in explored_dh_ratio_str
+    ], dtype=float)
+
+    load_factor_vals = np.array([
+        float(np.squeeze(results_summary[name_sim][dh_ratio_str]['load_factor_ccs']))
+        for dh_ratio_str in explored_dh_ratio_str
+    ], dtype=float)
+
+    label = "Time-resolved" if idx == 0 else "Static"
+    ls = "-" if idx == 0 else "--"
+    m1 = "o" if idx == 0 else "s"
+
+    ax1.plot(x, size_ccs_vals,
+             color=batlow_colors[0],
+             linestyle=ls, marker=m1, markersize=4, linewidth=1.4,
+             label=label)
+
+    ax2.plot(x, load_factor_vals,
+             color=batlow_colors[3],
+             linestyle=ls, marker=m1, markersize=4, linewidth=1.4,
+             label=label)
+
+ax1.set_xticks(x)
+ax1.set_xticklabels([str(r) for r in explored_dh_ratio])
+ax1.set_xlabel("District heating demand ratio [-]")
+ax1.set_ylabel("CCS size [t/h]", color=batlow_colors[0])
+ax2.set_ylabel("CCS load factor [-]", color=batlow_colors[3])
+
+ax1.set_ylim(bottom=15)
+ax2.set_ylim(0.8, 1.2)
+
+ax1.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
+ax1.set_axisbelow(True)
+
+# --- Scenario legend ---
+scenario_handles = [
+    Line2D([0], [0], color="black", linestyle="-", marker="o", markersize=4, label="Time-resolved"),
+    Line2D([0], [0], color="black", linestyle="--", marker="s", markersize=4, label="Static"),
+]
+legend1 = ax1.legend(handles=scenario_handles, frameon=False, loc="upper left")
+ax1.add_artist(legend1)
+
+# --- Variable legend ---
+variable_handles = [
+    Line2D([0], [0], color=batlow_colors[0], linestyle="-", marker="o", markersize=4, label="CCS size [t/h]"),
+    Line2D([0], [0], color=batlow_colors[3], linestyle="-", marker="o", markersize=4, label="CCS load factor [-]"),
+]
+ax1.legend(handles=variable_handles, frameon=False, loc="best")
+
+fig.tight_layout()
+save_figure_for_paper(fig, "MEA_vs_MEA_timeless_ccs_size_loadfactor", figures_path)
 plt.show()
