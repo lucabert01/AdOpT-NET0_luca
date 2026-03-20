@@ -28,7 +28,7 @@ def setup_matplotlib_for_paper(column="single"):
     fig_width_in = widths[column] * inches_per_pt
 
     # Use a slightly taller aspect ratio for 'single' to give legends room
-    aspect_ratio = 1 if column == "double" else 0.618
+    aspect_ratio = 0.309 if column == "double" else 0.618
     fig_height_in = fig_width_in * aspect_ratio
 
     fs = 9 if column == "double" else 8  # Don't go below 8 for legibility

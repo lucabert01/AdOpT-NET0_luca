@@ -13,9 +13,14 @@ import warnings
 
 from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
 from matplotlib import rcParams
+from matplotlib.colors import LinearSegmentedColormap
 
 
+# Set global styling for the plots
 colors = []
+pink_cmap = LinearSegmentedColormap.from_list(
+    "white_pink", ["#FAF0F6","#D491B8"]
+)
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8','#012E4D']
 figures_path = "../figures"
 
@@ -115,7 +120,7 @@ for j in range(0,num_carbon_tax):
             if cement_oxy_design["size_mea"].iloc[0] > 0:
                 type_installed = "Oxyfuel + PCC"
             else:
-                type_installed = "Partial oxyfuel"
+                type_installed = "Oxyfuel"
 
             capex = cement_oxy_design["capex_tot"]
             opex_fixed = cement_oxy_design["opex_fixed"]
@@ -249,7 +254,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
 # ------------------------------------------------------------
 setup_matplotlib_for_paper("single")
 
-types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + PCC"]
+types = ["none", "MEA", "Oxyfuel", "Oxyfuel + PCC"]
 type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
 # ------------------------------------------------------------
@@ -368,49 +373,150 @@ results_data["fraction_avoided"]= pivot_data(rows_ccs, "fa")
 
 
 # --- 2. STANDARDIZED PLOTTING FUNCTION ---
-def plot_heatmap(df, label, filename, cmap, is_pct=False):
+def plot_heatmap(df, label, filename, cmap, is_pct=False, zero_color="lightgrey"):
     setup_matplotlib_for_paper("single")
-    fig, ax = plt.subplots(layout="constrained")
+    fig, ax = plt.subplots()
 
     data = df.to_numpy()
-    im = ax.imshow(data, cmap=cmap, aspect="auto")
+    n_rows, n_cols = data.shape
 
-    # Annotations
-    for i in range(len(df.index)):
-        for j in range(len(df.columns)):
+    nonzero = data[data != 0]
+    curr_vmin = np.nanmin(nonzero) if len(nonzero) > 0 else 0
+    curr_vmax = np.nanmax(nonzero) if len(nonzero) > 0 else 1
+    norm = plt.Normalize(vmin=curr_vmin, vmax=curr_vmax)
+    cmap_obj = plt.get_cmap(cmap)
+
+    for i in range(n_rows):
+        for j in range(n_cols):
             val = df.iloc[i, j]
+
+            if val == 0:
+                facecolor = zero_color
+                text_color = "black"
+            else:
+                facecolor = cmap_obj(norm(val))
+                rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
+                text_color = "white" if rel_val > 0.6 else "black"
+
+            ax.add_patch(
+                plt.Rectangle(
+                    (j, i), 1, 1,
+                    facecolor=facecolor,
+                    edgecolor="black",
+                    linewidth=0.8,
+                )
+            )
+
             txt = f"{val:.1%}" if is_pct else f"{val:.1f}"
+            ax.text(
+                j + 0.5, i + 0.5, txt,
+                ha="center", va="center",
+                color=text_color,
+                fontsize=rcParams["axes.labelsize"] - 2,
+                fontweight="bold",
+            )
 
-            # Contrast logic
-            curr_vmin, curr_vmax = data.min(), data.max()
-            rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
-            color = "white" if rel_val > 0.6 else "black"
-
-            ax.text(j, i, txt, ha="center", va="center", color=color,
-                    fontsize=rcParams["axes.labelsize"] - 2, fontweight="bold")
-
-    # Axes Setup
-    ax.set_xticks(range(len(df.columns)))
+    ax.set_xlim(0, n_cols)
+    ax.set_ylim(0, n_rows)
+    ax.set_xticks([x + 0.5 for x in range(n_cols)])
+    ax.set_yticks([y + 0.5 for y in range(n_rows)])
     ax.set_xticklabels(df.columns)
-    ax.set_yticks(range(len(df.index)))
     ax.set_yticklabels(df.index)
+    ax.invert_yaxis()
     ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
     ax.set_ylabel("Electricity price [€/MWh]")
 
-    plt.colorbar(im, ax=ax, label=label)
+    fig.tight_layout(pad=0.6)
+
+    sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+    sm.set_array([])
+    fig.colorbar(sm, ax=ax, label=label)
+
     save_figure_for_paper(fig, filename, figures_path)
 
 
-# --- 3. EXECUTION ---
+def plot_heatmap_double(df1, label1, df2, label2, filename, cmap1, cmap2, is_pct1=False, is_pct2=False, zero_color="lightgrey"):
+    setup_matplotlib_for_paper(column="double")
+    fig, axes = plt.subplots(1, 2)
+
+    for ax, df, label, cmap, is_pct in zip(axes, [df1, df2], [label1, label2], [cmap1, cmap2], [is_pct1, is_pct2]):
+        data = df.to_numpy()
+        n_rows, n_cols = data.shape
+
+        nonzero = data[data != 0]
+        curr_vmin = np.nanmin(nonzero) if len(nonzero) > 0 else 0
+        curr_vmax = np.nanmax(nonzero) if len(nonzero) > 0 else 1
+        norm = plt.Normalize(vmin=curr_vmin, vmax=curr_vmax)
+        cmap_obj = plt.get_cmap(cmap)
+
+        for i in range(n_rows):
+            for j in range(n_cols):
+                val = df.iloc[i, j]
+
+                if val == 0:
+                    facecolor = zero_color
+                    text_color = "black"
+                else:
+                    facecolor = cmap_obj(norm(val))
+                    rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
+                    text_color = "white" if rel_val > 0.6 else "black"
+
+                ax.add_patch(
+                    plt.Rectangle(
+                        (j, i), 1, 1,
+                        facecolor=facecolor,
+                        edgecolor="black",
+                        linewidth=0.8,
+                    )
+                )
+
+                txt = f"{val:.1%}" if is_pct else f"{val:.1f}"
+                ax.text(
+                    j + 0.5, i + 0.5, txt,
+                    ha="center", va="center",
+                    color=text_color,
+                    fontsize=rcParams["axes.labelsize"] - 2,
+                    fontweight="bold",
+                )
+
+        ax.set_xlim(0, n_cols)
+        ax.set_ylim(0, n_rows)
+        ax.set_xticks([x + 0.5 for x in range(n_cols)])
+        ax.set_yticks([y + 0.5 for y in range(n_rows)])
+        ax.set_xticklabels(df.columns)
+        ax.set_yticklabels(df.index)
+        ax.invert_yaxis()
+        ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
+
+        sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+        sm.set_array([])
+        fig.colorbar(sm, ax=ax, label=label)
+
+    axes[0].set_ylabel("Electricity price [€/MWh]")
+    axes[1].set_yticklabels([])
+
+    save_figure_for_paper(fig, filename, figures_path)
+
+
+
+# --- EXECUTION ---
 metrics = [
-    (results_data["net_em_ccs"],      r"Net emissions [ktCO$_2$/y]", "net_emissions",    "RdBu_r",  False),
-    (results_data["load_factor_ccs"], "CCS load factor [-]",         "ccs_lf",           "YlGn",    True),
-    (results_data["size_ccs"],        "CCS size [t/h]",              "ccs_size",         "Purples",  False),
-    (results_data["fraction_avoided"],"Fraction avoided [-]",        "fraction_avoided", "Blues",    True),
+    (results_data["net_em_ccs"],      r"Net emissions [ktCO$_2$/y]", "net_emissions",   "RdBu_r",  False),
+    (results_data["load_factor_ccs"], "CCS load factor [-]",         "ccs_lf",          "YlGn",    True),
+    (results_data["size_ccs"],        "CCS size [t/h]",              "ccs_size",        "Purples",  False),
+    (results_data["fraction_avoided"],"Fraction avoided [-]",        "fraction_avoided", pink_cmap, True),
 ]
 
 for df, label, suffix, cmap, is_pct in metrics:
     plot_heatmap(df, label, f"cement_{suffix}", cmap, is_pct)
 
-print("All CCS plots (Net Emissions, Load Factor, CCS Size, Fraction Avoided) have been saved.")
+plot_heatmap_double(
+    results_data["size_ccs"],        "CCS size [t/h]",
+    results_data["load_factor_ccs"], "CCS load factor [-]",
+    "cement_size_lf",
+    "Purples", "YlGn",
+    False, True,
+)
+
+print("All CCS plots saved.")
 plt.show()
