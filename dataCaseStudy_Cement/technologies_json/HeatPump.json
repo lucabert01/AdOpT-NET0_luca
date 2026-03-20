@@ -7,7 +7,7 @@
   "Economics": {
     "comment": "CAPEX in EUR/MW or as a piecewise function, OPEX_variable in EUR/MWh total output, OPEX_fixed in % of up-front CAPEX",
     "capex_model": 1,
-    "unit_capex": 1060000,
+    "unit_capex": 1200000,
     "fix_capex": 0,
     "piecewise_capex": {
       "bp_x": [
