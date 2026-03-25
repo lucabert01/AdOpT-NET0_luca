@@ -9,7 +9,7 @@ from dataCaseStudy_Cement.process_data_cement_emission import create_norm_el_pri
 
 
 # Specify the path to your input data
-casepath = Path("./CaseStudy_Cement_flexbile")
+casepath = Path("./CaseStudy_Cement_flexible")
 json_files_path = Path("dataCaseStudy_Cement/technologies_json_flexible")
 json_files_path_network = Path("dataCaseStudy_Cement/network_json")
 result_path = "./dataCaseStudy_Cement/raw_results/flexible_ops"
