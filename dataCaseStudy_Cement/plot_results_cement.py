@@ -13,9 +13,14 @@ import warnings
 
 from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
 from matplotlib import rcParams
+from matplotlib.colors import LinearSegmentedColormap
 
 
+# Set global styling for the plots
 colors = []
+pink_cmap = LinearSegmentedColormap.from_list(
+    "white_pink", ["#FAF0F6","#D491B8"]
+)
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8','#012E4D']
 figures_path = "../figures"
 
@@ -76,6 +81,8 @@ for j in range(0,num_carbon_tax):
         with h5py.File(file_path, 'r') as hdf_file:
             df_operation = pd.DataFrame(extract_datasets_from_h5group(hdf_file["operation"]))
             df_design = pd.DataFrame(extract_datasets_from_h5group(hdf_file["design/nodes/period1"]))
+            df_design_network = pd.DataFrame(extract_datasets_from_h5group(
+                hdf_file["design/networks/period1/CO2PipelineOnshore/industrial_clusterstorage"]))
         #print(df_operation)
 
         cement_mea_design = df_design.loc[:, ('industrial_cluster', 'CementEmitter')]
@@ -84,28 +91,36 @@ for j in range(0,num_carbon_tax):
         heat_pump_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'HeatPump')]
         cement_oxy_design = df_design.loc[:, ('industrial_cluster', 'CementHybridCCS')]
         cement_oxy_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'CementHybridCCS')]
-
+        co2_storage_design = df_design.loc[:, ('storage', 'PermanentStorage_CO2_simple')]
 
         clinker_demand = df_operation.loc[:, ('energy_balance', 'period1', 'industrial_cluster','clinker', 'demand')]
         emissions_cement_baseline = clinker_demand * emission_factor_clinker_baseline
 
         # economics
+        pipeline_cost = df_design_network['capex'].values.flatten()[0]
+        storage_cost = co2_storage_design['opex_variable']
+
         el_price = electricity_price_norm*explored_el_price[i]
         if cement_mea_design["size_ccs"].iloc[0] > 0:
             type_installed = "MEA"
             capex = cement_mea_design["capex_tot"] + heat_pump_design["capex_tot"]
-            opex_fixed = cement_mea_design["opex_fixed"]
+            opex_fixed = cement_mea_design["opex_fixed"] + heat_pump_design["opex_fixed"]
             opex_variable = cement_mea_design["opex_variable"]
             energy_cost = sum(cement_mea_operation["electricity_var_input_ccs"]*el_price) + sum(cement_mea_operation["heat_var_input_ccs"]/cop_hp*el_price)
             co2_captured = cement_mea_operation['CO2captured_var_output_ccs']
             tot_co2_avoided = sum(cement_mea_operation["clinker_output"] * emission_factor_clinker_baseline) - sum(
                 cement_mea_operation["emissions_pos"])
+            transport_stor_cost = storage_cost + pipeline_cost
+            ccs_size = cement_mea_design["size_ccs"]
+            net_emissions = sum(cement_mea_operation["emissions_pos"])
+            load_factor = sum(co2_captured)/(ccs_size*8760)
+            fraction_avoided = tot_co2_avoided/sum(emissions_cement_baseline)
 
         elif cement_oxy_design["size"].iloc[0] > 0:
             if cement_oxy_design["size_mea"].iloc[0] > 0:
                 type_installed = "Oxyfuel + PCC"
             else:
-                type_installed = "Partial oxyfuel"
+                type_installed = "Oxyfuel"
 
             capex = cement_oxy_design["capex_tot"]
             opex_fixed = cement_oxy_design["opex_fixed"]
@@ -114,6 +129,12 @@ for j in range(0,num_carbon_tax):
             energy_cost = sum(cement_oxy_operation["electricity_input"]*el_price) + sum(cement_oxy_operation["extra_fuel_input"]*cost_extra_fuel)
             tot_co2_avoided = sum(cement_oxy_operation["clinker_output"] * emission_factor_clinker_baseline) - sum(
             cement_oxy_operation["emissions_pos"])
+            transport_stor_cost = storage_cost + pipeline_cost
+            ccs_size = max(co2_captured)
+            net_emissions = sum(cement_oxy_operation["emissions_pos"])
+            load_factor = sum(co2_captured)/(ccs_size*8760)
+            fraction_avoided = tot_co2_avoided/sum(emissions_cement_baseline)
+
 
         else:
             type_installed = "none"
@@ -123,15 +144,27 @@ for j in range(0,num_carbon_tax):
             energy_cost = 0
             tot_co2_avoided = 0
             capex = 0
+            transport_stor_cost = 0
+            ccs_size = 0
+            net_emissions = sum(emissions_cement_baseline)
+            load_factor = 0
+            fraction_avoided = tot_co2_avoided/sum(emissions_cement_baseline)
+
 
         results_summary[carbon_tax_str][el_price_str]['hourly_co2_captured'] = co2_captured
         results_summary[carbon_tax_str][el_price_str]['capex_tot'] = capex
         results_summary[carbon_tax_str][el_price_str]['opex_fixed'] = opex_fixed
         results_summary[carbon_tax_str][el_price_str]['opex_variable'] = opex_variable
         results_summary[carbon_tax_str][el_price_str]['energy_cost'] = energy_cost
+        results_summary[carbon_tax_str][el_price_str]['transport_stor_cost'] = transport_stor_cost
         results_summary[carbon_tax_str][el_price_str]['tot_co2_captured'] = (sum(co2_captured) if not isinstance(co2_captured, int) else pd.Series([0]))
-        results_summary[carbon_tax_str][el_price_str]['cost_of_capture'] = ((capex + opex_fixed + opex_variable + energy_cost)/tot_co2_avoided if not isinstance(co2_captured, int) else pd.Series([0]))
+        results_summary[carbon_tax_str][el_price_str]['cost_of_avoided'] = ((capex + opex_fixed + opex_variable + energy_cost
+                                                                             +transport_stor_cost)/tot_co2_avoided if not isinstance(co2_captured, int) else pd.Series([0]))
         results_summary[carbon_tax_str][el_price_str]['type_installed'] = type_installed
+        results_summary[carbon_tax_str][el_price_str]['net_emissions'] = net_emissions
+        results_summary[carbon_tax_str][el_price_str]['size_ccs'] = ccs_size
+        results_summary[carbon_tax_str][el_price_str]['load_factor_ccs'] = load_factor
+        results_summary[carbon_tax_str][el_price_str]['fraction_avoided'] = fraction_avoided
 
 
 
@@ -143,7 +176,7 @@ for ct in explored_carbon_tax_str:
         data.append({
             "carbon_tax": ct,
             "el_price": ep,
-            "cost_of_capture": entry["cost_of_capture"].iloc[0],
+            "cost_of_avoided": entry["cost_of_avoided"].iloc[0],
             "type_installed": entry["type_installed"]
         })
 
@@ -152,7 +185,7 @@ df["carbon_tax"] = pd.to_numeric(df["carbon_tax"])
 df["el_price"]   = pd.to_numeric(df["el_price"])
 
 # Pivot to matrices
-cost_matrix = df.pivot(index="el_price", columns="carbon_tax", values="cost_of_capture")
+cost_matrix = df.pivot(index="el_price", columns="carbon_tax", values="cost_of_avoided")
 type_matrix = df.pivot(index="el_price", columns="carbon_tax", values="type_installed")
 cost_matrix = cost_matrix.sort_index(ascending=False).sort_index(axis=1)
 type_matrix = type_matrix.sort_index(ascending=False).sort_index(axis=1)
@@ -221,7 +254,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
 # ------------------------------------------------------------
 setup_matplotlib_for_paper("single")
 
-types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + PCC"]
+types = ["none", "MEA", "Oxyfuel", "Oxyfuel + PCC"]
 type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
 # ------------------------------------------------------------
@@ -290,4 +323,200 @@ ax.legend(
 fig.tight_layout(pad=0.6)
 save_figure_for_paper(fig, "cement_tech_selection", figures_path)
 
+
+
+# --- PLOT SECONDARY VARIABLES ---
+
+# --- 1. DATA PREPARATION ---
+results_data = {
+    "net_em_ccs": {},
+    "load_factor_ccs": {},
+    "size_ccs": {},
+    "fraction_avoided": {}
+}
+
+rows_ccs = []
+
+for ct in explored_carbon_tax_str:
+    ct_key = f"carbon_tax_{ct}"
+    for ep in explored_el_price_str:
+        ep_key = f"el_price_{ep}"
+
+        d_ccs = results_summary[ct_key][ep_key]
+
+        # Helper to safely handle pandas Series vs scalar floats
+        def get_val(item):
+            return float(item.iloc[0]) if hasattr(item, 'iloc') else float(item)
+
+        em_val = get_val(d_ccs['net_emissions']) / 1000  # converted to kt
+        lf_val = get_val(d_ccs['load_factor_ccs'])
+        sz_val = get_val(d_ccs['size_ccs'])
+        fa_val = get_val(d_ccs['fraction_avoided'])
+
+        rows_ccs.append({
+            "ct": int(ct), "ep": int(ep),
+            "net_em": em_val, "lf": lf_val, "sz": sz_val, "fa": fa_val
+        })
+
+
+# Helper function to pivot lists into heatmaps
+def pivot_data(rows, val_col):
+    df_temp = pd.DataFrame(rows)
+    return df_temp.pivot(index="ep", columns="ct", values=val_col).sort_index(ascending=False).astype(float)
+
+
+# Store all matrices
+results_data["net_em_ccs"]      = pivot_data(rows_ccs, "net_em")
+results_data["load_factor_ccs"] = pivot_data(rows_ccs, "lf")
+results_data["size_ccs"]        = pivot_data(rows_ccs, "sz")
+results_data["fraction_avoided"]= pivot_data(rows_ccs, "fa")
+
+
+# --- 2. STANDARDIZED PLOTTING FUNCTION ---
+def plot_heatmap(df, label, filename, cmap, is_pct=False, zero_color="lightgrey"):
+    setup_matplotlib_for_paper("single")
+    fig, ax = plt.subplots()
+
+    data = df.to_numpy()
+    n_rows, n_cols = data.shape
+
+    nonzero = data[data != 0]
+    curr_vmin = np.nanmin(nonzero) if len(nonzero) > 0 else 0
+    curr_vmax = np.nanmax(nonzero) if len(nonzero) > 0 else 1
+    norm = plt.Normalize(vmin=curr_vmin, vmax=curr_vmax)
+    cmap_obj = plt.get_cmap(cmap)
+
+    for i in range(n_rows):
+        for j in range(n_cols):
+            val = df.iloc[i, j]
+
+            if val == 0:
+                facecolor = zero_color
+                text_color = "black"
+            else:
+                facecolor = cmap_obj(norm(val))
+                rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
+                text_color = "white" if rel_val > 0.6 else "black"
+
+            ax.add_patch(
+                plt.Rectangle(
+                    (j, i), 1, 1,
+                    facecolor=facecolor,
+                    edgecolor="black",
+                    linewidth=0.8,
+                )
+            )
+
+            txt = f"{val:.1%}" if is_pct else f"{val:.1f}"
+            ax.text(
+                j + 0.5, i + 0.5, txt,
+                ha="center", va="center",
+                color=text_color,
+                fontsize=rcParams["axes.labelsize"] - 2,
+                fontweight="bold",
+            )
+
+    ax.set_xlim(0, n_cols)
+    ax.set_ylim(0, n_rows)
+    ax.set_xticks([x + 0.5 for x in range(n_cols)])
+    ax.set_yticks([y + 0.5 for y in range(n_rows)])
+    ax.set_xticklabels(df.columns)
+    ax.set_yticklabels(df.index)
+    ax.invert_yaxis()
+    ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
+    ax.set_ylabel("Electricity price [€/MWh]")
+
+    fig.tight_layout(pad=0.6)
+
+    sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+    sm.set_array([])
+    fig.colorbar(sm, ax=ax, label=label)
+
+    save_figure_for_paper(fig, filename, figures_path)
+
+
+def plot_heatmap_double(df1, label1, df2, label2, filename, cmap1, cmap2, is_pct1=False, is_pct2=False, zero_color="lightgrey"):
+    setup_matplotlib_for_paper(column="double")
+    fig, axes = plt.subplots(1, 2)
+
+    for ax, df, label, cmap, is_pct in zip(axes, [df1, df2], [label1, label2], [cmap1, cmap2], [is_pct1, is_pct2]):
+        data = df.to_numpy()
+        n_rows, n_cols = data.shape
+
+        nonzero = data[data != 0]
+        curr_vmin = np.nanmin(nonzero) if len(nonzero) > 0 else 0
+        curr_vmax = np.nanmax(nonzero) if len(nonzero) > 0 else 1
+        norm = plt.Normalize(vmin=curr_vmin, vmax=curr_vmax)
+        cmap_obj = plt.get_cmap(cmap)
+
+        for i in range(n_rows):
+            for j in range(n_cols):
+                val = df.iloc[i, j]
+
+                if val == 0:
+                    facecolor = zero_color
+                    text_color = "black"
+                else:
+                    facecolor = cmap_obj(norm(val))
+                    rel_val = (val - curr_vmin) / (curr_vmax - curr_vmin) if (curr_vmax - curr_vmin) != 0 else 0
+                    text_color = "white" if rel_val > 0.6 else "black"
+
+                ax.add_patch(
+                    plt.Rectangle(
+                        (j, i), 1, 1,
+                        facecolor=facecolor,
+                        edgecolor="black",
+                        linewidth=0.8,
+                    )
+                )
+
+                txt = f"{val:.1%}" if is_pct else f"{val:.1f}"
+                ax.text(
+                    j + 0.5, i + 0.5, txt,
+                    ha="center", va="center",
+                    color=text_color,
+                    fontsize=rcParams["axes.labelsize"] - 2,
+                    fontweight="bold",
+                )
+
+        ax.set_xlim(0, n_cols)
+        ax.set_ylim(0, n_rows)
+        ax.set_xticks([x + 0.5 for x in range(n_cols)])
+        ax.set_yticks([y + 0.5 for y in range(n_rows)])
+        ax.set_xticklabels(df.columns)
+        ax.set_yticklabels(df.index)
+        ax.invert_yaxis()
+        ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
+
+        sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+        sm.set_array([])
+        fig.colorbar(sm, ax=ax, label=label)
+
+    axes[0].set_ylabel("Electricity price [€/MWh]")
+    axes[1].set_yticklabels([])
+
+    save_figure_for_paper(fig, filename, figures_path)
+
+
+
+# --- EXECUTION ---
+metrics = [
+    (results_data["net_em_ccs"],      r"Net emissions [ktCO$_2$/y]", "net_emissions",   "RdBu_r",  False),
+    (results_data["load_factor_ccs"], "CCS load factor [-]",         "ccs_lf",          "YlGn",    True),
+    (results_data["size_ccs"],        "CCS size [t/h]",              "ccs_size",        "Purples",  False),
+    (results_data["fraction_avoided"],"Fraction avoided [-]",        "fraction_avoided", pink_cmap, True),
+]
+
+for df, label, suffix, cmap, is_pct in metrics:
+    plot_heatmap(df, label, f"cement_{suffix}", cmap, is_pct)
+
+plot_heatmap_double(
+    results_data["size_ccs"],        "CCS size [t/h]",
+    results_data["load_factor_ccs"], "CCS load factor [-]",
+    "cement_size_lf",
+    "Purples", "YlGn",
+    False, True,
+)
+
+print("All CCS plots saved.")
 plt.show()
