@@ -130,7 +130,7 @@ for i_tec in range(0, num_tec):
 
                     type_installed = "MEA"
                     capex = cement_mea_design["capex_tot"] + heat_pump_design["capex_tot"]
-                    opex_fixed = cement_mea_design["opex_fixed"]
+                    opex_fixed = cement_mea_design["opex_fixed"]+ heat_pump_design["opex_fixed"]
                     opex_variable = cement_mea_design["opex_variable"]
                     energy_cost = sum(cement_mea_operation["electricity_var_input_ccs"]*el_price) + sum(cement_mea_operation["heat_var_input_ccs"]/cop_hp*el_price)
                     co2_captured = cement_mea_operation['CO2captured_var_output_ccs']
@@ -192,7 +192,7 @@ for i_tec in range(0, num_tec):
 
                     type_installed = "MEA"
                     capex = cement_mea_design["capex_tot"] + heat_pump_design["capex_tot"]
-                    opex_fixed = cement_mea_design["opex_fixed"]
+                    opex_fixed = cement_mea_design["opex_fixed"]+ heat_pump_design["opex_fixed"]
                     opex_variable = cement_mea_design["opex_variable"]
                     energy_cost = sum(cement_mea_operation["electricity_var_input_ccs"] * el_price) + sum(
                         cement_mea_operation["heat_var_input_ccs"] / cop_hp * el_price)
