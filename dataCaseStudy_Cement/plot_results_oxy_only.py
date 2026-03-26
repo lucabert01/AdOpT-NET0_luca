@@ -26,7 +26,7 @@ figures_path = "../figures"
 
 
 ## -----------------  Carbon and electricity price --------------------------
-explored_carbon_tax = [100, 250]
+explored_carbon_tax = [150, 151, 250]
 explored_el_price = [107] # average el prices explored in the analysis
 cost_extra_fuel = 15
 
@@ -84,8 +84,7 @@ for j in range(0,num_carbon_tax):
         #print(df_operation)
 
 
-        cement_oxy_design = df_design.loc[:, ('industrial_cluster', 'CementHybridCCS')]
-        cement_oxy_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'CementHybridCCS')]
+
         co2_storage_design = df_design.loc[:, ('storage', 'PermanentStorage_CO2_simple')]
 
         clinker_demand = df_operation.loc[:, ('energy_balance', 'period1', 'industrial_cluster','clinker', 'demand')]
@@ -98,23 +97,49 @@ for j in range(0,num_carbon_tax):
         el_price = electricity_price_norm*explored_el_price[i]
 
 
-        if cement_oxy_design["size_mea"].iloc[0] > 0:
-            type_installed = "Oxyfuel + PCC"
-        else:
-            type_installed = "Oxyfuel"
+        if ('industrial_cluster', 'CementEmitter') in df_design.columns:
+            cement_mea_design = df_design.loc[:, ('industrial_cluster', 'CementEmitter')]
+            cement_mea_operation = df_operation.loc[:,
+                                   ('technology_operation', 'period1', 'industrial_cluster', 'CementEmitter')]
+            heat_pump_design = df_design.loc[:, ('industrial_cluster', 'HeatPump')]
+            heat_pump_operation = df_operation.loc[:,
+                                  ('technology_operation', 'period1', 'industrial_cluster', 'HeatPump')]
+            type_installed = "MEA"
+            capex = cement_mea_design["capex_tot"] + heat_pump_design["capex_tot"]
+            opex_fixed = cement_mea_design["opex_fixed"] + heat_pump_design["opex_fixed"]
+            opex_variable = cement_mea_design["opex_variable"]
+            energy_cost = sum(cement_mea_operation["electricity_var_input_ccs"]*el_price) + sum(cement_mea_operation["heat_var_input_ccs"]/cop_hp*el_price)
+            co2_captured = cement_mea_operation['CO2captured_var_output_ccs']
+            tot_co2_avoided = sum(cement_mea_operation["clinker_output"] * emission_factor_clinker_baseline) - sum(
+                cement_mea_operation["emissions_pos"])
+            transport_stor_cost = storage_cost + pipeline_cost
+            ccs_size = cement_mea_design["size_ccs"]
+            net_emissions = sum(cement_mea_operation["emissions_pos"])
+            load_factor = sum(co2_captured)/(ccs_size*8760)
+            fraction_avoided = tot_co2_avoided/sum(emissions_cement_baseline)
 
-        capex = cement_oxy_design["capex_tot"]
-        opex_fixed = cement_oxy_design["opex_fixed"]
-        opex_variable = cement_oxy_design["opex_variable"]
-        co2_captured = cement_oxy_operation['CO2captured_output']
-        energy_cost = sum(cement_oxy_operation["electricity_input"]*el_price) + sum(cement_oxy_operation["extra_fuel_input"]*cost_extra_fuel)
-        tot_co2_avoided = sum(cement_oxy_operation["clinker_output"] * emission_factor_clinker_baseline) - sum(
-        cement_oxy_operation["emissions_pos"])
-        transport_stor_cost = storage_cost + pipeline_cost
-        ccs_size = max(co2_captured)
-        net_emissions = sum(cement_oxy_operation["emissions_pos"])
-        load_factor = sum(co2_captured)/(ccs_size*8760)
-        fraction_avoided = tot_co2_avoided/sum(emissions_cement_baseline)
+        elif ('industrial_cluster', 'CementHybridCCS') in df_design.columns:
+
+            cement_oxy_design = df_design.loc[:, ('industrial_cluster', 'CementHybridCCS')]
+            cement_oxy_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'CementHybridCCS')]
+            if cement_oxy_design["size_mea"].iloc[0] > 0:
+                type_installed = "Oxyfuel + PCC"
+            else:
+                type_installed = "Oxyfuel"
+
+            capex = cement_oxy_design["capex_tot"]
+            opex_fixed = cement_oxy_design["opex_fixed"]
+            opex_variable = cement_oxy_design["opex_variable"]
+            co2_captured = cement_oxy_operation['CO2captured_output']
+            energy_cost = sum(cement_oxy_operation["electricity_input"]*el_price) + sum(cement_oxy_operation["extra_fuel_input"]*cost_extra_fuel)
+            tot_co2_avoided = sum(cement_oxy_operation["clinker_output"] * emission_factor_clinker_baseline) - sum(
+            cement_oxy_operation["emissions_pos"])
+            transport_stor_cost = storage_cost + pipeline_cost
+            ccs_size = max(co2_captured)
+            net_emissions = sum(cement_oxy_operation["emissions_pos"])
+            load_factor = sum(co2_captured)/(ccs_size*8760)
+            fraction_avoided = tot_co2_avoided/sum(emissions_cement_baseline)
+
 
 
         results_summary[carbon_tax_str][el_price_str]['hourly_co2_captured'] = co2_captured
@@ -171,7 +196,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
 # ------------------------------------------------------------
 setup_matplotlib_for_paper("single")
 
-types = ["Oxyfuel", "Oxyfuel + PCC"]
+types = ["MEA","Oxyfuel", "Oxyfuel + PCC"]
 type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
 # ------------------------------------------------------------
@@ -268,11 +293,17 @@ ax2.scatter(x_cement, frac_avoided_arr,
 for i, val in enumerate(frac_avoided_arr):
     ax2.text(
         x_cement[i],
-        val -15,           # Offset the text slightly above the marker
-        f"{val:.1f}%",     # Format as integer percentage
+        val - 15,
+        f"{val:.1f}%",
         ha='center',
         va='bottom',
         fontsize=7,
+        bbox=dict(
+            boxstyle='round,pad=0.2',
+            facecolor='white',
+            edgecolor='none',
+            alpha=0.6,
+        )
     )
 # --- Style Adjustments ---
 ax.set_ylabel("CCA [€/tCO$_2$]")

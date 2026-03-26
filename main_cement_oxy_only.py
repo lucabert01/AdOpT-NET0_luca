@@ -19,7 +19,7 @@ adopt.create_optimization_templates(casepath)
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
-explored_carbon_tax = [100, 250]
+explored_carbon_tax = [150, 151, 250] # NOTE: use 150 if you want MEA only, otherwise it is always CementHybridCCS
 explored_el_price = [107] # average el prices explored in the analysis
 distance_to_stor = 100
 dymanics_on = 0
@@ -36,6 +36,11 @@ clinker_demand = clinker_data[f"clinker_{plant_analyzed}"]
 pyhub = {}
 
 for carbon_tax in explored_carbon_tax:
+    if carbon_tax == 150:
+        new_tech = {"CementEmitter", "HeatPump"}
+    else:
+        new_tech = {"CementHybridCCS"}
+
     pyhub_carbon_tax = f"carbon_tax_{carbon_tax}"
     pyhub[pyhub_carbon_tax] = {}
 
@@ -104,7 +109,7 @@ for carbon_tax in explored_carbon_tax:
             casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "r"
         ) as json_file:
             technologies = json.load(json_file)
-        technologies["new"] = ["CementHybridCCS"]
+        technologies["new"] = [t for t in new_tech]
 
         with open(
             casepath / "period1" / "node_data" / "industrial_cluster" / "Technologies.json", "w"
