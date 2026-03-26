@@ -1,0 +1,62 @@
+
+Gurobi 12.0.1 (win64) logging started Wed Mar 25 21:34:56 2026
+
+Set parameter LogFile to value "dataCaseStudy_Cement\raw_results\flexible_ops\20260325213343_mea_inflex_std_2_el_price_50\solver_log.txt"
+Set parameter TimeLimit to value 36000
+Set parameter MIPGap to value 0.03
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Gold 5120 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 8 physical cores, 8 logical processors, using up to 8 threads
+
+Non-default parameters:
+TimeLimit  36000
+MIPGap  0.03
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1103814 rows, 1068769 columns and 2426624 nonzeros
+Model fingerprint: 0x87a4763e
+Variable types: 1051245 continuous, 17524 integer (17524 binary)
+Coefficient statistics:
+  Matrix range     [1e-05, 2e+07]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+09]
+  RHS range        [1e+00, 2e+07]
+Warning: Model contains large matrix coefficient range
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+Presolve removed 1051054 rows and 1042391 columns
+Presolve time: 0.92s
+Presolved: 52760 rows, 26378 columns, 119388 nonzeros
+Variable types: 24504 continuous, 1874 integer (1874 binary)
+Performing another presolve...
+Presolve removed 41576 rows and 22646 columns
+Presolve time: 0.30s
+Found heuristic solution: objective 2.345071e+08
+Found heuristic solution: objective 2.324011e+08
+Found heuristic solution: objective 1.950763e+08
+
+Root relaxation: interrupted, 0 iterations, 0.01 seconds (0.00 work units)
+
+Explored 1 nodes (0 simplex iterations) in 3.53 seconds (1.58 work units)
+Thread count was 8 (of 8 available processors)
+
+Solution count 4: 1.95076e+08 1.95076e+08 2.32401e+08 2.34507e+08 
+
+Optimal solution found (tolerance 3.00e-02)
+Warning: max constraint violation (1.1912e-05) exceeds tolerance
+Best objective 1.950762616455e+08, best bound 1.908397867965e+08, gap 2.1717%
