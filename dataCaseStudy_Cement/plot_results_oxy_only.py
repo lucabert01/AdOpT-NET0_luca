@@ -215,8 +215,8 @@ item_colors_cement = {
     "CAPEX":               batlow_colors[0],
     "OPEX fixed":          batlow_colors[1],
     "OPEX variable":       batlow_colors[2],
-    "Energy cost":         batlow_colors[3],
-    "Transport & Storage": batlow_colors[4],
+    "Energy cost":         batlow_colors[4],
+    "Transport & Storage": batlow_colors[3],
 }
 
 # --- Collect data ---
@@ -288,7 +288,7 @@ ax.set_xticklabels(bar_labels, ha='center')
 
 # --- Fraction avoided on secondary axis ---
 ax2.scatter(x_cement, frac_avoided_arr,
-            color='black', marker='D', s=18, zorder=5)
+            color='black', marker='D', s=9, zorder=5)
 # Add text labels for each marker
 for i, val in enumerate(frac_avoided_arr):
     ax2.text(
