@@ -227,6 +227,18 @@ for i_tec in range(0, num_tec):
                                                                                 /tot_co2_avoided if not isinstance(co2_captured, int) else pd.Series([0]))
             results_summary[tec_str][std_el_str][el_price_str]['type_installed'] = type_installed
 
+for j in range(0, num_std_el):
+    std_el = explored_std_el[j]
+    std_el_str = f"std_{explored_std_el_str[j]}"
+    for i in range(0, num_el_prices):
+        el_price = explored_el_price[i] * electricity_price_norm
+        el_price_str = f"el_price_{explored_el_price[i]}"
+        cost_avoided_mea = results_summary["mea"][std_el_str][el_price_str]['cost_of_avoided']
+        cost_avoided_mea_inflex = results_summary["mea_inflex"][std_el_str][el_price_str]['cost_of_avoided']
+        cost_avoided_oxy = results_summary["oxy"][std_el_str][el_price_str]['cost_of_avoided']
+        cost_avoided_oxy_inflex = results_summary["oxy_inflex"][std_el_str][el_price_str]['cost_of_avoided']
+        results_summary["mea"][std_el_str][el_price_str]['delta_cost_abatement'] = cost_avoided_mea- cost_avoided_mea_inflex
+        results_summary["oxy"][std_el_str][el_price_str]['delta_cost_abatement'] = cost_avoided_oxy - cost_avoided_oxy_inflex
 # ------------------------------------------------------------
 
 # Define types and colors once
@@ -345,13 +357,13 @@ for tec_str in explored_tec_str:
 #-------------Plot time series ---------------------------
 
 time_axis = np.arange(8760)
+explored_tec_str = ["mea", "oxy"]
 
 for tec_str in explored_tec_str:
     n_rows, n_cols = len(explored_el_price_str), len(explored_std_el_str)
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 4, n_rows * 3),
                              sharex=True, sharey='row')
-    fig.suptitle(f"Clinker Operations: {tec_str}", fontsize=16, fontweight='bold')
     axes = np.atleast_2d(axes)
 
     for i, ep in enumerate(reversed(explored_el_price_str)):
@@ -359,25 +371,35 @@ for tec_str in explored_tec_str:
             ax = axes[i, j]
             entry = results_summary[tec_str][f"std_{ct}"][f"el_price_{ep}"]
 
-            # Plotting only the Clinker Data
             ax.fill_between(time_axis, entry['hourly_clinker_demand'],
                             color='gray', alpha=0.2, label='Demand', zorder=1)
 
             ax.plot(time_axis, entry['hourly_clinker_output'],
                     color='#222A6A', linewidth=0.7, label='Production', zorder=2)
 
-            # Clean styling
+            # Delta cost annotation — subtle, bottom-left
+            delta_cost = float(entry['delta_cost_abatement'])
+            ax.annotate(
+                r"$\Delta CCA = $" + f"${delta_cost:.0f}$" + r"€/tCO$_2$",
+                xy=(0.03, 0.06),
+                xycoords='axes fraction',
+                ha='left', va='bottom',
+                fontsize=7.5,
+                color='black',
+                alpha=0.75,
+                bbox=dict(boxstyle='round,pad=0.25', facecolor='white', edgecolor='none', alpha=0.5)
+            )
+
             ax.set_ylim(0, None)
             ax.spines[['top', 'right']].set_visible(False)
 
-            if i == 0: ax.set_title(f"Std Inc: {ct}")
-            if j == 0: ax.set_ylabel(f"EP: {ep} €\nClinker [t/h]")
+            if i == 0: ax.set_title(f"Std: {ct}")
+            if j == 0: ax.set_ylabel(f"El. price: {ep} €\nClinker [t/h]")
             if i == n_rows - 1: ax.set_xlabel("Hour [h]")
 
-    # Single simplified legend
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper right', bbox_to_anchor=(0.95, 0.95), frameon=False)
 
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
     save_figure_for_paper(fig, f"clinker_only_{tec_str}", figures_path)
+
 plt.show()

@@ -214,7 +214,6 @@ setup_matplotlib_for_paper("single")
 item_colors_cement = {
     "CAPEX":               batlow_colors[0],
     "OPEX fixed":          batlow_colors[1],
-    "OPEX variable":       batlow_colors[2],
     "Energy cost":         batlow_colors[4],
     "Transport & Storage": batlow_colors[3],
 }
@@ -238,7 +237,6 @@ for ct in explored_carbon_tax_str:
 
         bar_capex.append(to_scalar(entry["capex_tot"])            / tot_co2_avoided)
         bar_opex_f.append(to_scalar(entry["opex_fixed"])          / tot_co2_avoided)
-        bar_opex_v.append(to_scalar(entry["opex_variable"])       / tot_co2_avoided)
         bar_energy.append(entry["energy_cost"]                    / tot_co2_avoided)
         bar_transp.append(to_scalar(entry["transport_stor_cost"]) / tot_co2_avoided)
         bar_frac_avoided.append(to_scalar(entry["fraction_avoided"]) * 100)
@@ -246,7 +244,6 @@ for ct in explored_carbon_tax_str:
 
 capex_arr        = np.array(bar_capex,        dtype=float)
 opex_f_arr       = np.array(bar_opex_f,       dtype=float)
-opex_v_arr       = np.array(bar_opex_v,       dtype=float)
 energy_arr       = np.array(bar_energy,       dtype=float)
 transp_arr       = np.array(bar_transp,       dtype=float)
 frac_avoided_arr = np.array(bar_frac_avoided, dtype=float)
@@ -269,9 +266,6 @@ ax.bar(x_cement, opex_f_arr, width_cement, bottom=bottom,
        color=item_colors_cement["OPEX fixed"], edgecolor='black', linewidth=edge_width)
 bottom += opex_f_arr
 
-ax.bar(x_cement, opex_v_arr, width_cement, bottom=bottom,
-       color=item_colors_cement["OPEX variable"], edgecolor='black', linewidth=edge_width)
-bottom += opex_v_arr
 
 ax.bar(x_cement, energy_arr, width_cement, bottom=bottom,
        color=item_colors_cement["Energy cost"], edgecolor='black', linewidth=edge_width)
