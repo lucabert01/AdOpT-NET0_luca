@@ -1,16 +1,16 @@
 {
   "tec_type": "CementHybridCCS",
   "size_min": 0,
-  "size_max": 102.6,
+  "size_max": 125,
   "size_is_int": 0,
   "size_clinker_is_fixed": 1,
   "decommission": 0,
   "Economics": {
-    "comment": "CAPEX in EUR/tonne/hr or as a piecewise function, OPEX_variable in EUR/tonne total output, OPEX_fixed in % of CAPEX_annual",
-    "capex_model": 1,
-    "unit_capex": 492000,
-    "fix_capex": 6.92E+07,
-    "piecewise_capex": {
+    "comment": "CAPEX in EUR/tCLinker/h or as a piecewise function, CAPEX MEA is in EUR/tCO2/h, OPEX_variable in EUR/tonne total output, OPEX_fixed in % of CAPEX_annual",
+    "CAPEX_model": 1,
+    "unit_CAPEX": 600000,
+    "fix_CAPEX": 0,
+    "piecewise_CAPEX": {
       "bp_x": [
         0,
         75,
@@ -18,43 +18,43 @@
       ],
       "bp_y": [
         0,
-        36900000,
-        49680000
+        50760000,
+        72350000
       ]
     },
     "other_economics": {
-      "unit_capex_MEA": 3031614,
-      "capex_MEA_is_piecewise": 1,
-      "piecewise_capex_MEA": {
+      "unit_CAPEX_MEA": 1717286,
+      "CAPEX_MEA_is_piecewise": 1,
+      "piecewise_CAPEX_MEA": {
       "bp_x": [
         0,
-        3.708,
-        12.361,
-        20.603
+        4.430,
+        11.81,
+        20.619
       ],
       "bp_y": [
         0,
-        26177807,
-        39222628,
-        47580196
+        13902000,
+        22501251,
+        26820000
       ]
       },
-      "opex_fixed_MEA": 0.20,
-      "opex_fixed_oxy": 0.295
+      "OPEX_fixed_MEA": 0.02,
+      "OPEX_fixed_oxy": 0.16
     },
-    "opex_variable": 0,
-    "opex_fixed": 0,
+    "OPEX_variable": 0,
+    "OPEX_fixed": 0,
     "discount_rate": 0.1,
     "lifetime": 25,
     "decommission_cost": 0
   },
   "Performance": {
     "comment": "contains fitting data on unit of input, technology types and input/output carriers",
-    "performance_function_type": 1,
+    "performance_function_type": 2,
     "clinker_capacity_is_fixed": 0,
     "prod_capacity_clinker": 80,
     "co2_out_is_compressed": 1,
-    "phase_of_co2_out": "supercritical",
+    "phase_of_co2_out": "gas",
     "input_carrier": [
       "extra_fuel",
       "electricity"
@@ -65,8 +65,9 @@
       "clinker"
     ],
     "emission_factor": 0,
+    "min_part_load": 1,
     "performance": {
-      "tCO2_tclinker": 0.943,
+      "tCO2_tclinker": 0.94,
       "CCR_oxy": 0.782,
       "CCR_mea": 0.95
     },
@@ -77,7 +78,7 @@
     "standby_power": -1,
     "min_uptime": 168,
     "min_downtime": 168,
-    "SU_time": 48,
+    "SU_time": -1,
     "SD_time": -1,
     "SU_load": -1,
     "SD_load": -1,
@@ -95,3 +96,4 @@
     }
   }
 }
+
