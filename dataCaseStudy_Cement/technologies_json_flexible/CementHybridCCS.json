@@ -8,8 +8,8 @@
   "Economics": {
     "comment": "CAPEX in EUR/tonne/hr or as a piecewise function, OPEX_variable in EUR/tonne total output, OPEX_fixed in % of CAPEX_annual",
     "capex_model": 1,
-    "unit_capex": 492000,
-    "fix_capex": 6.92E+07,
+    "unit_capex": 600000,
+    "fix_capex": 0,
     "piecewise_capex": {
       "bp_x": [
         0,
@@ -18,12 +18,12 @@
       ],
       "bp_y": [
         0,
-        36900000,
-        49680000
+        50760000,
+        72350000
       ]
     },
     "other_economics": {
-      "unit_capex_MEA": 3031614,
+      "unit_capex_MEA": 1717286,
       "capex_MEA_is_piecewise": 1,
       "piecewise_capex_MEA": {
       "bp_x": [
@@ -34,13 +34,13 @@
       ],
       "bp_y": [
         0,
-        26177807,
-        39222628,
-        47580196
+        13902000,
+        22501251,
+        26820000
       ]
       },
-      "opex_fixed_MEA": 0.20,
-      "opex_fixed_oxy": 0.295
+      "OPEX_fixed_MEA": 0.02,
+      "OPEX_fixed_oxy": 0.16
     },
     "opex_variable": 0,
     "opex_fixed": 0,
@@ -66,7 +66,7 @@
     ],
     "emission_factor": 0,
     "performance": {
-      "tCO2_tclinker": 0.943,
+      "tCO2_tclinker": 0.94,
       "CCR_oxy": 0.782,
       "CCR_mea": 0.95
     },
