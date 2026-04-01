@@ -6,11 +6,11 @@
   "size_clinker_is_fixed": 1,
   "decommission": 0,
   "Economics": {
-    "comment": "CAPEX in EUR/tCLinker/h or as a piecewise function, CAPEX MEA is in EUR/tCO2/h, OPEX_variable in EUR/tonne total output, OPEX_fixed in % of CAPEX_annual",
-    "CAPEX_model": 1,
-    "unit_CAPEX": 600000,
-    "fix_CAPEX": 0,
-    "piecewise_CAPEX": {
+    "comment": "capex in EUR/tCLinker/h or as a piecewise function, capex MEA is in EUR/tCO2/h, opex_variable in EUR/tonne total output, opex_fixed in % of capex_annual",
+    "capex_model": 1,
+    "unit_capex": 600000,
+    "fix_capex": 0,
+    "piecewise_capex": {
       "bp_x": [
         0,
         75,
@@ -23,9 +23,9 @@
       ]
     },
     "other_economics": {
-      "unit_CAPEX_MEA": 1717286,
-      "CAPEX_MEA_is_piecewise": 1,
-      "piecewise_CAPEX_MEA": {
+      "unit_capex_MEA": 1717286,
+      "capex_MEA_is_piecewise": 1,
+      "piecewise_capex_MEA": {
       "bp_x": [
         0,
         4.430,
@@ -39,11 +39,11 @@
         26820000
       ]
       },
-      "OPEX_fixed_MEA": 0.02,
-      "OPEX_fixed_oxy": 0.16
+      "opex_fixed_MEA": 0.02,
+      "opex_fixed_oxy": 0.16
     },
-    "OPEX_variable": 0,
-    "OPEX_fixed": 0,
+    "opex_variable": 0,
+    "opex_fixed": 0,
     "discount_rate": 0.1,
     "lifetime": 25,
     "decommission_cost": 0
