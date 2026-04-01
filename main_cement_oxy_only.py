@@ -19,7 +19,7 @@ adopt.create_optimization_templates(casepath)
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
-explored_carbon_tax = [150, 151, 250] # NOTE: use 150 if you want MEA only, otherwise it is always CementHybridCCS
+explored_carbon_tax = [150, 90, 250] # NOTE: use 150 if you want MEA only, otherwise it is always CementHybridCCS
 explored_el_price = [107] # average el prices explored in the analysis
 distance_to_stor = 100
 dymanics_on = 0
