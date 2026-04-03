@@ -19,7 +19,9 @@ adopt.create_optimization_templates(casepath)
 objective_function = "costs" # "emissions_net", "emissions_minC", "costs"
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
-explored_carbon_tax = [150, 90, 250] # NOTE: use 150 if you want MEA only, otherwise it is always CementHybridCCS
+explored_carbon_tax = [150, 90, 250] # NOTE: use 150 if you want MEA only, 90 for oxy only otherwise it is always CementHybridCCS
+# note! that when 90 is set we also set storage_size to 530000, so that it forces the system to choose the oxy-only!!
+
 explored_el_price = [107] # average el prices explored in the analysis
 distance_to_stor = 100
 dymanics_on = 0
@@ -40,6 +42,8 @@ for carbon_tax in explored_carbon_tax:
         new_tech = {"CementEmitter", "HeatPump"}
     else:
         new_tech = {"CementHybridCCS"}
+
+
 
     pyhub_carbon_tax = f"carbon_tax_{carbon_tax}"
     pyhub[pyhub_carbon_tax] = {}
@@ -118,6 +122,20 @@ for carbon_tax in explored_carbon_tax:
 
         # Copy over technology files
         adopt.copy_technology_data(casepath, json_files_path)
+
+        if carbon_tax == 90:
+            storage_size = 530000
+        else:
+            storage_size = 1000000
+
+        with open(
+                casepath / "period1" / "node_data" / "storage" / "technology_data" / "PermanentStorage_CO2_simple.json",
+                "r") as json_file:
+            storage = json.load(json_file)
+        storage["size_max"] = storage_size
+
+        with open(casepath / "period1" / "node_data" / "storage" / "technology_data" / "PermanentStorage_CO2_simple.json", "w") as json_file:
+            json.dump(storage, json_file, indent=4)
 
         # Add networks
         with open(casepath / "period1" / "Networks.json", "r") as json_file:
