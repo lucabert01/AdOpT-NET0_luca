@@ -24,8 +24,8 @@ figures_path = "../figures"
 
 ## -----------------  Carbon and electricity price --------------------------
 explored_std_el = [1, 2]
-explored_el_price = [50, 150] # average el prices explored in the analysis
-explored_tec = ["mea","mea_inflex", "oxy", "oxy_inflex"]
+explored_el_price = [50,107, 150] # average el prices explored in the analysis
+explored_tec = ["mea","mea_inflex"]
 cost_extra_fuel = 15
 
 path_processed_data = Path("./dataSources/data_processed.xlsx")
@@ -235,10 +235,11 @@ for j in range(0, num_std_el):
         el_price_str = f"el_price_{explored_el_price[i]}"
         cost_avoided_mea = results_summary["mea"][std_el_str][el_price_str]['cost_of_avoided']
         cost_avoided_mea_inflex = results_summary["mea_inflex"][std_el_str][el_price_str]['cost_of_avoided']
-        cost_avoided_oxy = results_summary["oxy"][std_el_str][el_price_str]['cost_of_avoided']
-        cost_avoided_oxy_inflex = results_summary["oxy_inflex"][std_el_str][el_price_str]['cost_of_avoided']
         results_summary["mea"][std_el_str][el_price_str]['delta_cost_abatement'] = cost_avoided_mea- cost_avoided_mea_inflex
-        results_summary["oxy"][std_el_str][el_price_str]['delta_cost_abatement'] = cost_avoided_oxy - cost_avoided_oxy_inflex
+
+        # cost_avoided_oxy = results_summary["oxy"][std_el_str][el_price_str]['cost_of_avoided']
+        # cost_avoided_oxy_inflex = results_summary["oxy_inflex"][std_el_str][el_price_str]['cost_of_avoided']
+        # results_summary["oxy"][std_el_str][el_price_str]['delta_cost_abatement'] = cost_avoided_oxy - cost_avoided_oxy_inflex
 # ------------------------------------------------------------
 
 # Define types and colors once
@@ -357,7 +358,7 @@ for tec_str in explored_tec_str:
 #-------------Plot time series ---------------------------
 
 time_axis = np.arange(8760)
-explored_tec_str = ["mea", "oxy"]
+explored_tec_str = ["mea"]#, "oxy"]
 
 for tec_str in explored_tec_str:
     n_rows, n_cols = len(explored_el_price_str), len(explored_std_el_str)
