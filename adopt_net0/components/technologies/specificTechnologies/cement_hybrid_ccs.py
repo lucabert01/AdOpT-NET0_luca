@@ -75,6 +75,9 @@ class CementHybridCCS(Technology):
         self.processed_coeff.time_independent["alpha_oxy"] = (
             performance_data_oxy_mea.loc["alpha_oxy", "value"]
         )
+        self.processed_coeff.time_independent["el_recovery_oxy"] = (
+            performance_data_oxy_mea.loc["el_recovery_oxy", "value"]
+        )
         self.processed_coeff.time_independent["alpha_mea"] = (
             performance_data_oxy_mea.loc["alpha_mea", "value"]
         )
@@ -206,6 +209,7 @@ class CementHybridCCS(Technology):
             "tCO2_tclinker"
         ]
         alpha_oxy = self.processed_coeff.time_independent["alpha_oxy"]
+        el_recovery_oxy = self.processed_coeff.time_independent["el_recovery_oxy"]
         beta_oxy = self.processed_coeff.time_independent["beta_oxy"]
         alpha_mea = self.processed_coeff.time_independent["alpha_mea"]
         CCR_oxy = self.performance_data["performance"]["CCR_oxy"]
@@ -266,25 +270,59 @@ class CementHybridCCS(Technology):
         def init_input_output(const, t, car_input):
             if car_input == "extra_fuel":
                 return (
-                    self.input[t, car_input]
-                    == self.output[t, "clinker"]
-                    * emissions_clinker
-                    * CCR_oxy
-                    * beta_oxy
+                        self.input[t, car_input]
+                        == self.output[t, "clinker"] * emissions_clinker * CCR_oxy * beta_oxy
                 )
             elif car_input == "electricity":
-                return (
-                    self.input[t, car_input]
-                    == self.output[t, "clinker"]
-                    * emissions_clinker
-                    * CCR_oxy
-                    * alpha_oxy
-                    + b_tec.var_co2_captured_mea[t] * alpha_mea
-                )
+                return pyo.Constraint.Skip  # handled by disjunction above
 
         b_tec.const_input_output = pyo.Constraint(
             self.set_t_performance, b_tec.set_input_carriers, rule=init_input_output
         )
+
+        def init_disjunct_mea_active(dis, t):
+            """MEA is installed (var_size_mea > 0)"""
+
+            def init_elec(const):
+                return (
+                        self.input[t, "electricity"]
+                        == self.output[t, "clinker"] * emissions_clinker * CCR_oxy * alpha_oxy
+                        + b_tec.var_co2_captured_mea[t] * alpha_mea
+                )
+
+            dis.const_elec = pyo.Constraint(rule=init_elec)
+
+            def init_size_bound(const):
+                return b_tec.var_size_mea >= 0.001  # var_size_mea > 0
+
+            dis.const_size_active = pyo.Constraint(rule=init_size_bound)
+
+        def init_disjunct_mea_inactive(dis, t):
+            """MEA is not installed (var_size_mea == 0)"""
+
+            def init_elec(const):
+                return (
+                        self.input[t, "electricity"]
+                        == self.output[t, "clinker"] * emissions_clinker * CCR_oxy * (alpha_oxy-el_recovery_oxy)
+                )
+
+            dis.const_elec = pyo.Constraint(rule=init_elec)
+
+            def init_size_bound(const):
+                return b_tec.var_size_mea == 0
+
+            dis.const_size_inactive = pyo.Constraint(rule=init_size_bound)
+
+        b_tec.dis_mea_active = gdp.Disjunct(self.set_t_performance, rule=init_disjunct_mea_active)
+        b_tec.dis_mea_inactive = gdp.Disjunct(self.set_t_performance, rule=init_disjunct_mea_inactive)
+
+        def bind_disjunction_mea(dis, t):
+            return [b_tec.dis_mea_active[t], b_tec.dis_mea_inactive[t]]
+
+        b_tec.disjunction_mea = gdp.Disjunction(self.set_t_performance, rule=bind_disjunction_mea)
+
+
+
 
         def init_output_output(const, t):
             return (
