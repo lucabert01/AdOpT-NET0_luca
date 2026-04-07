@@ -42,7 +42,7 @@
       "OPEX_fixed_MEA": 0.02,
       "OPEX_fixed_oxy": 0.16
     },
-    "OPEX_variable": 0,
+    "OPEX_variable": 3.56,
     "OPEX_fixed": 0,
     "discount_rate": 0.1,
     "lifetime": 25,
