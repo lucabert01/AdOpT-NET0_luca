@@ -7,6 +7,7 @@ from ...utilities import annualize, set_discount_rate
 from ..technology import Technology
 from warnings import warn
 import logging
+from scipy.interpolate import interp1d
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +38,49 @@ class WasteToEnergy(Technology):
         ]
 
 
+    def fit_technology_performance(self, climate_data: pd.DataFrame, location: dict):
+        """
+        Fits the technology performance
 
+        :param pd.Dataframe climate_data: dataframe containing climate data
+        :param dict location: dict containing location details
+        """
+        super(WasteToEnergy, self).fit_technology_performance(climate_data, location)
+
+        other_data_path = Path(__file__).parent.parent.parent.parent
+        other_data_path = (
+                other_data_path
+                / "database/templates/technology_data/Industrial/WasteCaL_data/wasteCaL_sheet.xlsx"
+        )
+        lhv_hourly = []
+        emission_factor_hourly = []
+        if self.performance_data["co2_concentration_is_hourly"]:
+            offdesign_co2_conc = pd.read_excel(
+                other_data_path, sheet_name="offdesign_results", index_col=0
+            )
+            data_waste_in = pd.read_excel(
+                other_data_path, sheet_name="emission_factor_waste", index_col=0
+            )
+            x_values_conc = data_waste_in.columns.astype(float)
+            y_values_lhv = data_waste_in.loc['lhv_MWh_twaste']
+            y_values_ef = data_waste_in.loc['emission_factor_tco2_twaste']
+            function_lhv = interp1d(x_values_conc, y_values_lhv, fill_value="extrapolate")
+            function_ef = interp1d(x_values_conc, y_values_ef, fill_value="extrapolate")
+
+            co2_concentration = climate_data[f"co2_concentration_{self.name}"]
+
+
+            for t in range(len(co2_concentration)):
+                lhv_hourly.append(function_lhv(co2_concentration.iloc[t]))
+                emission_factor_hourly.append(function_ef(co2_concentration.iloc[t]))
+
+            self.processed_coeff.time_dependent_full["lhv_msw_hourly"] = lhv_hourly
+            self.processed_coeff.time_dependent_full["emission_factor_msw_hourly"] = emission_factor_hourly
+
+        self.processed_coeff.time_independent["max_lhv_msw"] = max(lhv_hourly) if self.performance_data["co2_concentration_is_hourly"] \
+            else self.performance_data["LHV"]
+        self.processed_coeff.time_independent["max_emission_factor_msw"] = max(emission_factor_hourly) if self.performance_data["co2_concentration_is_hourly"] \
+            else self.performance_data["emission_factor"]
 
     def _calculate_bounds(self):
         """
