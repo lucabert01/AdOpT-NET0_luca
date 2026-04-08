@@ -214,6 +214,7 @@ setup_matplotlib_for_paper("single")
 item_colors_cement = {
     "CAPEX":               batlow_colors[0],
     "OPEX fixed":          batlow_colors[1],
+    "OPEX variable":       batlow_colors[2],
     "Energy cost":         batlow_colors[4],
     "Transport & Storage": batlow_colors[3],
 }
@@ -237,6 +238,10 @@ for ct in explored_carbon_tax_str:
 
         bar_capex.append(to_scalar(entry["capex_tot"])            / tot_co2_avoided)
         bar_opex_f.append(to_scalar(entry["opex_fixed"])          / tot_co2_avoided)
+        bar_opex_v.append(
+            to_scalar(entry["opex_variable"]) / tot_co2_avoided
+            if entry['type_installed'] != "MEA" else 0.0
+        )
         bar_energy.append(entry["energy_cost"]                    / tot_co2_avoided)
         bar_transp.append(to_scalar(entry["transport_stor_cost"]) / tot_co2_avoided)
         bar_frac_avoided.append(to_scalar(entry["fraction_avoided"]) * 100)
@@ -244,6 +249,7 @@ for ct in explored_carbon_tax_str:
 
 capex_arr        = np.array(bar_capex,        dtype=float)
 opex_f_arr       = np.array(bar_opex_f,       dtype=float)
+opex_v_arr       = np.array(bar_opex_v,       dtype=float)
 energy_arr       = np.array(bar_energy,       dtype=float)
 transp_arr       = np.array(bar_transp,       dtype=float)
 frac_avoided_arr = np.array(bar_frac_avoided, dtype=float)
@@ -266,6 +272,9 @@ ax.bar(x_cement, opex_f_arr, width_cement, bottom=bottom,
        color=item_colors_cement["OPEX fixed"], edgecolor='black', linewidth=edge_width)
 bottom += opex_f_arr
 
+ax.bar(x_cement, opex_v_arr, width_cement, bottom=bottom,
+       color=item_colors_cement["OPEX variable"], edgecolor='black', linewidth=edge_width)
+bottom += opex_v_arr
 
 ax.bar(x_cement, energy_arr, width_cement, bottom=bottom,
        color=item_colors_cement["Energy cost"], edgecolor='black', linewidth=edge_width)
@@ -303,10 +312,9 @@ for i, val in enumerate(frac_avoided_arr):
 ax.set_ylabel("CCA [€/tCO$_2$]")
 ax2.set_ylabel("CO$_2$ avoidance [%]")
 ax.set_ylim(0, 200)
-ax2.set_ylim(0, 140) # Reset to 100 as it's a percentage
+ax2.set_ylim(0, 140)
 
 # --- Legend Reconstruction (Matching the Black Edges) ---
-# Use facecolor and edgecolor to match the bars exactly
 cost_handles = [mpatches.Patch(facecolor=c, edgecolor='black', linewidth=edge_width, label=l)
                 for l, c in item_colors_cement.items()]
 
@@ -317,7 +325,7 @@ frac_handle  = plt.Line2D([0], [0], marker='D', color='w', markerfacecolor='blac
 ax.legend(
     handles=cost_handles + [frac_handle],
     loc='upper center',
-    bbox_to_anchor=(0.5, 1.01), # Adjusted slightly for extra breathing room
+    bbox_to_anchor=(0.5, 1.01),
     ncol=2,
     columnspacing=0.8,
     handletextpad=0.4,

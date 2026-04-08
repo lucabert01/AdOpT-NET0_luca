@@ -90,7 +90,7 @@ for i_tec in range(0, num_tec):
         std_el_names = [d for d in dir_results_sorted[-num_el_prices:]]
         for i in range(0,num_el_prices):
             el_price = explored_el_price[i] * electricity_price_norm
-
+            absolute_std= el_price.std()
             file_path = raw_results_path / f"{std_el_names[i]}/optimization_results.h5"
 
             # Check if each explored_el_price[i] is in file_names[i]
@@ -226,6 +226,9 @@ for i_tec in range(0, num_tec):
             results_summary[tec_str][std_el_str][el_price_str]['cost_of_avoided'] = ((capex + opex_fixed + opex_variable + energy_cost + transport_stor_cost)
                                                                                 /tot_co2_avoided if not isinstance(co2_captured, int) else pd.Series([0]))
             results_summary[tec_str][std_el_str][el_price_str]['type_installed'] = type_installed
+            results_summary[tec_str][std_el_str][el_price_str]['fract_hours_prod_shifting'] = np.sum(clinker_output > clinker_demand + 0.1)/8760
+            results_summary[tec_str][std_el_str][el_price_str]['absolute_std'] = absolute_std
+
 
 for j in range(0, num_std_el):
     std_el = explored_std_el[j]
@@ -288,71 +291,71 @@ for tec_str in explored_tec_str:
     type_matrix[tec_str] = type_matrix[tec_str].sort_index(axis=1, ascending=True)
 
 # ------- PLOTTING ----------
-
-for tec_str in explored_tec_str:
-    setup_matplotlib_for_paper("single")
-    fig, ax = plt.subplots()
-    tm = type_matrix[tec_str]
-    cm = cost_matrix[tec_str]
-
-    # Iterate through the matrices to draw the cells
-    for i, ep in enumerate(tm.index):
-        for j, std in enumerate(tm.columns):
-            tech = tm.loc[ep, std]
-            cost = cm.loc[ep, std]
-
-            # Draw the colored background based on Technology Type
-            ax.add_patch(
-                plt.Rectangle(
-                    (j, i), 1, 1,
-                    facecolor=type_to_color.get(tech, "#CCCCCC"),  # fallback to grey
-                    edgecolor="white",
-                    linewidth=0.8
-                )
-            )
-
-            # Add the Cost as text
-            ax.text(
-                j + 0.5, i + 0.5,
-                f"{cost:.1f}",
-                ha="center", va="center",
-                color="white",
-                fontsize=rcParams["font.size"] - 2,
-                fontweight="bold"
-            )
-
-    # --- AXES FORMATTING ---
-    ax.set_xlim(0, len(tm.columns))
-    ax.set_ylim(0, len(tm.index))
-
-    ax.set_xticks(np.arange(len(tm.columns)) + 0.5)
-    ax.set_yticks(np.arange(len(tm.index)) + 0.5)
-
-    ax.set_xticklabels(tm.columns)
-    ax.set_yticklabels(tm.index)
-
-    # Invert Y to show high prices at the top if necessary (already handled by sort_index)
-    ax.invert_yaxis()
-
-    ax.set_xlabel("Std increase [-]")
-    ax.set_ylabel("Electricity price [€/MWh]")
-    ax.set_title(f"Scenario: {tec_str}", pad=30)
-
-    # --- LEGEND ---
-    legend_patches = [
-        mpatches.Patch(color=type_to_color[t], label=t) for t in types if t in tm.values
-    ]
-    ax.legend(
-        handles=legend_patches,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.02),
-        ncol=len(legend_patches),
-        frameon=True,
-        fontsize='small'
-    )
-
-    fig.tight_layout(pad=0.6)
-    save_figure_for_paper(fig, f"flex_tech_selection_{tec_str}", figures_path)
+#
+# for tec_str in explored_tec_str:
+#     setup_matplotlib_for_paper("single")
+#     fig, ax = plt.subplots()
+#     tm = type_matrix[tec_str]
+#     cm = cost_matrix[tec_str]
+#
+#     # Iterate through the matrices to draw the cells
+#     for i, ep in enumerate(tm.index):
+#         for j, std in enumerate(tm.columns):
+#             tech = tm.loc[ep, std]
+#             cost = cm.loc[ep, std]
+#
+#             # Draw the colored background based on Technology Type
+#             ax.add_patch(
+#                 plt.Rectangle(
+#                     (j, i), 1, 1,
+#                     facecolor=type_to_color.get(tech, "#CCCCCC"),  # fallback to grey
+#                     edgecolor="white",
+#                     linewidth=0.8
+#                 )
+#             )
+#
+#             # Add the Cost as text
+#             ax.text(
+#                 j + 0.5, i + 0.5,
+#                 f"{cost:.1f}",
+#                 ha="center", va="center",
+#                 color="white",
+#                 fontsize=rcParams["font.size"] - 2,
+#                 fontweight="bold"
+#             )
+#
+#     # --- AXES FORMATTING ---
+#     ax.set_xlim(0, len(tm.columns))
+#     ax.set_ylim(0, len(tm.index))
+#
+#     ax.set_xticks(np.arange(len(tm.columns)) + 0.5)
+#     ax.set_yticks(np.arange(len(tm.index)) + 0.5)
+#
+#     ax.set_xticklabels(tm.columns)
+#     ax.set_yticklabels(tm.index)
+#
+#     # Invert Y to show high prices at the top if necessary (already handled by sort_index)
+#     ax.invert_yaxis()
+#
+#     ax.set_xlabel("Std increase [-]")
+#     ax.set_ylabel("Electricity price [€/MWh]")
+#     ax.set_title(f"Scenario: {tec_str}", pad=30)
+#
+#     # --- LEGEND ---
+#     legend_patches = [
+#         mpatches.Patch(color=type_to_color[t], label=t) for t in types if t in tm.values
+#     ]
+#     ax.legend(
+#         handles=legend_patches,
+#         loc="lower center",
+#         bbox_to_anchor=(0.5, 1.02),
+#         ncol=len(legend_patches),
+#         frameon=True,
+#         fontsize='small'
+#     )
+#
+#     fig.tight_layout(pad=0.6)
+#     save_figure_for_paper(fig, f"flex_tech_selection_{tec_str}", figures_path)
 
 
 #-------------Plot time series ---------------------------
@@ -393,14 +396,92 @@ for tec_str in explored_tec_str:
 
             ax.set_ylim(0, None)
             ax.spines[['top', 'right']].set_visible(False)
-
-            if i == 0: ax.set_title(f"Std: {ct}")
+            actual_std_percent = 26.5 if ct == '1' else 53
+            if i == 0: ax.set_title(f"STD: {actual_std_percent}%")
             if j == 0: ax.set_ylabel(f"El. price: {ep} €\nClinker [t/h]")
             if i == n_rows - 1: ax.set_xlabel("Hour [h]")
-
+            ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
+            ax.set_axisbelow(True)
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper right', bbox_to_anchor=(0.95, 0.95), frameon=False)
 
     save_figure_for_paper(fig, f"clinker_only_{tec_str}", figures_path)
 
+
+## Only one time series
+setup_matplotlib_for_paper("single")
+
+fig, ax = plt.subplots()
+
+entry = results_summary["mea"]["std_1"]["el_price_107"]
+
+ax.fill_between(time_axis, entry['hourly_clinker_demand'],
+                color='gray', alpha=0.2, label='Demand', zorder=1)
+
+ax.plot(time_axis, entry['hourly_clinker_output'],
+        color='#222A6A', linewidth=0.7, label='Production', zorder=2)
+
+delta_cost = float(entry['delta_cost_abatement'])
+
+ax.set_ylim(0, 125)
+ax.spines[['top', 'right']].set_visible(False)
+ax.set_xlabel("Time [h]")
+ax.set_ylabel("Clinker [t/h]")
+ax.legend(loc='upper right', frameon=False)
+ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
+ax.set_axisbelow(True)
+
+save_figure_for_paper(fig, "flex_ops__ep107_std1", figures_path)
+
+
+## Plot with hours of shifting
+setup_matplotlib_for_paper("single")
+
+fig, ax = plt.subplots()
+
+colors = {explored_std_el_str[0]: batlow_colors[1],
+          explored_std_el_str[1]: batlow_colors[5]}
+
+for std_str in explored_std_el_str:
+    x = [float(ep) for ep in explored_el_price_str]
+    y = [results_summary["mea"][f"std_{std_str}"][f"el_price_{ep}"]['fract_hours_prod_shifting'] * 100
+         for ep in explored_el_price_str]
+    deltas = [float(results_summary["mea"][f"std_{std_str}"][f"el_price_{ep}"]['delta_cost_abatement'])
+              for ep in explored_el_price_str]
+    actual_std_percent = 26.5 if std_str == '1' else 53
+    ax.plot(x, y, color=colors[std_str], marker='o', markersize=3,
+            linewidth=0.8, label=f"STD: {actual_std_percent}%")
+
+    for xi, yi, delta in zip(x, y, deltas):
+        offset =  (-10, 6)
+
+        ax.annotate(f"{delta:.0f}" + r"€/tCO$_2$",
+                    xy=(xi, yi),
+                    xytext=offset,
+                    textcoords='offset points',
+                    ha='center', va='bottom',
+                    fontsize=6,
+                    color=colors[std_str])
+
+# --- New Annotation Logic ---
+# Pick a representative point (e.g., the 3rd point of the first series)
+target_x = 40
+target_y = 3
+
+ax.annotate('Decrease in cost \n of carbon avoided',
+            xy=(target_x, target_y),
+            xytext=(30, 11),
+            fontsize=6,
+            fontstyle='italic',
+            color='gray',  # This makes the text gray
+            arrowprops=dict(arrowstyle='->', lw=0.5, color='gray', connectionstyle="arc3,rad=.2"))
+
+ax.set_xlabel("Electricity price [€/MWh]")
+ax.set_ylabel("Hours with load shifting [%]")
+ax.spines[['top', 'right']].set_visible(False)
+ax.legend(loc='best', frameon=False)
+ax.set_xlim(0, 175)
+ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
+ax.set_axisbelow(True)
+save_figure_for_paper(fig, "fract_hours_shifting_mea", figures_path)
 plt.show()
