@@ -47,14 +47,23 @@ class WasteToEnergyCaLCCS(Technology):
                 other_data_path
                 / "database/templates/technology_data/Industrial/WasteCaL_data/wasteCaL_sheet.xlsx"
         )
-
-
         el_efficiency_cal_hourly = []
         th_input_cal_hourly = []
+        lhv_hourly = []
+        emission_factor_hourly = []
         if self.performance_data["co2_concentration_is_hourly"]:
             offdesign_co2_conc = pd.read_excel(
                 other_data_path, sheet_name="offdesign_results", index_col=0
             )
+            data_waste_in = pd.read_excel(
+                other_data_path, sheet_name="emission_factor_waste", index_col=0
+            )
+            x_values_conc = data_waste_in.columns.astype(float)
+            y_values_lhv = data_waste_in.loc['lhv_MWh_twaste']
+            y_values_ef = data_waste_in.loc['emission_factor_tco2_twaste']
+            function_lhv = interp1d(x_values_conc, y_values_lhv, fill_value="extrapolate")
+            function_ef = interp1d(x_values_conc, y_values_ef, fill_value="extrapolate")
+
             co2_concentration = climate_data[f"co2_concentration_{self.name}"]
             design_co2_conc = self.performance_data["design_co2_concentration"]
 
@@ -78,10 +87,22 @@ class WasteToEnergyCaLCCS(Technology):
                 th_input_cal_hourly.append(th_input_cal_design*
                                                     (1+var_th_input*(co2_concentration.iloc[t]-design_co2_conc)))
 
+                lhv_hourly.append(function_lhv(co2_concentration.iloc[t]))
+                emission_factor_hourly.append(function_ef(co2_concentration.iloc[t]))
+
             self.processed_coeff.time_dependent_full["el_efficiency_cal_hourly"] = el_efficiency_cal_hourly
             self.processed_coeff.time_dependent_full["th_input_cal_hourly"] = th_input_cal_hourly
-        self.processed_coeff.time_independent["max_el_efficiency_cal"] = max(el_efficiency_cal_hourly) if self.performance_data["co2_concentration_is_hourly"] else el_efficiency_design
-        self.processed_coeff.time_independent["max_th_input_cal"] = max(th_input_cal_hourly) if self.performance_data["co2_concentration_is_hourly"] else th_input_cal_design
+            self.processed_coeff.time_dependent_full["lhv_msw_hourly"] = lhv_hourly
+            self.processed_coeff.time_dependent_full["emission_factor_msw_hourly"] = emission_factor_hourly
+
+        self.processed_coeff.time_independent["max_el_efficiency_cal"] = max(el_efficiency_cal_hourly) if self.performance_data["co2_concentration_is_hourly"] \
+            else el_efficiency_design
+        self.processed_coeff.time_independent["max_th_input_cal"] = max(th_input_cal_hourly) if self.performance_data["co2_concentration_is_hourly"] \
+            else th_input_cal_design
+        self.processed_coeff.time_independent["max_lhv_msw"] = max(lhv_hourly) if self.performance_data["co2_concentration_is_hourly"] \
+            else self.performance_data["LHV"]
+        self.processed_coeff.time_independent["max_emission_factor_msw"] = max(emission_factor_hourly) if self.performance_data["co2_concentration_is_hourly"] \
+            else self.performance_data["emission_factor"]
 
 
     def _define_size(self, b_tec):
@@ -90,12 +111,12 @@ class WasteToEnergyCaLCCS(Technology):
         """
         super(WasteToEnergyCaLCCS, self)._define_size(b_tec)
 
-        emission_factor = self.performance_data["emission_factor"]
+        max_emission_factor = self.processed_coeff.time_independent["max_emission_factor_msw"]
         emission_factor_RDF = self.performance_data["emission_factor_RDF"]
         th_input_cal_max = self.processed_coeff.time_independent["max_th_input_cal"]
         ccr = self.performance_data["capture_rate"]
         lhv_RDF = self.performance_data["LHV_RDF"]
-        size_max_cal = b_tec.para_size_max.value * emission_factor * ccr * (
+        size_max_cal = b_tec.para_size_max.value * max_emission_factor * ccr * (
                     1 + th_input_cal_max / lhv_RDF * emission_factor_RDF * ccr)
 
         b_tec.var_size_cal = pyo.Var(
@@ -112,7 +133,7 @@ class WasteToEnergyCaLCCS(Technology):
         super(WasteToEnergyCaLCCS, self)._calculate_bounds()
 
 
-        emission_factor = self.performance_data["emission_factor"]
+        max_emission_factor = self.processed_coeff.time_independent["max_emission_factor_msw"]
         time_steps = len(self.set_t_performance)
         th_efficiency = self.performance_data["th_efficiency"]
         el_efficiency = self.performance_data["el_efficiency"]
@@ -122,7 +143,7 @@ class WasteToEnergyCaLCCS(Technology):
         ccr = self.performance_data["capture_rate"]
         lhv = self.performance_data["LHV"]
         lhv_RDF = self.performance_data["LHV_RDF"]
-        bound_factor_size_max_cal = emission_factor * ccr * (
+        bound_factor_size_max_cal = max_emission_factor * ccr * (
                 1 + th_input_cal_max / lhv_RDF * emission_factor_RDF * ccr)
 
         # Input Bounds
@@ -138,7 +159,7 @@ class WasteToEnergyCaLCCS(Technology):
             (
                 np.zeros(shape=(time_steps)),
                 np.ones(shape=time_steps)
-                * emission_factor * ccr * th_input_cal_max /(lhv_RDF- emission_factor_RDF*th_input_cal_max*ccr)
+                * max_emission_factor * ccr * th_input_cal_max /(lhv_RDF- emission_factor_RDF*th_input_cal_max*ccr)
                 ,
             )
         )
@@ -169,7 +190,7 @@ class WasteToEnergyCaLCCS(Technology):
         self.bounds["output"]["CO2captured"] = np.column_stack(
             (
                 np.zeros(shape=(time_steps)),
-                np.ones(shape=time_steps)* (emission_factor * ccr /
+                np.ones(shape=time_steps)* (max_emission_factor * ccr /
                                             (1- emission_factor_RDF*th_input_cal_max / lhv_RDF*ccr))
                 ,
             )
@@ -194,15 +215,19 @@ class WasteToEnergyCaLCCS(Technology):
 
         th_efficiency = self.performance_data["th_efficiency"]
         el_efficiency = self.performance_data["el_efficiency"]
-        emission_factor = self.performance_data["emission_factor"]
         el_efficiency_CaL = self.performance_data["el_efficiency_CaL"]
         emission_factor_RDF = self.performance_data["emission_factor_RDF"]
         th_input_CaL = self.performance_data["th_input_CaL"]
         th_input_cal_max = self.processed_coeff.time_independent["max_th_input_cal"]
         ccr = self.performance_data["capture_rate"]
-        lhv = self.performance_data["LHV"]
+        max_lhv_msw = self.processed_coeff.time_independent["max_lhv_msw"]
         lhv_RDF = self.performance_data["LHV_RDF"]
-        size_max_cal = b_tec.para_size_max*emission_factor*ccr*(1+ th_input_cal_max/lhv_RDF* emission_factor_RDF * ccr)
+        max_emission_factor = self.processed_coeff.time_independent["max_emission_factor_msw"]
+        size_max_cal = b_tec.para_size_max*max_emission_factor*ccr*(1+ th_input_cal_max/lhv_RDF* emission_factor_RDF * ccr)
+        lhv_msw_hourly = self.processed_coeff.time_dependent_full["lhv_msw_hourly"]
+        emission_factor_msw_hourly = self.processed_coeff.time_dependent_full["emission_factor_msw_hourly"]
+
+        el_efficiency_cal_hourly = self.processed_coeff.time_dependent_full["el_efficiency_cal_hourly"]
 
         def init_size_cal(const, t):
             return self.output[t, "CO2captured"] <= b_tec.var_size_cal
@@ -227,30 +252,39 @@ class WasteToEnergyCaLCCS(Technology):
         b_tec.var_el_wte = pyo.Var(
             self.set_t_performance,
             domain=pyo.NonNegativeReals,
-            bounds=(0, b_tec.para_size_max*lhv*el_efficiency)
+            bounds=(0, b_tec.para_size_max*max_lhv_msw*el_efficiency)
         )
 
         #Force the el production from CaL to be linked to the CO2 capturing (RDF is linked to CO2captured later)
         def init_el_cal(const, t):
             if self.performance_data["co2_concentration_is_hourly"]:
-                return b_tec.var_el_cal[t] == self.input[t, "wasteInRDF"] * lhv_RDF * self.processed_coeff.time_dependent_full["el_efficiency_cal_hourly"][t-1]
+                return b_tec.var_el_cal[t] == self.input[t, "wasteInRDF"] * lhv_RDF * el_efficiency_cal_hourly[t-1]
             else:
                 return b_tec.var_el_cal[t] == self.input[t, "wasteInRDF"]*lhv_RDF*el_efficiency_CaL
 
         b_tec.const_el_cal = pyo.Constraint(self.set_t_performance, rule=init_el_cal)
 
         def init_el_wte(const, t):
-            return b_tec.var_el_wte[t] <= self.input[t, "wasteIn"] * lhv * el_efficiency
+            if self.performance_data["co2_concentration_is_hourly"]:
+                return b_tec.var_el_wte[t] <= self.input[t, "wasteIn"] * lhv_msw_hourly[t-1] * el_efficiency
+            else:
+                return b_tec.var_el_wte[t] <= self.input[t, "wasteIn"] * max_lhv_msw * el_efficiency
+
 
         b_tec.const_el_wte = pyo.Constraint(self.set_t_performance, rule=init_el_wte)
 
 
         def init_total_output_wte(const, t):
-            return (
-                self.output[t, "heat"]/th_efficiency + b_tec.var_el_wte[t]/el_efficiency
-                == self.input[t, "wasteIn"]*lhv
-            )
-
+            if self.performance_data["co2_concentration_is_hourly"]:
+                return (
+                    self.output[t, "heat"]/th_efficiency + b_tec.var_el_wte[t]/el_efficiency
+                    == self.input[t, "wasteIn"]*lhv_msw_hourly[t-1]
+                )
+            else:
+                return (
+                        self.output[t, "heat"] / th_efficiency + b_tec.var_el_wte[t] / el_efficiency
+                        == self.input[t, "wasteIn"] * max_lhv_msw
+                )
 
         b_tec.const_total_output_wte = pyo.Constraint(
             self.set_t_performance, rule=init_total_output_wte
@@ -263,10 +297,16 @@ class WasteToEnergyCaLCCS(Technology):
                         == self.input[t, "wasteIn"]
                 )
             if car == "heat":
-                return (
-                    self.output[t, car]
-                    <= self.input[t, "wasteIn"] * lhv * th_efficiency
-                )
+                if self.performance_data["co2_concentration_is_hourly"]:
+                    return (
+                        self.output[t, car]
+                        <= self.input[t, "wasteIn"] * lhv_msw_hourly[t-1] * th_efficiency
+                    )
+                else:
+                    return (
+                            self.output[t, car]
+                            <= self.input[t, "wasteIn"] * max_lhv_msw * th_efficiency
+                    )
             if car == "electricity":
                 return (
                     self.output[t, car]
@@ -287,10 +327,10 @@ class WasteToEnergyCaLCCS(Technology):
 
         def init_max_co2_captured(const, t):
             if self.performance_data["co2_concentration_is_hourly"]:
-                return (self.output[t, "CO2captured"] <= self.input[t, "wasteIn"] * emission_factor * ccr
+                return (self.output[t, "CO2captured"] <= self.input[t, "wasteIn"] * emission_factor_msw_hourly[t-1] * ccr
                     / (1- self.processed_coeff.time_dependent_full["th_input_cal_hourly"][t-1]/lhv_RDF*emission_factor_RDF*ccr))
             else:
-                return (self.output[t, "CO2captured"] <= self.input[t, "wasteIn"] * emission_factor * ccr
+                return (self.output[t, "CO2captured"] <= self.input[t, "wasteIn"] * max_emission_factor * ccr
                     / (1-th_input_CaL/lhv_RDF*emission_factor_RDF*ccr))
 
         b_tec.const_max_captured = pyo.Constraint(self.set_t_performance, rule=init_max_co2_captured)
@@ -359,7 +399,8 @@ class WasteToEnergyCaLCCS(Technology):
         """
         c = self.processed_coeff.time_independent
         technology_model = self.technology_model
-        emission_factor = self.performance_data["emission_factor"]
+        max_emission_factor = self.processed_coeff.time_independent["max_emission_factor_msw"]
+        emission_factor_msw_hourly = self.processed_coeff.time_dependent_full["emission_factor_msw_hourly"]
         emission_factor_RDF = self.performance_data["emission_factor_RDF"]
 
         b_tec.var_tec_emissions_pos = pyo.Var(
@@ -370,12 +411,20 @@ class WasteToEnergyCaLCCS(Technology):
         )
 
         def init_tec_emissions_pos(const, t):
-            return (
-                self.input[t, "wasteIn"] * emission_factor
-                + self.input[t, "wasteInRDF"] * emission_factor_RDF
-                - self.output[t, "CO2captured"]
-                == b_tec.var_tec_emissions_pos[t]
-            )
+            if self.performance_data["co2_concentration_is_hourly"]:
+                return (
+                    self.input[t, "wasteIn"] * emission_factor_msw_hourly[t-1]
+                    + self.input[t, "wasteInRDF"] * emission_factor_RDF
+                    - self.output[t, "CO2captured"]
+                    == b_tec.var_tec_emissions_pos[t]
+                )
+            else:
+                return (
+                        self.input[t, "wasteIn"] * max_emission_factor
+                        + self.input[t, "wasteInRDF"] * emission_factor_RDF
+                        - self.output[t, "CO2captured"]
+                        == b_tec.var_tec_emissions_pos[t]
+                )
 
         b_tec.const_tec_emissions_pos = pyo.Constraint(
             self.set_t_global, rule=init_tec_emissions_pos
