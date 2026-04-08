@@ -181,17 +181,17 @@ for dh_ratio in explored_dh_ratio:
             # Import hourly profiles
             electricity_price = electricity_price_norm * av_el_price
             if wte_demand_is_averaged:
-                emissions = data[f"emission_{plant_analyzed}"].rolling(window=rolling_av_hours, min_periods=1).mean()
+                wasteProcessed_demand = data[f"waste_in_{plant_analyzed}"].rolling(window=rolling_av_hours,
+                                                                                   min_periods=1).mean()
             else:
-                emissions = data[f"emission_{plant_analyzed}"]
+                wasteProcessed_demand = data[f"waste_in_{plant_analyzed}"]
+            # emissions  = emissions.to_numpy()
             norm_heat_demand = data["normalized_heat_demand_milan"]
-            json_wasteCHP = Path("./dataCaseStudy_WtE/technologies_json/WasteCHP.json")
-            info_wasteCHP = json.loads(json_wasteCHP.read_text())
-            lhv = info_wasteCHP["Performance"]["LHV"]
-            th_efficiency = info_wasteCHP["Performance"]["th_efficiency"]
-            emission_factor = info_wasteCHP["Performance"]["emission_factor"]
-            wasteProcessed_demand = emissions / emission_factor
-            max_useful_heat_output = max(wasteProcessed_demand) * lhv * th_efficiency
+            json_WasteCaL_CCS = Path("./dataCaseStudy_WtE/technologies_json/WasteCaL_CCS.json")
+            info_WasteCaL_CCS = json.loads(json_WasteCaL_CCS.read_text())
+            lhv = info_WasteCaL_CCS["Performance"]["LHV"]
+            th_efficiency = info_WasteCaL_CCS["Performance"]["th_efficiency"]
+            max_useful_heat_output = wasteProcessed_demand.mean() * lhv * th_efficiency
             peak_heat_demand = dh_ratio * max_useful_heat_output
             heat_demand = (norm_heat_demand * peak_heat_demand).rolling(window=rolling_av_hours, min_periods=1).mean()
             if heat_demand_is_averaged:
