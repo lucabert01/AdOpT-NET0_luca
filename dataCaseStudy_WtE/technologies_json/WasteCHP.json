@@ -1,65 +1,79 @@
 {
-  "tec_type": "WasteToEnergy",
-  "size_min": 0,
-  "size_max": 100,
-  "size_is_int": 0,
-  "size_based_on": "input",
-  "decommission": "impossible",
-  "Economics": {
-    "comment": "CAPEX in EUR/MW or as a piecewise function, OPEX_variable in EUR/MWh total output, OPEX_fixed in % of up-front CAPEX",
-    "capex_model": 1,
-    "unit_capex": 100,
-    "opex_variable": 0,
-    "opex_fixed": 0.09,
-    "discount_rate": 0.1,
-    "lifetime": 25,
-    "decommission_cost": 0
-  },
-  "Performance": {
-    "comment": "contains fitting data on unit of input, technology types and input/output carriers",
-    "performance_function_type": 1,
-    "input_carrier": [
-      "wasteIn"
-    ],
-    "main_input_carrier": "wasteIn",
-    "output_carrier": [
-      "electricity",
-      "heat",
-      "wasteProcessed"
-    ],
-    "LHV": 2.45,
-    "emission_factor": 1.124,
-    "min_part_load": 0,
-    "el_efficiency": 0.264,
-    "th_efficiency": 0.865,
-    "ccs": {
-      "possible": 1,
-      "co2_concentration_is_hourly" : 1,
-      "co2_concentration" : 0.08,
-      "ccs_type": "MEA_medium"
+    "tec_type": "WasteToEnergy",
+    "size_min": 0,
+    "size_max": 100,
+    "size_is_int": 0,
+    "size_based_on": "input",
+    "decommission": "impossible",
+    "Economics": {
+        "comment": "CAPEX in EUR/MW or as a piecewise function, OPEX_variable in EUR/MWh total output, OPEX_fixed in % of up-front CAPEX",
+        "capex_model": 1,
+        "unit_capex": 100,
+        "opex_variable": 0,
+        "opex_fixed": 0.09,
+        "discount_rate": 0.1,
+        "lifetime": 25,
+        "decommission_cost": 0
     },
-    "ramping_time": -1,
-    "ref_size": -1,
-    "ramping_const_int": -1,
-    "standby_power": -1,
-    "min_uptime": -1,
-    "min_downtime": -1,
-    "SU_time": -1,
-    "SD_time": -1,
-    "SU_load": -1,
-    "SD_load": -1,
-    "max_startups": -1
-  },
-
-  "Units": {
-    "size": "MW",
-    "input_carrier": {
-      "gas": "MW",
-      "hydrogen": "MW"
+    "Performance": {
+        "comment": "contains fitting data on unit of input, technology types and input/output carriers",
+        "performance_function_type": 1,
+        "input_carrier": [
+            "wasteIn"
+        ],
+        "main_input_carrier": "wasteIn",
+        "output_carrier": [
+            "electricity",
+            "heat",
+            "wasteProcessed"
+        ],
+        "LHV": 2.45,
+        "emission_factor": 0.89,
+        "min_part_load": 0,
+        "el_efficiency": 0.264,
+        "th_efficiency": 0.865,
+        "ccs": {
+            "possible": 1,
+            "co2_concentration_is_hourly": 1,
+            "co2_concentration": 0.08,
+            "ccs_type": "MEA_medium"
+        },
+        "waste_prop_interp": {
+            "waste_as_function_of_co2_conc": 1,
+            "ref_co2_conc": [
+                0.08,
+                0.1
+            ],
+            "ref_lhv": [
+                2.45,
+                3.0
+            ],
+            "ref_emission_factor": [
+                0.89,
+                1.04
+            ]
+        },
+        "ramping_time": -1,
+        "ref_size": -1,
+        "ramping_const_int": -1,
+        "standby_power": -1,
+        "min_uptime": -1,
+        "min_downtime": -1,
+        "SU_time": -1,
+        "SD_time": -1,
+        "SU_load": -1,
+        "SD_load": -1,
+        "max_startups": -1
     },
-    "output_carrier": {
-      "electricity": "MW",
-      "heat": "MW"
+    "Units": {
+        "size": "MW",
+        "input_carrier": {
+            "gas": "MW",
+            "hydrogen": "MW"
+        },
+        "output_carrier": {
+            "electricity": "MW",
+            "heat": "MW"
+        }
     }
-  }
 }
