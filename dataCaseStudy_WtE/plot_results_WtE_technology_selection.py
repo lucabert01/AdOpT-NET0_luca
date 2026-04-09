@@ -54,7 +54,8 @@ path_processed_data = Path("../dataCaseStudy_Cement/dataSources/data_processed.x
 data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
 av_el_price = data["el_price_itNord"].mean()
 electricity_price_norm = data["el_price_itNord"] / av_el_price
-
+emission_factor = data["emission_factor_PAIP"]
+lhv = data["lhv_PAIP"]
 
 def extract_no_ccs_results(
     raw_results_path,
@@ -255,10 +256,8 @@ for i_dh in range(0, num_dh_ratio):
             # El. production if CCS didn't exist
             json_wasteCHP = Path("./technologies_json/WasteCHP.json")
             info_wasteCHP = json.loads(json_wasteCHP.read_text())
-            lhv = info_wasteCHP["Performance"]["LHV"]
             th_efficiency = info_wasteCHP["Performance"]["th_efficiency"]
             el_efficiency = info_wasteCHP["Performance"]["el_efficiency"]
-            emission_factor = info_wasteCHP["Performance"]["emission_factor"]
             no_ccs_entry = no_ccs_summary[dh_ratio_str][carbon_tax_str][el_price_str]
             revenues_no_ccs = no_ccs_entry["electricity_revenues"]
             tot_boiler_out_no_ccs = no_ccs_entry["tot_boiler_out"]
@@ -317,11 +316,9 @@ for i_dh in range(0, num_dh_ratio):
             ):
                 json_WasteCaL_CCS = Path("./technologies_json/WasteCaL_CCS.json")
                 info_WasteCaL_CCS = json.loads(json_WasteCaL_CCS.read_text())
-                lhv = info_WasteCaL_CCS["Performance"]["LHV"]
                 lhv_rdf = info_WasteCaL_CCS["Performance"]["LHV_RDF"]
                 th_efficiency = info_WasteCaL_CCS["Performance"]["th_efficiency"]
                 el_efficiency = info_WasteCaL_CCS["Performance"]["el_efficiency"]
-                emission_factor = info_WasteCaL_CCS["Performance"]["emission_factor"]
                 emission_factor_rdf = info_WasteCaL_CCS["Performance"]["emission_factor_RDF"]
                 w2e_cal_operation = df_operation.loc[
                     :,
