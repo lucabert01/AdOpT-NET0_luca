@@ -29,9 +29,23 @@
       "wasteProcessed",
       "CO2captured"
     ],
+    "waste_prop_interp": {
+        "ref_co2_conc": [
+            0.08,
+            0.1
+        ],
+        "ref_lhv": [
+            2.45,
+            3.0
+        ],
+        "ref_emission_factor": [
+            0.89,
+            1.04
+        ]
+    },
     "LHV": 2.45,
     "LHV_RDF": 4.92,
-    "emission_factor": 1.124,
+    "emission_factor": 0.89,
     "emission_factor_RDF": 1.649,
     "min_part_load": 0,
     "el_efficiency": 0.264,
