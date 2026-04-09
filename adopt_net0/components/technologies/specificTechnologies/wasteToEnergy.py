@@ -47,40 +47,40 @@ class WasteToEnergy(Technology):
         """
         super(WasteToEnergy, self).fit_technology_performance(climate_data, location)
 
-        other_data_path = Path(__file__).parent.parent.parent.parent
-        other_data_path = (
-                other_data_path
-                / "database/templates/technology_data/Industrial/WasteCaL_data/wasteCaL_sheet.xlsx"
-        )
+
         lhv_hourly = []
         emission_factor_hourly = []
-        if self.performance_data["co2_concentration_is_hourly"]:
-            offdesign_co2_conc = pd.read_excel(
-                other_data_path, sheet_name="offdesign_results", index_col=0
-            )
-            data_waste_in = pd.read_excel(
-                other_data_path, sheet_name="emission_factor_waste", index_col=0
-            )
-            x_values_conc = data_waste_in.columns.astype(float)
-            y_values_lhv = data_waste_in.loc['lhv_MWh_twaste']
-            y_values_ef = data_waste_in.loc['emission_factor_tco2_twaste']
+        if self.performance_data["waste_prop_interp"]["waste_as_function_of_co2_conc"]:
+            waste_prop = self.performance_data["waste_prop_interp"]
+
+            x_values_conc = np.array(waste_prop["ref_co2_conc"])
+            y_values_lhv = np.array(waste_prop["ref_lhv"])
+            y_values_ef = np.array(waste_prop["ref_emission_factor"])
             function_lhv = interp1d(x_values_conc, y_values_lhv, fill_value="extrapolate")
             function_ef = interp1d(x_values_conc, y_values_ef, fill_value="extrapolate")
+            if not self.performance_data.get("ccs"):
+                raise ValueError(
+                    f'You need to define the "ccs" block in the JSON file of {self.name} if you set waste_as_function_of_co2_conc=1')
 
-            co2_concentration = climate_data[f"co2_concentration_{self.name}"]
+            if self.performance_data["ccs"]["co2_concentration_is_hourly"]:
 
+                co2_concentration = climate_data[f"co2_concentration_{self.name}"]
 
-            for t in range(len(co2_concentration)):
-                lhv_hourly.append(function_lhv(co2_concentration.iloc[t]))
-                emission_factor_hourly.append(function_ef(co2_concentration.iloc[t]))
+                for t in range(len(co2_concentration)):
+                    lhv_hourly.append(function_lhv(co2_concentration.iloc[t]))
+                    emission_factor_hourly.append(function_ef(co2_concentration.iloc[t]))
 
-            self.processed_coeff.time_dependent_full["lhv_msw_hourly"] = lhv_hourly
-            self.processed_coeff.time_dependent_full["emission_factor_msw_hourly"] = emission_factor_hourly
-
-        self.processed_coeff.time_independent["max_lhv_msw"] = max(lhv_hourly) if self.performance_data["co2_concentration_is_hourly"] \
-            else self.performance_data["LHV"]
-        self.processed_coeff.time_independent["max_emission_factor_msw"] = max(emission_factor_hourly) if self.performance_data["co2_concentration_is_hourly"] \
-            else self.performance_data["emission_factor"]
+                self.processed_coeff.time_dependent_full["lhv_msw_hourly"] = lhv_hourly
+                self.processed_coeff.time_dependent_full["emission_factor_msw_hourly"] = emission_factor_hourly
+                self.processed_coeff.time_independent["max_lhv_msw"] = max(lhv_hourly)
+                self.processed_coeff.time_independent["max_emission_factor_msw"] = max(emission_factor_hourly)
+            else:
+                co2_concentration = self.ccs_data["co2_concentration"]
+                self.processed_coeff.time_independent["max_lhv_msw"] = function_lhv(co2_concentration)
+                self.processed_coeff.time_independent["max_emission_factor_msw"] = function_ef(co2_concentration)
+        else:
+            self.processed_coeff.time_independent["max_lhv_msw"] = self.performance_data["LHV"]
+            self.processed_coeff.time_independent["max_emission_factor_msw"] = self.performance_data["emission_factor"]
 
     def _calculate_bounds(self):
         """
@@ -91,14 +91,14 @@ class WasteToEnergy(Technology):
         time_steps = len(self.set_t_performance)
         th_efficiency = self.performance_data["th_efficiency"]
         el_efficiency = self.performance_data["el_efficiency"]
-        lhv = self.performance_data["LHV"]
+        max_lhv = self.processed_coeff.time_independent["max_lhv_msw"]
 
         # Output Bounds
         self.bounds["output"]["heat"] = np.column_stack(
             (
                 np.zeros(shape=(time_steps)),
                 np.ones(shape=time_steps)
-                * th_efficiency * lhv,
+                * th_efficiency * max_lhv,
             )
         )
 
@@ -106,7 +106,7 @@ class WasteToEnergy(Technology):
             (
                 np.zeros(shape=(time_steps)),
                 np.ones(shape=time_steps)
-                * el_efficiency * lhv,
+                * el_efficiency * max_lhv,
             )
         )
         self.bounds["output"]["wasteProcessed"] = np.column_stack(
@@ -144,7 +144,8 @@ class WasteToEnergy(Technology):
 
         th_efficiency = self.performance_data["th_efficiency"]
         el_efficiency = self.performance_data["el_efficiency"]
-        lhv = self.performance_data["LHV"]
+        lhv = self.processed_coeff.time_independent["max_lhv_msw"]
+        lhv_msw_hourly = self.processed_coeff.time_dependent_full["lhv_msw_hourly"]
 
 
         def init_size_waste_max(const, t):
@@ -163,25 +164,43 @@ class WasteToEnergy(Technology):
                         == self.input[t, "wasteIn"]
                 )
             if car == "heat":
-                return (
-                    self.output[t, car]
-                    <= self.input[t, "wasteIn"] * lhv * th_efficiency
-                )
+                if self.performance_data["ccs"]["co2_concentration_is_hourly"]:
+                    return (
+                        self.output[t, car]
+                        <= self.input[t, "wasteIn"] * lhv_msw_hourly[t-1] * th_efficiency
+                    )
+                else:
+                    return (
+                            self.output[t, car]
+                            <= self.input[t, "wasteIn"] * lhv * th_efficiency
+                    )
             if car == "electricity":
-                return (
-                    self.output[t, car]
-                    <= self.input[t, "wasteIn"] * lhv * el_efficiency
-                )
+                if self.performance_data["ccs"]["co2_concentration_is_hourly"]:
+                    return (
+                        self.output[t, car]
+                        <= self.input[t, "wasteIn"] * lhv_msw_hourly[t-1] * el_efficiency
+                    )
+                else:
+                    return (
+                        self.output[t, car]
+                        <= self.input[t, "wasteIn"] * lhv * el_efficiency
+                    )
 
         b_tec.const_input_output = pyo.Constraint(
             self.set_t_performance, b_tec.set_output_carriers, rule=init_input_output
         )
 
         def init_total_output(const, t):
-            return (
-                self.output[t, "heat"]/th_efficiency + self.output[t, "electricity"]/el_efficiency
-                == self.input[t, "wasteIn"]*lhv
-            )
+            if self.performance_data["ccs"]["co2_concentration_is_hourly"]:
+                return (
+                    self.output[t, "heat"]/th_efficiency + self.output[t, "electricity"]/el_efficiency
+                    == self.input[t, "wasteIn"]*lhv_msw_hourly[t-1]
+                )
+            else:
+                return (
+                        self.output[t, "heat"] / th_efficiency + self.output[t, "electricity"] / el_efficiency
+                        == self.input[t, "wasteIn"] * lhv
+                )
 
 
         b_tec.const_total_output = pyo.Constraint(
@@ -243,4 +262,213 @@ class WasteToEnergy(Technology):
 
 
 
+
+    def _define_ccs_performance(self, b_tec, data: dict):
+        """
+        Defines CCS performance. The unit capex parameter is calculated from Eq. 10 of Weimann et al. 2023
+
+        :param b_tec: pyomo block with technology model
+        :param dict data: dict containing model information
+        :return: pyomo block with technology model
+        """
+
+        coeff_ti = self.ccs_component.processed_coeff.time_independent
+        coeff_td = self.ccs_component.processed_coeff.time_dependent_full
+
+        emission_factor = self.processed_coeff.time_independent["max_emission_factor_msw"]
+        emission_factor_hourly = self.processed_coeff.time_dependent_full["emission_factor_msw_hourly"]
+
+        capture_rate = coeff_ti["capture_rate"]
+
+        # Initialize the size of CCS as in _define_size (size given in mass flow of CO2 entering the CCS object)
+        b_tec.para_size_min_ccs = pyo.Param(
+            domain=pyo.NonNegativeReals,
+            initialize=self.ccs_component.size_min,
+            mutable=True,
+        )
+        b_tec.para_size_max_ccs = pyo.Param(
+            domain=pyo.NonNegativeReals,
+            initialize=self.ccs_component.size_max,
+            mutable=True,
+        )
+
+        # Size CCS
+        b_tec.var_size_ccs = pyo.Var(
+            within=pyo.NonNegativeReals,
+            bounds=(0, b_tec.para_size_max_ccs),
+        )
+
+        # TODO: maybe make the full set of all carriers as an intersection between this set and  the others?
+
+        b_tec.var_tec_emissions_pos = pyo.Var(
+            self.set_t_global, within=pyo.NonNegativeReals
+        )
+        b_tec.var_tec_emissions_neg = pyo.Var(
+            self.set_t_global, within=pyo.NonNegativeReals
+        )
+
+        def init_input_bounds(bounds, t, car):
+            return tuple(
+                self.ccs_component.bounds["input"][car][self.sequence[t - 1] - 1, :]
+                * coeff_ti["size_max"]
+            )
+
+        b_tec.var_input_ccs = pyo.Var(
+            self.set_t_global,
+            b_tec.set_input_carriers_ccs,
+            within=pyo.NonNegativeReals,
+            bounds=init_input_bounds,
+        )
+
+        def init_output_bounds(bounds, t, car):
+            return tuple(
+                self.ccs_component.bounds["output"][car][self.sequence[t - 1] - 1, :]
+                * coeff_ti["size_max"]
+            )
+
+        b_tec.var_output_ccs = pyo.Var(
+            self.set_t_global,
+            b_tec.set_output_carriers_ccs,
+            within=pyo.NonNegativeReals,
+            bounds=init_output_bounds,
+        )
+
+        # Input-output correlation
+        def init_input_output_ccs(const, t):
+            if self.emissions_based_on == "output":
+                if self.performance_data["ccs"]["co2_concentration_is_hourly"]:
+                    return (
+                        b_tec.var_output_ccs[t, "CO2captured"]
+                        <= capture_rate
+                        * emission_factor_hourly[t-1]
+                        * b_tec.var_output[t, self.main_output_carrier]
+                    )
+                else:
+                    return (
+                            b_tec.var_output_ccs[t, "CO2captured"]
+                            <= capture_rate
+                            * emission_factor
+                            * b_tec.var_output[t, self.main_output_carrier]
+                    )
+            else:
+                if self.performance_data["ccs"]["co2_concentration_is_hourly"]:
+                    return (
+                        b_tec.var_output_ccs[t, "CO2captured"]
+                        <= capture_rate
+                        * emission_factor_hourly[t-1]
+                        * b_tec.var_input[t, self.main_input_carrier]
+                    )
+                else:
+                    return (
+                            b_tec.var_output_ccs[t, "CO2captured"]
+                            <= capture_rate
+                            * emission_factor
+                            * b_tec.var_input[t, self.main_input_carrier]
+                    )
+
+        b_tec.const_input_output_ccs = pyo.Constraint(
+            self.set_t_global, rule=init_input_output_ccs
+        )
+
+        def init_size_output_ccs(const, t):
+            return b_tec.var_output_ccs[t, "CO2captured"] <= b_tec.var_size_ccs
+
+        b_tec.const_size_output_ccs = pyo.Constraint(
+            self.set_t_global, rule=init_size_output_ccs
+        )
+
+        # Electricity and heat demand CCS
+        def init_input_ccs(const, t, car):
+            if self.performance_data["ccs"].get("co2_concentration_is_hourly", False):
+                return (
+                    b_tec.var_input_ccs[t, car]
+                    == coeff_td["input_ratios"][car][t-1]
+                    * b_tec.var_output_ccs[t, "CO2captured"]
+                    / capture_rate
+                )
+            else:
+                return (
+                    b_tec.var_input_ccs[t, car]
+                    == coeff_ti["input_ratios"][car]
+                    * b_tec.var_output_ccs[t, "CO2captured"]
+                    / capture_rate
+                )
+
+        b_tec.const_input_el = pyo.Constraint(
+            self.set_t_global, b_tec.set_input_carriers_ccs, rule=init_input_ccs
+        )
+
+        return b_tec
+
+    def _define_ccs_emissions(self, b_tec):
+        """
+        Defines CCS performance. The unit capex parameter is calculated from Eq. 10 of Weimann et al. 2023
+
+        :param b_tec: pyomo block with technology model
+        :return: pyomo block with technology model
+        """
+
+        emission_factor = self.processed_coeff.time_independent["max_emission_factor_msw"]
+        emission_factor_hourly = self.processed_coeff.time_dependent_full["emission_factor_msw_hourly"]
+
+        # Emissions
+        if self.emissions_based_on == "output":
+
+            def init_tec_emissions_pos(const, t):
+                if self.performance_data["ccs"]["co2_concentration_is_hourly"]:
+                    return (
+                        b_tec.var_output[t, self.main_output_carrier]
+                        * emission_factor_hourly[t-1]
+                        - b_tec.var_output_ccs[t, "CO2captured"]
+                        == b_tec.var_tec_emissions_pos[t]
+                    )
+                else:
+                    return (
+                            b_tec.var_output[t, self.main_output_carrier]
+                            * emission_factor
+                            - b_tec.var_output_ccs[t, "CO2captured"]
+                            == b_tec.var_tec_emissions_pos[t]
+                    )
+
+            b_tec.const_tec_emissions_pos = pyo.Constraint(
+                self.set_t_global, rule=init_tec_emissions_pos
+            )
+
+            def init_tec_emissions_neg(const, t):
+                return b_tec.var_tec_emissions_neg[t] == 0
+
+            b_tec.const_tec_emissions_neg = pyo.Constraint(
+                self.set_t_global, rule=init_tec_emissions_neg
+            )
+
+        elif self.emissions_based_on == "input":
+
+            def init_tec_emissions_pos(const, t):
+                if self.performance_data["ccs"]["co2_concentration_is_hourly"]:
+                    return (
+                        b_tec.var_input[t, self.main_input_carrier]
+                        * emission_factor_hourly[t-1]
+                        - b_tec.var_output_ccs[t, "CO2captured"]
+                        == b_tec.var_tec_emissions_pos[t]
+                    )
+                else:
+                    return (
+                            b_tec.var_input[t, self.main_input_carrier]
+                            * emission_factor
+                            - b_tec.var_output_ccs[t, "CO2captured"]
+                            == b_tec.var_tec_emissions_pos[t]
+                    )
+
+            b_tec.const_tec_emissions_pos = pyo.Constraint(
+                self.set_t_global, rule=init_tec_emissions_pos
+            )
+
+            def init_tec_emissions_neg(const, t):
+                return b_tec.var_tec_emissions_neg[t] == 0
+
+            b_tec.const_tec_emissions_neg = pyo.Constraint(
+                self.set_t_global, rule=init_tec_emissions_neg
+            )
+
+        return b_tec
 
