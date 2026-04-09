@@ -55,12 +55,11 @@ class WasteToEnergyCaLCCS(Technology):
             offdesign_co2_conc = pd.read_excel(
                 other_data_path, sheet_name="offdesign_results", index_col=0
             )
-            data_waste_in = pd.read_excel(
-                other_data_path, sheet_name="emission_factor_waste", index_col=0
-            )
-            x_values_conc = data_waste_in.columns.astype(float)
-            y_values_lhv = data_waste_in.loc['lhv_MWh_twaste']
-            y_values_ef = data_waste_in.loc['emission_factor_tco2_twaste']
+            waste_prop = self.performance_data["waste_prop_interp"]
+
+            x_values_conc = np.array(waste_prop["ref_co2_conc"])
+            y_values_lhv = np.array(waste_prop["ref_lhv"])
+            y_values_ef = np.array(waste_prop["ref_emission_factor"])
             function_lhv = interp1d(x_values_conc, y_values_lhv, fill_value="extrapolate")
             function_ef = interp1d(x_values_conc, y_values_ef, fill_value="extrapolate")
 
