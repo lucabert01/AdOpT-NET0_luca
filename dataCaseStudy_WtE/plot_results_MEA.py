@@ -12,6 +12,7 @@ from matplotlib import rcParams
 from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
+from scipy.interpolate import interp1d
 
 
 # ======================================================
@@ -42,10 +43,11 @@ el_price = data["el_price_itNord"]
 
 json_wasteCHP = Path("./technologies_json/WasteCHP.json")
 info_wasteCHP = json.loads(json_wasteCHP.read_text())
-lhv = info_wasteCHP["Performance"]["LHV"]
 th_efficiency = info_wasteCHP["Performance"]["th_efficiency"]
 el_efficiency = info_wasteCHP["Performance"]["el_efficiency"]
-emission_factor = info_wasteCHP["Performance"]["emission_factor"]
+emission_factor = data["emission_factor_PAIP"]
+lhv = data["lhv_PAIP"]
+
 
 json_mea = Path("./technologies_json/MEA_medium.json")
 info_mea = json.loads(json_mea.read_text())
