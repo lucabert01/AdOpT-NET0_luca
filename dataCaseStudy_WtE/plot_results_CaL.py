@@ -31,14 +31,14 @@ path_processed_data = Path("./dataSources/hourly_data_casestudy.xlsx")
 data = pd.read_excel(path_processed_data)
 av_el_price = data["el_price_itNord"].mean()
 electricity_price_norm = data["el_price_itNord"]/av_el_price
+emission_factor = data["emission_factor_PAIP"]
+lhv = data["lhv_PAIP"]
 
 json_WasteCaL_CCS = Path("./technologies_json/WasteCaL_CCS.json")
 info_WasteCaL_CCS = json.loads(json_WasteCaL_CCS.read_text())
-lhv = info_WasteCaL_CCS["Performance"]["LHV"]
 lhv_rdf = info_WasteCaL_CCS["Performance"]["LHV_RDF"]
 th_efficiency = info_WasteCaL_CCS["Performance"]["th_efficiency"]
 el_efficiency = info_WasteCaL_CCS["Performance"]["el_efficiency"]
-emission_factor = info_WasteCaL_CCS["Performance"]["emission_factor"]
 emission_factor_rdf = info_WasteCaL_CCS["Performance"]["emission_factor_RDF"]
 ccr = info_WasteCaL_CCS["Performance"]["capture_rate"]
 
