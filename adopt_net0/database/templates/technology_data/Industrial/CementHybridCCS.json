@@ -64,6 +64,21 @@
       "CO2captured",
       "clinker"
     ],
+    "waste_prop_interp": {
+        "waste_as_function_of_co2_conc": 1,
+        "ref_co2_conc": [
+            0.08,
+            0.1
+        ],
+        "ref_lhv": [
+            2.45,
+            3.0
+        ],
+        "ref_emission_factor": [
+            0.89,
+            1.04
+        ]
+    },
     "emission_factor": 0,
     "min_part_load": 0,
     "performance": {
