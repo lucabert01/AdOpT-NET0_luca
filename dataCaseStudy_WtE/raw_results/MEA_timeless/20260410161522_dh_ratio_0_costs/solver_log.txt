@@ -1,7 +1,7 @@
 
-Gurobi 12.0.1 (win64) logging started Mon Mar  2 22:08:16 2026
+Gurobi 12.0.1 (win64) logging started Fri Apr 10 16:16:40 2026
 
-Set parameter LogFile to value "dataCaseStudy_WtE\raw_results\MEA_timeless\20260302220652_dh_ratio_0.5_costs\solver_log.txt"
+Set parameter LogFile to value "dataCaseStudy_WtE\raw_results\MEA_timeless\20260410161522_dh_ratio_0_costs\solver_log.txt"
 Set parameter TimeLimit to value 36000
 Set parameter MIPGap to value 0.02
 Set parameter MIPFocus to value 0
@@ -28,7 +28,7 @@ LPWarmStart  0
 NodefileStart  60
 
 Optimize a model with 1007454 rows, 1042488 columns and 2233908 nonzeros
-Model fingerprint: 0xb8b6b5a9
+Model fingerprint: 0xd7c95f70
 Variable types: 1042484 continuous, 4 integer (4 binary)
 Coefficient statistics:
   Matrix range     [1e-05, 1e+07]
@@ -40,28 +40,28 @@ Warning: Model contains large bounds
          Consider reformulating model or setting NumericFocus parameter
          to avoid numerical issues.
 Presolve removed 963652 rows and 1007449 columns
-Presolve time: 1.14s
+Presolve time: 1.18s
 Presolved: 43802 rows, 35039 columns, 105121 nonzeros
 Variable types: 35037 continuous, 2 integer (2 binary)
 Performing another presolve...
 Presolve removed 43797 rows and 35032 columns
-Presolve time: 0.13s
+Presolve time: 0.19s
 
-Root relaxation: objective 1.027218e+07, 3 iterations, 0.00 seconds (0.00 work units)
+Root relaxation: objective 5.231882e+06, 3 iterations, 0.03 seconds (0.00 work units)
 
     Nodes    |    Current Node    |     Objective Bounds      |     Work
  Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
 
-     0     0 1.0272e+07    0    1          - 1.0272e+07      -     -    1s
-     0     0 1.0272e+07    0    1          - 1.0272e+07      -     -    1s
-     0     2 1.0272e+07    0    1          - 1.0272e+07      -     -    1s
-*    1     0               1    2.073534e+07 1.1594e+07  44.1%   0.0    1s
-*    2     0               1    1.159440e+07 1.1594e+07  0.00%   0.0    1s
+     0     0 5231882.04    0    1          - 5231882.04      -     -    2s
+     0     0 5231882.04    0    1          - 5231882.04      -     -    2s
+     0     2 5231882.04    0    1          - 5231882.04      -     -    2s
+*    1     0               1    1.562769e+07 6558439.58  58.0%   0.0    2s
+*    2     0               1    6558439.5774 6558439.58  0.00%   0.0    2s
 
-Explored 3 nodes (3 simplex iterations) in 2.09 seconds (0.89 work units)
+Explored 3 nodes (3 simplex iterations) in 2.50 seconds (0.90 work units)
 Thread count was 8 (of 8 available processors)
 
-Solution count 2: 1.15944e+07 2.07353e+07 
+Solution count 2: 6.55844e+06 1.56277e+07 
 
 Optimal solution found (tolerance 2.00e-02)
-Best objective 1.159440403027e+07, best bound 1.159440403027e+07, gap 0.0000%
+Best objective 6.558439577374e+06, best bound 6.558439577374e+06, gap 0.0000%
