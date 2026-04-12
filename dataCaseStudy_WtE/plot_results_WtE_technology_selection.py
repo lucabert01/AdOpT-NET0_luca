@@ -50,8 +50,8 @@ explored_dh_ratio = [0.5]
 gas_price = 40
 import_price_RDF = 20
 
-path_processed_data = Path("../dataCaseStudy_Cement/dataSources/data_processed.xlsx")
-data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
+path_processed_data = Path("./dataSources/hourly_data_casestudy.xlsx")
+data = pd.read_excel(path_processed_data)
 av_el_price = data["el_price_itNord"].mean()
 electricity_price_norm = data["el_price_itNord"] / av_el_price
 emission_factor = data["emission_factor_PAIP"]

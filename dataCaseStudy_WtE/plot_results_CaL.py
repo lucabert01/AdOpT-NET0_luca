@@ -23,7 +23,7 @@ figures_path = "../figures"
 
 ## -----------------  Electricity price --------------------------
 
-explored_el_price = [100,125, 150, 175, 200] # average el prices explored in the analysis
+explored_el_price = [100,150, 200, 250, 300] # average el prices explored in the analysis
 rolling_av_hours = 1
 import_price_RDF = 20
 
@@ -277,7 +277,7 @@ ax2.tick_params(axis='y', labelcolor=colors[2])
 ax1.annotate(
     "Size",
     xy=(el_prices[1], fraction_size_cal_values[1]),
-    xytext=(el_prices[1] - 15, fraction_size_cal_values[1] + 0.022),
+    xytext=(el_prices[1] - 15, fraction_size_cal_values[1] - 0.022),
     color=colors[1],
     arrowprops=dict(
         arrowstyle="->",
@@ -517,7 +517,7 @@ all_totals = np.concatenate([
 ymax = all_totals.max() * 1.15
 ymin = min(all_totals.min() * 1.15, 0)
 
-ax.set_ylim(-300, 400)
+ax.set_ylim(-330, 400)
 
 ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
 ax.set_axisbelow(True)
