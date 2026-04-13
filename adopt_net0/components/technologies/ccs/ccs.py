@@ -49,13 +49,8 @@ def fit_ccs_coeff(tech_data: dict, ccs_data: dict, tech_name: str, climate_data:
     convert2t_per_h = molar_mass_CO2 * design_co2_concentration * 3.6
     capture_rate = ccs_data["Performance"]["capture_rate"]
     # Recalculate unit_capex in EUR/(t_CO2out/h)
-    ccs_data["Economics"]["unit_capex"] = (
-        (
-            ccs_data["Economics"]["capex_kappa"] / convert2t_per_h
-            + ccs_data["Economics"]["capex_lambda"]
-        )
-        * design_co2_concentration
-    ) / convert2t_per_h
+    ccs_data["Economics"]["unit_capex"] = (ccs_data["Economics"]["capex_kappa"] / (design_co2_concentration*capture_rate)
+                                           + ccs_data["Economics"]["capex_lambda"]) /(molar_mass_CO2*3600/1000)
 
     ccs_data["Economics"]["fix_capex"] = ccs_data["Economics"]["capex_zeta"]
 
@@ -84,11 +79,11 @@ def fit_ccs_coeff(tech_data: dict, ccs_data: dict, tech_name: str, climate_data:
     ccs_data.processed_coeff.time_independent["capture_rate"] = capture_rate
     if "MEA" in ccs_data.technology_model:
         for car in ccs_data.input_carrier:
-            el_consumption_compression = ccs_data.performance_data["el_consumption_compression"] / capture_rate if car=="electricity" else 0
+            el_consumption_compression = ccs_data.performance_data["el_consumption_compression"] if car=="electricity" else 0
             input_ratios_container[car] = (
                 ccs_data.performance_data["eta"][car]
                 + ccs_data.performance_data["omega"][car] * co2_concentration
-            ) / (co2_concentration * molar_mass_CO2 * 3.6)  + el_consumption_compression
+            ) / (co2_concentration * molar_mass_CO2 * 3.6 * capture_rate)  + el_consumption_compression
     else:
         raise Exception(
             "Only CCS type MEA is modelled so far. ccs_type in the json file of the "
