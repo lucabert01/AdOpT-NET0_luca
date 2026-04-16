@@ -47,6 +47,7 @@
     "LHV_RDF": 4.92,
     "emission_factor": 0.89,
     "emission_factor_RDF": 1.649,
+    "fraction_emissions_wte": 0.49,
     "min_part_load": 0,
     "el_efficiency": 0.264,
     "th_efficiency": 0.865,
