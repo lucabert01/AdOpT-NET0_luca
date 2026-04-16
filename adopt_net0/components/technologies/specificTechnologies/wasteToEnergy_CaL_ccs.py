@@ -47,6 +47,9 @@ class WasteToEnergyCaLCCS(Technology):
                 other_data_path
                 / "database/templates/technology_data/Industrial/WasteCaL_data/wasteCaL_sheet.xlsx"
         )
+        el_efficiency_design = self.performance_data["el_efficiency_CaL"]
+        th_input_cal_design = self.performance_data["th_input_CaL"]
+
         el_efficiency_cal_hourly = []
         th_input_cal_hourly = []
         lhv_hourly = []
@@ -64,14 +67,12 @@ class WasteToEnergyCaLCCS(Technology):
             function_ef = interp1d(x_values_conc, y_values_ef, fill_value="extrapolate")
 
             co2_concentration = climate_data[f"co2_concentration_{self.name}"]
-            design_co2_conc = self.performance_data["design_co2_concentration"]
+            design_co2_conc = co2_concentration.mean()
 
             rel_eff_variation_down_conc = offdesign_co2_conc.loc["down conc", "rel_el_eff_variation"]
             rel_eff_variation_up_conc = offdesign_co2_conc.loc["up conc", "rel_el_eff_variation"]
-            el_efficiency_design = self.performance_data["el_efficiency_CaL"]
             rel_th_input_rdf_variation_down_conc = offdesign_co2_conc.loc["down conc", "rel_rdf_input_variation"]
             rel_th_input_rdf_variation_up_conc = offdesign_co2_conc.loc["up conc", "rel_rdf_input_variation"]
-            th_input_cal_design = self.performance_data["th_input_CaL"]
 
             for t in range(len(co2_concentration)):
                 if co2_concentration.iloc[t] >= design_co2_conc:
@@ -94,6 +95,7 @@ class WasteToEnergyCaLCCS(Technology):
             self.processed_coeff.time_dependent_full["lhv_msw_hourly"] = lhv_hourly
             self.processed_coeff.time_dependent_full["emission_factor_msw_hourly"] = emission_factor_hourly
 
+
         self.processed_coeff.time_independent["max_el_efficiency_cal"] = max(el_efficiency_cal_hourly) if self.performance_data["co2_concentration_is_hourly"] \
             else el_efficiency_design
         self.processed_coeff.time_independent["max_th_input_cal"] = max(th_input_cal_hourly) if self.performance_data["co2_concentration_is_hourly"] \
@@ -103,6 +105,8 @@ class WasteToEnergyCaLCCS(Technology):
         self.processed_coeff.time_independent["max_emission_factor_msw"] = max(emission_factor_hourly) if self.performance_data["co2_concentration_is_hourly"] \
             else self.performance_data["emission_factor"]
 
+        self.processed_coeff.time_independent["design_co2_concentration"] = design_co2_conc if self.performance_data["co2_concentration_is_hourly"] \
+            else self.performance_data["design_co2_concentration"]
 
     def _define_size(self, b_tec):
         """
@@ -472,15 +476,21 @@ class WasteToEnergyCaLCCS(Technology):
             capex_data_path, sheet_name="capex_eur", index_col=0
         )
 
-        self.economics["bp_x_capex_cal"] = capex_data.index.tolist()
         possible_concentrations = capex_data.columns.tolist()
-        co2_concentration = self.performance_data["design_co2_concentration"]
+        co2_concentration = self.processed_coeff.time_independent["design_co2_concentration"]
         bp_y_capex_cal_adjusted = []
-        for s in self.economics["bp_x_capex_cal"]:
+        for s in capex_data.index.tolist():
             capex_interpolated = interp1d(possible_concentrations, capex_data.loc[s], kind="linear", fill_value="extrapolate")
             bp_y_capex_cal_adjusted.append(capex_interpolated(co2_concentration))
 
         self.economics["bp_y_capex_cal"] = bp_y_capex_cal_adjusted
+
+        # convert bp_x from kmol_fluegas/h to tCO2_out/h
+        mm_co2 = 44.01
+        fraction_emissions_wte = self.performance_data["fraction_emissions_wte"]
+        capture_rate = self.performance_data["capture_rate"]
+        convert_to_co2_out = co2_concentration*mm_co2/1000/fraction_emissions_wte*capture_rate
+        self.economics["bp_x_capex_cal"] = (capex_data.index*convert_to_co2_out).tolist()
 
 
         if self.existing and not self.decommission == "impossible":
