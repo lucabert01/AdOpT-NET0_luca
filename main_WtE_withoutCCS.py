@@ -10,7 +10,7 @@ import os
 casepath= Path("CaseStudies_WtE/technology_selection")
 json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
 json_files_path_network = Path("./dataCaseStudy_WtE/network_json")
-result_path = "./dataCaseStudy_WtE/raw_results/technology_selection"
+result_path = "./dataCaseStudy_WtE/raw_results/WtE_withoutCCS"
 
 adopt.create_optimization_templates(casepath)
 

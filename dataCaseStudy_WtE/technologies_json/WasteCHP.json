@@ -33,7 +33,7 @@
         "el_efficiency": 0.264,
         "th_efficiency": 0.865,
         "ccs": {
-            "possible": 1,
+            "possible": 0,
             "co2_concentration_is_hourly": 1,
             "co2_concentration": 0.08,
             "ccs_type": "MEA_medium"
