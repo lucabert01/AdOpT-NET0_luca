@@ -1,23 +1,17 @@
 import subprocess, os, sys
 
 mains = ["main_cement.py", "main_WtE_CaL.py", "main_WtE_MEA.py", "main_WtE_MEA_timeless.py", "main_WtE_technology_selection.py"]
-mains = ["main_WtE_MEA.py", "main_WtE_MEA_timeless.py"]
+mains = ["main_WtE_CaL.py", "main_WtE_MEA.py", "main_WtE_MEA_timeless.py", "main_WtE_technology_selection.py",
+         "main_WtE_withoutCCS.py"]
 plots = ["plot_results_CaL.py","plot_results_MEA.py","plot_results_WtE_technology_selection.py","plot_results_cement.py",]
 processes = []
 env = os.environ.copy()
 
 
-# Start all scripts
 for script in mains:
-    p = subprocess.Popen(
-    [sys.executable, script],
-    env=env
-)
-    processes.append(p)
-    print(f"Launched {script}")
+    print(f"Starting {script}...")
+    # run() waits for the process to complete before moving to the next iteration
+    subprocess.run([sys.executable, script], check=True)
+    print(f"Finished {script}\n")
 
-# Wait for all scripts to finish
-for p in processes:
-    p.wait()
-
-print("All parallel simulations finished.")
+print("All sequential simulations finished.")
