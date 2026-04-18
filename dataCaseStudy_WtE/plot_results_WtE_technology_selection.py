@@ -596,8 +596,8 @@ for dh in explored_dh_ratio_str:
 
 # --- 2. STANDARDIZED PLOTTING FUNCTION ---
 def plot_heatmap(df, label, filename, cmap, is_pct=False, zero_color="lightgrey"):
-    setup_matplotlib_for_paper("double")
-    fig, ax = plt.subplots()
+    setup_matplotlib_for_paper("single")
+    fig, ax = plt.subplots(layout="constrained")
 
     data = df.to_numpy()
     n_rows, n_cols = data.shape
@@ -647,8 +647,6 @@ def plot_heatmap(df, label, filename, cmap, is_pct=False, zero_color="lightgrey"
     ax.invert_yaxis()
     ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
     ax.set_ylabel("Electricity price [€/MWh]")
-
-    fig.tight_layout(pad=0.6)
 
     sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
     sm.set_array([])
