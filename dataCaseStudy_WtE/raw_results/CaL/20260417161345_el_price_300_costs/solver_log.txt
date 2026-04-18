@@ -1,0 +1,68 @@
+
+Gurobi 12.0.1 (win64) logging started Fri Apr 17 16:14:55 2026
+
+Set parameter LogFile to value "dataCaseStudy_WtE\raw_results\CaL\20260417161345_el_price_300_costs\solver_log.txt"
+Set parameter TimeLimit to value 36000
+Set parameter MIPGap to value 0.02
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Gold 5120 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 8 physical cores, 8 logical processors, using up to 8 threads
+
+Non-default parameters:
+TimeLimit  36000
+MIPGap  0.02
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1095044 rows, 1138846 columns and 2435373 nonzeros
+Model fingerprint: 0xdcbc11f4
+Model has 1 SOS constraint
+Variable types: 1138844 continuous, 2 integer (2 binary)
+Coefficient statistics:
+  Matrix range     [1e-05, 5e+07]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+09]
+  RHS range        [8e-03, 1e+07]
+Warning: Model contains large matrix coefficient range
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+Presolve removed 1064701 rows and 1113188 columns
+Presolve time: 1.35s
+Presolved: 30343 rows, 25658 columns, 69442 nonzeros
+Variable types: 25654 continuous, 4 integer (4 binary)
+Performing another presolve...
+Presolve removed 12823 rows and 16893 columns
+Presolve time: 0.08s
+
+Root relaxation: objective -8.616886e+06, 4458 iterations, 0.17 seconds (0.30 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 -8616885.7    0    3          - -8616885.7      -     -    2s
+     0     0 -8616885.7    0    3          - -8616885.7      -     -    2s
+     0     2 -8616885.7    0    3          - -8616885.7      -     -    2s
+*    4     3               2    1.104775e+07 684522.471  93.8%  2005    2s
+*    8     0               3    4526518.0009 4526518.00  0.00%  1150    2s
+
+Explored 9 nodes (13657 simplex iterations) in 2.69 seconds (1.71 work units)
+Thread count was 8 (of 8 available processors)
+
+Solution count 2: 4.52652e+06 1.10477e+07 
+
+Optimal solution found (tolerance 2.00e-02)
+Best objective 4.526518000937e+06, best bound 4.526518000937e+06, gap 0.0000%
