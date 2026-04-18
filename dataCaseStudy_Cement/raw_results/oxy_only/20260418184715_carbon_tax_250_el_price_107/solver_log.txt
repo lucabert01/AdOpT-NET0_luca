@@ -1,7 +1,7 @@
 
-Gurobi 12.0.2 (win64) logging started Tue Apr  7 23:19:43 2026
+Gurobi 12.0.2 (win64) logging started Sat Apr 18 18:47:56 2026
 
-Set parameter LogFile to value "dataCaseStudy_Cement\raw_results\oxy_only\20260407231826_carbon_tax_90_el_price_107\solver_log.txt"
+Set parameter LogFile to value "dataCaseStudy_Cement\raw_results\oxy_only\20260418184715_carbon_tax_250_el_price_107\solver_log.txt"
 Set parameter TimeLimit to value 36000
 Set parameter MIPGap to value 0.02
 Set parameter MIPFocus to value 0
@@ -28,37 +28,44 @@ LPWarmStart  0
 NodefileStart  60
 
 Optimize a model with 1016205 rows, 946127 columns and 2225140 nonzeros
-Model fingerprint: 0xb2709a58
+Model fingerprint: 0xa053a0f8
 Model has 2 SOS constraints
 Variable types: 911085 continuous, 35042 integer (35042 binary)
 Coefficient statistics:
   Matrix range     [1e-05, 1e+07]
   Objective range  [1e+00, 1e+00]
-  Bounds range     [1e+00, 6e+07]
+  Bounds range     [1e+00, 1e+08]
   RHS range        [1e+00, 1e+07]
 Warning: Model contains large matrix coefficient range
          Consider reformulating model or setting NumericFocus parameter
          to avoid numerical issues.
-Presolve removed 950452 rows and 916690 columns
-Presolve time: 1.62s
-Presolved: 65753 rows, 29437 columns, 152175 nonzeros
-Variable types: 20672 continuous, 8765 integer (8765 binary)
+Presolve removed 950457 rows and 916694 columns
+Presolve time: 0.52s
+Presolved: 65748 rows, 29433 columns, 152161 nonzeros
+Variable types: 20668 continuous, 8765 integer (8765 binary)
 Performing another presolve...
-Presolve removed 38191 rows and 15652 columns
-Presolve time: 0.61s
+Presolve removed 50831 rows and 21970 columns
+Presolve time: 0.54s
+Found heuristic solution: objective 8.819997e+07
+Found heuristic solution: objective 7.623029e+07
 
-Root relaxation: objective 6.503954e+07, 54 iterations, 0.29 seconds (0.73 work units)
+Root relaxation: objective 6.850294e+07, 9139 iterations, 0.25 seconds (0.32 work units)
 
     Nodes    |    Current Node    |     Objective Bounds      |     Work
  Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
 
-*    0     0               0    6.503954e+07 6.5040e+07  0.00%     -    3s
+     0     0 6.8503e+07    0    2 7.6230e+07 6.8503e+07  10.1%     -    1s
+     0     0 6.8506e+07    0    1 7.6230e+07 6.8506e+07  10.1%     -    1s
+H    0     0                    6.850898e+07 6.8506e+07  0.00%     -    2s
 
-Explored 1 nodes (54 simplex iterations) in 3.46 seconds (2.19 work units)
+Cutting planes:
+  Gomory: 1
+
+Explored 1 nodes (9142 simplex iterations) in 2.46 seconds (2.37 work units)
 Thread count was 12 (of 12 available processors)
 
-Solution count 1: 6.50395e+07 
+Solution count 3: 6.8509e+07 7.62303e+07 8.82e+07 
 
 Optimal solution found (tolerance 2.00e-02)
-Warning: max constraint violation (1.6863e-06) exceeds tolerance
-Best objective 6.503954222263e+07, best bound 6.503954222262e+07, gap 0.0000%
+Warning: max constraint violation (3.9413e-06) exceeds tolerance
+Best objective 6.850898045020e+07, best bound 6.850898045019e+07, gap 0.0000%

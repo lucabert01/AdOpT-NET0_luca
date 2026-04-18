@@ -7,17 +7,10 @@ processes = []
 env = os.environ.copy()
 
 
-# Start all scripts
 for script in mains:
-    p = subprocess.Popen(
-    [sys.executable, script],
-    env=env
-)
-    processes.append(p)
-    print(f"Launched {script}")
+    print(f"Starting {script}...")
+    # run() waits for the process to complete before moving to the next iteration
+    subprocess.run([sys.executable, script], check=True)
+    print(f"Finished {script}\n")
 
-# Wait for all scripts to finish
-for p in processes:
-    p.wait()
-
-print("All parallel simulations finished.")
+print("All sequential simulations finished.")
