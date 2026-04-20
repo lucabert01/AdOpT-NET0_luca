@@ -202,7 +202,7 @@ for name_sim in simulations:
 
         for j in range(len(total_heat_production)):
 
-            denominator = max(total_heat_production)
+            denominator = total_heat_production.mean()
 
             if total_heat_production[j] > 0:
                 heat_for_ccs.append(
@@ -262,7 +262,7 @@ for name_sim in simulations:
 
         ax.text(
             0.5,
-            0.97,
+            0.93,
             f"DH ratio {dh_ratio_str}",
             transform=ax.transAxes,
             ha="center",
@@ -273,7 +273,8 @@ for name_sim in simulations:
                 facecolor="white",
                 alpha=0.8,
                 edgecolor="none"
-            )
+            ),
+            clip_on=True
         )
 
     # --- LEGEND IN EMPTY PANEL (EXACTLY LIKE YOUR ORIGINAL) ---
@@ -289,7 +290,7 @@ for name_sim in simulations:
         loc="center",
         frameon=True,
         ncol=1,
-        fontsize=rcParams["legend.fontsize"]
+        fontsize=rcParams["axes.labelsize"]
     )
 
     legend.get_frame().set_facecolor("white")
