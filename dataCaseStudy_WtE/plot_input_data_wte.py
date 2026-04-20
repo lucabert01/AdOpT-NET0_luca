@@ -33,6 +33,7 @@ data = pd.read_excel(path_processed_data)
 plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
 co2_concentration = data["co2_concentration_"+plant_analyzed]
 norm_heat_demand = data["normalized_heat_demand_milan"]
+wasteProcessed_demand_norm = data["waste_in_PAIP"]
 emissions = data[f"emission_{plant_analyzed}"]
 average_conc = co2_concentration.mean()
 
