@@ -255,8 +255,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
 setup_matplotlib_for_paper("single")
 
 types = ["none", "MEA", "Oxyfuel", "Oxyfuel + PCC"]
-type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
-
+type_to_color = {t: batlow_colors[i] for i, t in zip([0, 1, 2, 4], types)}
 # ------------------------------------------------------------
 # FIGURE
 # ------------------------------------------------------------
@@ -285,7 +284,7 @@ for i, ep in enumerate(type_matrix.index):
             j + 0.5, i + 0.5,
             f"{cost:.1f}",
             ha="center", va="center",
-            color="white",
+            color="black" if tech == "Oxyfuel + PCC" else "white",
             fontsize=rcParams["font.size"] - 2,
             fontweight="bold"
         )
