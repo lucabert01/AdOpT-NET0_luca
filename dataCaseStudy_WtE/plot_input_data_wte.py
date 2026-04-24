@@ -36,7 +36,7 @@ norm_heat_demand = data["normalized_heat_demand_milan"]
 wasteProcessed_demand_norm = data["waste_in_PAIP"]
 emissions = data[f"emission_{plant_analyzed}"]
 average_conc = co2_concentration.mean()
-
+emissions_norm = emissions/max(emissions)
 
 other_data_path = Path("../adopt_net0")
 other_data_path = (
@@ -84,7 +84,7 @@ def ecdf(series):
 rows = [
     ("El. price [-]", electricity_price_norm, batlow_colors[0]),
     ("Heat demand [-]",       norm_heat_demand,       batlow_colors[1]),
-    ("Waste input [-]",   wasteProcessed_demand_norm,  batlow_colors[2]),
+    ("CO$_2$ emisssions [-]",   emissions_norm,  batlow_colors[2]),
     ("CO$_2$ conc. [%]", co2_concentration*100,      batlow_colors[3]),
 ]
 
