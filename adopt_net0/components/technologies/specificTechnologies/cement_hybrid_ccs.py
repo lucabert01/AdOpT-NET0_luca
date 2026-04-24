@@ -215,11 +215,7 @@ class CementHybridCCS(Technology):
         CCR_oxy = self.performance_data["performance"]["CCR_oxy"]
         CCR_mea = self.performance_data["performance"]["CCR_mea"]
 
-        b_tec.var_co2_captured_mea = pyo.Var(
-            self.set_t_performance,
-            within=pyo.NonNegativeReals,
-            bounds=[0, self.processed_coeff.time_independent["size_max_mea"]],
-        )
+
 
         if self.performance_data["clinker_capacity_is_fixed"]:
 
@@ -386,6 +382,13 @@ class CementHybridCCS(Technology):
             within=pyo.NonNegativeReals,
             bounds=init_output_bounds,
         )
+
+        b_tec.var_co2_captured_mea = pyo.Var(
+            self.set_t_performance,
+            within=pyo.NonNegativeReals,
+            bounds=[0, self.processed_coeff.time_independent["size_max_mea"]],
+        )
+
         return b_tec
 
     def _define_emissions(self, b_tec):
