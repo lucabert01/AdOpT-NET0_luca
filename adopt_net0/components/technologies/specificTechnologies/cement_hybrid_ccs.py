@@ -629,26 +629,46 @@ class CementHybridCCS(Technology):
         annualization_factor = annualize(
             discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
+        emissions_clinker = self.performance_data["performance"][
+            "tCO2_tclinker"
+        ]
+        CCR_oxy = self.performance_data["performance"]["CCR_oxy"]
 
         # VARIABLE OPEX
-        b_tec.para_opex_variable = pyo.Param(
-            domain=pyo.Reals, initialize=economics["opex_variable"], mutable=True
+        b_tec.para_opex_var_oxy = pyo.Param(
+            domain=pyo.Reals,
+            initialize=economics["other_economics"]["opex_var_oxy"],
+            mutable=True,
+        )
+
+        b_tec.para_opex_var_mea = pyo.Param(
+            domain=pyo.Reals,
+            initialize=economics["other_economics"]["opex_var_MEA"],
+            mutable=True,
         )
         b_tec.var_opex_variable = pyo.Var()
 
+
+
         hour_factors = data["hour_factors"]
         nr_timesteps_averaged = data["nr_timesteps_averaged"]
-        def init_opex_variable(const, t):
-            """opexvar = sum(Input_{t, maincarrier}) * opex_{var}"""
 
+        def init_opex_variable(const):
             return (
                     sum(
                         (
-                            b_tec.var_output[t, self.main_output_carrier]
-                            * nr_timesteps_averaged
-                            * hour_factors[t - 1]
+                                b_tec.var_output[t, self.main_output_carrier]
+                                * emissions_clinker * CCR_oxy
+                                * nr_timesteps_averaged
+                                * hour_factors[t - 1]
+                                * b_tec.para_opex_var_oxy
                         )
-                        * b_tec.para_opex_variable
+                        + (
+                                b_tec.var_co2_captured_mea[t]
+                                * nr_timesteps_averaged
+                                * hour_factors[t - 1]
+                                * b_tec.para_opex_var_mea
+                        )
                         for t in self.set_t_global
                     )
                     == b_tec.var_opex_variable

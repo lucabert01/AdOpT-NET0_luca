@@ -40,7 +40,9 @@
       ]
       },
       "opex_fixed_MEA": 0.02,
-      "opex_fixed_oxy": 0.16
+      "opex_fixed_oxy": 0.16,
+      "opex_var_MEA": 15.9,
+      "opex_var_oxy": 1.3
     },
     "opex_variable": 3.56,
     "opex_fixed": 0,
