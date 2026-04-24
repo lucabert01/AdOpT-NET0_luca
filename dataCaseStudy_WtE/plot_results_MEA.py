@@ -142,6 +142,7 @@ for name_sim in simulations:
 
         results_summary[name_sim][dh_ratio_str]['capex_tot'] = float(w2e_design["capex_ccs"])
         results_summary[name_sim][dh_ratio_str]['opex_fixed'] = float(w2e_design["opex_fixed_ccs"])
+        results_summary[name_sim][dh_ratio_str]['opex_variable'] = float(w2e_design["opex_variable_ccs"])
         results_summary[name_sim][dh_ratio_str]['transport_stor_cost'] = float(transport_stor_cost)
         results_summary[name_sim][dh_ratio_str]['loss_el_revenues'] = float(sum(
             (baseline_el_prod - el_out) * el_price))
@@ -315,7 +316,7 @@ economics_all = {}
 
 for name_sim in simulations:
 
-    capex, opex_f, transport, loss_el, boiler = [], [], [], [], []
+    capex, opex_f, opex_v, transport, loss_el, boiler = [], [], [], [], [], []
     correct_factor = []
 
     for dh_ratio_str in explored_dh_ratio_str:
@@ -326,6 +327,7 @@ for name_sim in simulations:
         if captured == 0 or avoided == 0:
             capex.append(0)
             opex_f.append(0)
+            opex_v.append(0)
             transport.append(0)
             loss_el.append(0)
             boiler.append(0)
@@ -336,12 +338,14 @@ for name_sim in simulations:
 
             capex.append(results_summary[name_sim][dh_ratio_str]['capex_tot'] / captured)
             opex_f.append(results_summary[name_sim][dh_ratio_str]['opex_fixed'] / captured)
+            opex_v.append(results_summary[name_sim][dh_ratio_str]['opex_variable'] / captured)
             transport.append(results_summary[name_sim][dh_ratio_str]['transport_stor_cost'] / captured)
             loss_el.append(results_summary[name_sim][dh_ratio_str]['loss_el_revenues'] / captured)
             boiler.append(results_summary[name_sim][dh_ratio_str]['extra_cost_boiler'] / captured)
 
     capex     = np.array(capex, dtype=float) * np.array(correct_factor)
     opex_f    = np.array(opex_f, dtype=float) * np.array(correct_factor)
+    opex_v    = np.array(opex_v, dtype=float) * np.array(correct_factor)
     transport = np.array(transport, dtype=float) * np.array(correct_factor)
     loss_el   = np.array(loss_el, dtype=float) * np.array(correct_factor)
     boiler    = np.array(boiler, dtype=float) * np.array(correct_factor)
@@ -349,10 +353,11 @@ for name_sim in simulations:
     economics_all[name_sim] = {
         "capex": capex,
         "opex_f": opex_f,
+        "opex_v": opex_v,
         "transport": transport,
         "loss_el": loss_el,
         "boiler": boiler,
-        "total": capex + opex_f + transport + loss_el + boiler
+        "total": capex + opex_f + opex_v + transport + loss_el + boiler
     }
 
 # -----------------------------
@@ -392,19 +397,27 @@ for idx, name_sim in enumerate(simulations):
            hatch=hatch,
            label="OPEX fixed" if idx == 0 else "")
 
-    ax.bar(x + offset, eco["transport"],
+    ax.bar(x + offset, eco["opex_v"],
            width=bar_width,
            bottom=eco["capex"] + eco["opex_f"],
+           color=batlow_colors[2],
+           edgecolor=edgecolor,
+           linewidth=linewidth,
+           hatch=hatch,
+           label="OPEX variable" if idx == 0 else "")
+
+    ax.bar(x + offset, eco["transport"],
+           width=bar_width,
+           bottom=eco["capex"] + eco["opex_f"] + eco["opex_v"],
            color=batlow_colors[3],
            edgecolor=edgecolor,
            linewidth=linewidth,
            hatch=hatch,
            label="Transport & storage" if idx == 0 else "")
 
-    # <-- Swap these two -->
     ax.bar(x + offset, eco["loss_el"],
            width=bar_width,
-           bottom=eco["capex"] + eco["opex_f"] + eco["transport"],
+           bottom=eco["capex"] + eco["opex_f"] + eco["opex_v"] + eco["transport"],
            color=batlow_colors[4],
            edgecolor=edgecolor,
            linewidth=linewidth,
@@ -413,7 +426,7 @@ for idx, name_sim in enumerate(simulations):
 
     ax.bar(x + offset, eco["boiler"],
            width=bar_width,
-           bottom=eco["capex"] + eco["opex_f"] + eco["transport"] + eco["loss_el"],
+           bottom=eco["capex"] + eco["opex_f"] + eco["opex_v"] + eco["transport"] + eco["loss_el"],
            color=batlow_colors[5],
            edgecolor=edgecolor,
            linewidth=linewidth,
