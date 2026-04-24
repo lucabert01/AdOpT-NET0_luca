@@ -296,8 +296,7 @@ for i_dh in range(0, num_dh_ratio):
                 type_installed = "MEA"
                 capex = w2e_design["capex_ccs"]
                 opex_fixed = w2e_design["opex_fixed_ccs"]
-                # TODO change to opex_variable_ccs
-                opex_variable = w2e_design["opex_variable"]
+                opex_variable = w2e_design["opex_variable_ccs"]
                 energy_cost = (
                     loss_el_revenues
                     + extra_cost_boiler
