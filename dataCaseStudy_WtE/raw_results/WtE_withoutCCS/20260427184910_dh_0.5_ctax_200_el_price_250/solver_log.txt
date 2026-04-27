@@ -1,0 +1,57 @@
+
+Gurobi 12.0.1 (win64) logging started Mon Apr 27 18:52:08 2026
+
+Set parameter LogFile to value "dataCaseStudy_WtE\raw_results\WtE_withoutCCS\20260427184910_dh_0.5_ctax_200_el_price_250\solver_log.txt"
+Set parameter TimeLimit to value 36000
+Set parameter MIPGap to value 0.02
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Gold 5120 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 8 physical cores, 8 logical processors, using up to 8 threads
+
+Non-default parameters:
+TimeLimit  36000
+MIPGap  0.02
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1051242 rows, 1103801 columns and 2295203 nonzeros
+Model fingerprint: 0xd420b420
+Variable types: 1103799 continuous, 2 integer (2 binary)
+Coefficient statistics:
+  Matrix range     [1e-05, 1e+07]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+09]
+  RHS range        [8e-03, 1e+07]
+Warning: Model contains large matrix coefficient range
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+Presolve removed 1047166 rows and 1095654 columns
+Presolve time: 0.96s
+Presolved: 4076 rows, 8147 columns, 8154 nonzeros
+Variable types: 8146 continuous, 1 integer (1 binary)
+Performing another presolve...
+Presolve removed 4076 rows and 8147 columns
+Presolve time: 0.01s
+Found heuristic solution: objective 7063754.6282
+
+Explored 1 nodes (0 simplex iterations) in 1.57 seconds (0.70 work units)
+Thread count was 8 (of 8 available processors)
+
+Solution count 1: 7.06375e+06 
+
+Optimal solution found (tolerance 2.00e-02)
+Best objective 7.063754628239e+06, best bound 7.063754628239e+06, gap 0.0000%
