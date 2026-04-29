@@ -106,8 +106,8 @@ for j in range(0,num_carbon_tax):
                                   ('technology_operation', 'period1', 'industrial_cluster', 'HeatPump')]
             type_installed = "MEA"
             capex = cement_mea_design["capex_tot"] + heat_pump_design["capex_tot"]
-            opex_fixed = cement_mea_design["opex_fixed"] + heat_pump_design["opex_fixed"]
-            opex_variable = cement_mea_design["opex_variable"]
+            opex_fixed = cement_mea_design["opex_fixed_ccs"] + heat_pump_design["opex_fixed"]
+            opex_variable = cement_mea_design["opex_variable_ccs"]
             energy_cost = sum(cement_mea_operation["electricity_var_input_ccs"]*el_price) + sum(cement_mea_operation["heat_var_input_ccs"]/cop_hp*el_price)
             co2_captured = cement_mea_operation['CO2captured_var_output_ccs']
             tot_co2_avoided = sum(cement_mea_operation["clinker_output"] * emission_factor_clinker_baseline) - sum(
@@ -240,7 +240,6 @@ for ct in explored_carbon_tax_str:
         bar_opex_f.append(to_scalar(entry["opex_fixed"])          / tot_co2_avoided)
         bar_opex_v.append(
             to_scalar(entry["opex_variable"]) / tot_co2_avoided
-            if entry['type_installed'] != "MEA" else 0.0
         )
         bar_energy.append(entry["energy_cost"]                    / tot_co2_avoided)
         bar_transp.append(to_scalar(entry["transport_stor_cost"]) / tot_co2_avoided)
