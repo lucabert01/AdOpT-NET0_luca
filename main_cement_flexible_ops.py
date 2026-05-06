@@ -24,7 +24,7 @@ explored_std = [1, 2]
 explored_el_price = [50, 107, 150] # average el prices explored in the analysis
 explored_technologies = ["mea","mea_inflex"]
 distance_to_stor = 100
-carbon_tax = 150
+carbon_tax = 200
 dymanics_on = 1
 
 cost_extra_fuel = 15
