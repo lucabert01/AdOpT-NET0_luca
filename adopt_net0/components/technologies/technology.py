@@ -1186,6 +1186,7 @@ class Technology(ModelComponent):
             h5_group.create_dataset("size_ccs", data=[model_block.var_size_ccs.value])
             h5_group.create_dataset("capex_tec", data=[model_block.var_capex.value])
             h5_group.create_dataset("capex_ccs", data=[model_block.var_capex_ccs.value])
+            h5_group.create_dataset("opex_variable_ccs", data=[model_block.var_opex_variable_ccs.value])
             h5_group.create_dataset(
                 "opex_fixed_ccs", data=[model_block.var_opex_fixed_ccs.value]
             )
