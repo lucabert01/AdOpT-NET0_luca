@@ -248,7 +248,7 @@ for j in range(0, num_std_el):
 # Define types and colors once
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
                  '#F7D03C', '#D491B8', '#012E4D']
-types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + PCC"]
+types = ["none", "MEA"]
 type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
 cost_matrix = {}
@@ -413,7 +413,7 @@ setup_matplotlib_for_paper("single")
 
 fig, ax = plt.subplots()
 
-entry = results_summary["mea"]["std_1"]["el_price_107"]
+entry = results_summary["mea"]["std_2"]["el_price_150"]
 
 ax.fill_between(time_axis, entry['hourly_clinker_demand'],
                 color='gray', alpha=0.2, label='Demand', zorder=1)
@@ -431,7 +431,7 @@ ax.legend(loc='upper right', frameon=False)
 ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
 ax.set_axisbelow(True)
 
-save_figure_for_paper(fig, "flex_ops__ep107_std1", figures_path)
+save_figure_for_paper(fig, "flex_ops_ep150_std2", figures_path)
 
 
 ## Plot with hours of shifting
