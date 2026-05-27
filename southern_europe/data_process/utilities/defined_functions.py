@@ -1346,288 +1346,122 @@ def load_climate_data_from_api_robust(folder_path: str | Path, dataset: str = "J
     return successful_nodes, failed_nodes, offshore_nodes
 
 
-def load_real_hourly_demand_profiles(path_files_node_flux, node_name, carrier_name):
-    """
-    Load real hourly demand profiles for a specific node and carrier from Excel file.
-    Sheet: single sheet in 'emission_profile_emitter.xlsx'
-    Column header format: "node_type - node_name"
-
-    Parameters:
-        - path_files_node_flux: Path to the directory containing node flux data
-        - node_name: Name of the node to get demand profile for
-        - carrier_name: Name of the carrier (waste, cement, refined_product, industrial_product)
-
-    Returns:
-        - hourly_demand_array: Array of 8760 hourly demand values if found, None if not found
-    """
-    excel_file_path = path_files_node_flux / "emission_profile_emitter.xlsx"
-
-    if not excel_file_path.exists():
-        print(f"  📊 Real demand profiles file not found: {excel_file_path}")
-        return None
-
-    carrier_to_node_type = {
-        'waste': 'Waste',
-        'cement': 'Cement',
-        'refined_product': 'Refining',
-        'industrial_product': 'Other'
-    }
-
-    node_type = carrier_to_node_type.get(carrier_name, carrier_name.title())
-    column_name = f"{node_type} - {node_name}"
-
-    demand_df = pd.read_excel(excel_file_path)
-
-    if column_name not in demand_df.columns:
-        print(f"  ❌ Column '{column_name}' not found. Available columns: {list(demand_df.columns)}")
-        return None
-
-    hourly_demand_array = demand_df[column_name].head(8760).values
-
-    if len(hourly_demand_array) != 8760:
-        raise ValueError(f"Expected 8760 rows, got {len(hourly_demand_array)}")
-
-    hourly_demand_array = np.array(hourly_demand_array, dtype=float)
-
-    if np.any(np.isnan(hourly_demand_array)):
-        raise ValueError(f"Demand array for '{column_name}' contains NaN values")
-
-    print(f"  ✅ Loaded real demand profile for {node_name} ({carrier_name})")
-    print(f"     Data range: {hourly_demand_array.min():.2f} - {hourly_demand_array.max():.2f} tonnes/hour")
-    print(f"     Annual total: {hourly_demand_array.sum():.2f} tonnes/year")
-
-    return hourly_demand_array
-
-
 def update_carrier_data(input_data_path, electricity_price_data, network_emission_flux,
-                                           path_files_technologies, node_names, co2_intensity_electricity,
-                                           cop_hp, path_files_node_flux,
-                                           electricity_import_limit=100, heat_import_limit=200):
-    """
-    Enhanced version of update_carrier_data that uses real hourly demand profiles when available,
-    otherwise falls back to averaged values. Now handles both daily and hourly data from Excel.
+                        path_files_technologies, node_names, co2_intensity_electricity,
+                        cop_hp, path_files_node_flux,
+                        electricity_import_limit=100, heat_import_limit=200):
 
-    Parameters:
-        - input_data_path: Path to the input data directory
-        - electricity_price_data: DataFrame containing hourly electricity prices
-        - network_emission_flux: DataFrame containing emission data with node_name, node_type, and annual_emission
-        - path_files_technologies: Path to the technologies directory containing emission factor JSON files
-        - node_names: List of all node names in the network
-        - co2_intensity_electricity: CO2 emission factor for electricity (kg CO2/kWh)
-        - cop_hp: Coefficient of performance of the HP, used to calculate heat price and emission factor from electricity (default: 2.6)
-        - path_files_node_flux: Path to the directory containing real hourly demand profiles Excel file
-        - electricity_import_limit: Import limit for electricity (default: 100)
-        - heat_import_limit: Import limit for heat (default: 200)
-
-    Returns:
-        - None (calls adopt.fill_carrier_data to update files)
-    """
-
-    # Import the adopt module (assuming it's already imported in main.py)
     import adopt_net0 as adopt
 
-    # Calculate heat emission factor
-    co2_intensity_heat = round(co2_intensity_electricity / cop_hp,
-                               4)  # Round to 4 decimal places for precision
+    co2_intensity_heat = round(co2_intensity_electricity / cop_hp, 4)
 
-    # Update import limits for electricity and heat for all nodes
-    adopt.fill_carrier_data(input_data_path,
-                            value_or_data=electricity_import_limit,
-                            columns=['Import limit'],
-                            carriers=['electricity'],
-                            nodes=node_names)
+    # --- Import limits ---
+    adopt.fill_carrier_data(input_data_path, value_or_data=electricity_import_limit,
+                            columns=['Import limit'], carriers=['electricity'], nodes=node_names)
+    adopt.fill_carrier_data(input_data_path, value_or_data=heat_import_limit,
+                            columns=['Import limit'], carriers=['heat'], nodes=node_names)
 
-    adopt.fill_carrier_data(input_data_path,
-                            value_or_data=heat_import_limit,
-                            columns=['Import limit'],
-                            carriers=['heat'],
-                            nodes=node_names)
+    # --- Emission factors ---
+    adopt.fill_carrier_data(input_data_path, value_or_data=co2_intensity_electricity,
+                            columns=['Import emission factor'], carriers=['electricity'], nodes=node_names)
+    adopt.fill_carrier_data(input_data_path, value_or_data=co2_intensity_heat,
+                            columns=['Import emission factor'], carriers=['heat'], nodes=node_names)
 
-    # Update import emission factors for electricity and heat for all nodes
-    adopt.fill_carrier_data(input_data_path,
-                            value_or_data=co2_intensity_electricity,
-                            columns=['Import emission factor'],
-                            carriers=['electricity'],
-                            nodes=node_names)
-
-    adopt.fill_carrier_data(input_data_path,
-                            value_or_data=co2_intensity_heat,
-                            columns=['Import emission factor'],
-                            carriers=['heat'],
-                            nodes=node_names)
-
-    # Process electricity pricing data (same as original function)
-    print(f"Input electricity price data shape: {electricity_price_data.shape}")
-    print(f"Columns: {electricity_price_data.columns.tolist()}")
-
-    # Extract the price column
+    # --- Electricity & heat prices ---
     electricity_prices = electricity_price_data['Day-ahead Price (EUR/MWh)'].values
+    heat_prices = np.round(electricity_prices / cop_hp, 2)
 
-    # Calculate heat prices (electricity_price / cop_hp)
-    heat_prices = np.round(electricity_prices / cop_hp, 2)  # Round to 2 decimal places
+    adopt.fill_carrier_data(input_data_path, value_or_data=electricity_prices,
+                            columns=['Import price'], carriers=['electricity'], nodes=node_names)
+    adopt.fill_carrier_data(input_data_path, value_or_data=heat_prices,
+                            columns=['Import price'], carriers=['heat'], nodes=node_names)
 
-    # Update import prices for electricity and heat for all nodes
-    adopt.fill_carrier_data(input_data_path,
-                            value_or_data=electricity_prices,
-                            columns=['Import price'],
-                            carriers=['electricity'],
-                            nodes=node_names)
-
-    adopt.fill_carrier_data(input_data_path,
-                            value_or_data=heat_prices,
-                            columns=['Import price'],
-                            carriers=['heat'],
-                            nodes=node_names)
-
-    # Load emission factors from technology JSON files
-    emission_factors = {}
-
-    # Define mapping from node_type to technology file and emission factor key path
+    # --- Load emission factors from technology JSON files ---
     node_type_mapping = {
-        'Waste': ('Emitter/WasteToEnergyEmitter.json', ['Performance', 'emission_factor']),
-        'Cement': ('Emitter/CementEmitter.json', ['Performance', 'emission_factor']),
-        'Refining': ('Emitter/RefineryEmitter.json', ['Performance', 'emission_factor']),
-        'Other': ('Emitter/UnspecifiedEmitter.json', ['Performance', 'emission_factor'])
+        'Waste':    ('Emitter/WasteToEnergyEmitter.json', 'waste'),
+        'Cement':   ('Emitter/CementEmitter.json',        'cement'),
+        'Refining': ('Emitter/RefineryEmitter.json',      'refined_product'),
+        'Other':    ('Emitter/UnspecifiedEmitter.json',   'industrial_product'),
     }
 
-    # Load emission factors from JSON files
-    for node_type, (filename, factor_key_path) in node_type_mapping.items():
-        tech_file_path = path_files_technologies / filename  # Now includes Emitter/ subfolder
-        if tech_file_path.exists():
+    emission_factors = {}
+    for node_type, (filename, _) in node_type_mapping.items():
+        tech_file_path = path_files_technologies / filename
+        try:
             with open(tech_file_path, 'r') as f:
-                tech_data = json.load(f)
+                emission_factors[node_type] = json.load(f)['Performance']['emission_factor']
+            print(f"✅ Loaded emission factor for {node_type}: {emission_factors[node_type]}")
+        except (FileNotFoundError, KeyError) as e:
+            print(f"Warning: could not load emission factor for {node_type} ({e}), defaulting to 1.0")
+            emission_factors[node_type] = 1.0
 
-                # Navigate through the nested structure
-                try:
-                    current_data = tech_data
-                    for key in factor_key_path:
-                        current_data = current_data[key]
+    # --- Load real hourly demand profiles once (if the file exists) ---
+    excel_file_path = path_files_node_flux / "emission_profile_emitters.xlsx"
+    profiles_df = pd.read_excel(excel_file_path) if excel_file_path.exists() else None
 
-                    emission_factors[node_type] = current_data
-                    print(f"✅ Loaded emission factor for {node_type}: {current_data}")
-                except KeyError as e:
-                    print(f"Warning: Key path {factor_key_path} not found in {filename} (missing: {e})")
-                    emission_factors[node_type] = 1.0  # Default value
-        else:
-            print(f"Warning: Technology file {filename} not found at {tech_file_path}")
-            emission_factors[node_type] = 1.0  # Default value
-
-    # Process demands for each node based on emission data
-    # Handle multiple emitters per node by accumulating demands by carrier type
-    node_demands_annual = {}
+    # --- Process demands per node ---
     node_demands_hourly = {}
-    emitter_count_by_node = {}
-    nodes_with_real_data = []
-    nodes_with_averaged_data = []
-    nodes_with_hourly_data = []
+    node_demands_annual = {}
+    nodes_with_real_data, nodes_with_averaged_data = [], []
 
     for _, row in network_emission_flux.iterrows():
-        node_name = row['node_name']
-        node_type = row['node_type']
-
-        # Use the pre-calculated annual_emission value
+        node_name  = row['node_name']
+        node_type  = row['node_type']
         annual_emission = row['annual_emission']
 
-        # Skip non-emitter nodes or nodes with zero emissions
-        if node_type in ['Storage', 'Transport'] or annual_emission == 0:
+        if node_type in ('Storage', 'Transport') or annual_emission == 0:
+            continue
+        if node_type not in node_type_mapping:
             continue
 
-        # Count emitters per node for logging
-        if node_name not in emitter_count_by_node:
-            emitter_count_by_node[node_name] = []
-        emitter_count_by_node[node_name].append(f"{node_type}({annual_emission})")
+        _, carrier_name = node_type_mapping[node_type]
+        annual_demand_tonnes = round(annual_emission / emission_factors[node_type] / 1000.0, 2)
 
-        if node_type in emission_factors:
-            # Calculate annual demand using emission factor (demand = emission / emission_factor)
-            annual_demand_value = round(annual_emission / emission_factors[node_type], 2)  # kg product/year
-            annual_demand_tonnes = round(annual_demand_value / 1000.0, 2)  # Convert to tonnes/year
+        # Try real hourly profile first
+        column_name = f"{node_type} - {node_name}"
+        if profiles_df is not None and column_name in profiles_df.columns:
+            hourly_demand_array = profiles_df[column_name].head(8760).values.astype(float)
+            if len(hourly_demand_array) != 8760:
+                raise ValueError(f"Expected 8760 rows for '{column_name}', got {len(hourly_demand_array)}")
+            if np.any(np.isnan(hourly_demand_array)):
+                raise ValueError(f"NaN values in demand profile for '{column_name}'")
+            annual_demand_tonnes = round(hourly_demand_array.sum(), 2)
+            nodes_with_real_data.append(f"{node_name} - {node_type}")
+            print(f"  ✅ Real profile loaded for {node_name} ({carrier_name}): {hourly_demand_array.sum():.2f} t/yr")
+        else:
+            hourly_rate = round(annual_demand_tonnes / 8760.0, 2)
+            hourly_demand_array = np.full(8760, hourly_rate)
+            nodes_with_averaged_data.append(f"{node_name} - {node_type}")
+            print(f"  📊 Averaged profile for {node_name} ({carrier_name}): {hourly_rate:.2f} t/hr")
 
-            # Create carrier name based on node type
-            if node_type == 'Waste':
-                carrier_name = 'waste'
-            elif node_type == 'Cement':
-                carrier_name = 'cement'
-            elif node_type == 'Refining':
-                carrier_name = 'refined_product'
-            elif node_type == 'Other':
-                carrier_name = 'industrial_product'
-            else:
-                carrier_name = node_type.lower()
+        node_demands_hourly.setdefault(node_name, {}).setdefault(carrier_name, np.zeros(8760))
+        node_demands_hourly[node_name][carrier_name] += hourly_demand_array
 
-            # Try to load real hourly demand profile with updated function ***
-            real_hourly_demand = load_real_hourly_demand_profiles(path_files_node_flux, node_name, carrier_name)
+        node_demands_annual.setdefault(node_name, {}).setdefault(carrier_name, 0)
+        node_demands_annual[node_name][carrier_name] = round(
+            node_demands_annual[node_name][carrier_name] + annual_demand_tonnes, 2)
 
-            if real_hourly_demand is not None:
-                # Use real hourly demand data
-                hourly_demand_array = real_hourly_demand
-                nodes_with_real_data.append(f"{node_name} - {node_type}")
+    # --- Apply demands ---
+    for node_name, carriers in node_demands_hourly.items():
+        for carrier_name, hourly_array in carriers.items():
+            adopt.fill_carrier_data(input_data_path, value_or_data=hourly_array,
+                                    columns=['Demand'], carriers=[carrier_name], nodes=[node_name])
 
-                # Recalculate annual demand from real data for consistency checks
-                annual_from_real_data = round(hourly_demand_array.sum(), 2)
-                print(f"     Real data annual total: {annual_from_real_data:.2f} tonnes/year")
-                print(f"     Calculated annual: {annual_demand_tonnes:.2f} tonnes/year")
-
-                # Use the real data annual total for consistency
-                annual_demand_tonnes = annual_from_real_data
-
-            else:
-                # Fall back to averaged demand (original method)
-                hourly_demand_tonnes = round(annual_demand_tonnes / 8760.0, 2)  # tonnes/hour
-                hourly_demand_array = np.full(8760, hourly_demand_tonnes)
-                nodes_with_averaged_data.append(f"{node_name} - {node_type}")
-                print(f"  📊 Using AVERAGED hourly demand profile for {node_name} - {node_type}")
-                print(f"     Flat rate: {hourly_demand_tonnes:.2f} tonnes/hour")
-
-            # Store annual demand data (for logging)
-            if node_name not in node_demands_annual:
-                node_demands_annual[node_name] = {}
-            if carrier_name not in node_demands_annual[node_name]:
-                node_demands_annual[node_name][carrier_name] = 0
-            node_demands_annual[node_name][carrier_name] = round(
-                node_demands_annual[node_name][carrier_name] + annual_demand_tonnes, 2
-            )
-
-            # Store hourly demand data (accumulate if multiple emitters of same type per node)
-            if node_name not in node_demands_hourly:
-                node_demands_hourly[node_name] = {}
-            if carrier_name not in node_demands_hourly[node_name]:
-                node_demands_hourly[node_name][carrier_name] = np.zeros(8760)
-            node_demands_hourly[node_name][carrier_name] += hourly_demand_array
-
-    # Update demands using adopt.fill_carrier_data with hourly data
-    for node_name, carriers_demands in node_demands_hourly.items():
-        for carrier_name, hourly_demand_array in carriers_demands.items():
-            adopt.fill_carrier_data(input_data_path,
-                                    value_or_data=hourly_demand_array,  # Use hourly array
-                                    columns=['Demand'],
-                                    carriers=[carrier_name],
-                                    nodes=[node_name])
-
-    # Print enhanced summary
+    # --- Summary ---
     print(f"\n📊 CARRIER DATA UPDATE SUMMARY:")
-    print(f"=" * 60)
-    print(f"  - Electricity import limit: {electricity_import_limit} for all nodes")
-    print(f"  - Heat import limit: {heat_import_limit} for all nodes")
-    print(f"  - Electricity emission factor: {co2_intensity_electricity} kg CO2/kWh for all nodes")
-    print(f"  - Heat emission factor: {co2_intensity_heat:.4f} kg CO2/kWh for all nodes")
-    print(f"  - Electricity prices: {len(electricity_prices)} hourly values applied to all nodes")
-    print(f"  - Heat prices: derived from electricity prices (electricity_price / {cop_hp})")
-    print(f"  - Demands updated for {len(node_demands_hourly)} nodes with emissions")
-    print(f"  - Total emitters processed: {sum(len(emitters) for emitters in emitter_count_by_node.values())}")
-    print(f"  - Emission factors used: {emission_factors}")
-
-    print(f"\n📊 DEMAND PROFILE SUMMARY:")
-    print(f"  - Nodes with REAL HOURLY data ({len(nodes_with_hourly_data)}): {nodes_with_hourly_data}")
-    print(f"  - Nodes with AVERAGED data ({len(nodes_with_averaged_data)}): {nodes_with_averaged_data}")
-    print(f"  - Total nodes with real data: {len(nodes_with_real_data)}")
+    print(f"  Electricity import limit : {electricity_import_limit}")
+    print(f"  Heat import limit        : {heat_import_limit}")
+    print(f"  Elec. emission factor    : {co2_intensity_electricity} kg CO2/kWh")
+    print(f"  Heat emission factor     : {co2_intensity_heat:.4f} kg CO2/kWh")
+    print(f"  Electricity price points : {len(electricity_prices)}")
+    print(f"  Nodes with real profiles : {len(nodes_with_real_data)} — {nodes_with_real_data}")
+    print(f"  Nodes with flat profiles : {len(nodes_with_averaged_data)} — {nodes_with_averaged_data}")
 
     if node_demands_annual:
-        print(f"\nDetailed annual demand summary by node (in tonnes/year):")
-        for node_name, carriers_demands in node_demands_annual.items():
-            total_node_demand = round(sum(carriers_demands.values()), 2)
-            carrier_details = ', '.join(
-                [f"{carrier}: {demand:.2f}t/yr" for carrier, demand in carriers_demands.items()])
-            print(f"  {node_name}: {carrier_details} (Total: {total_node_demand:.2f}t/yr)")
+        print(f"\nAnnual demand by node (tonnes/year):")
+        for node_name, carriers in node_demands_annual.items():
+            details = ', '.join(f"{c}: {d:.2f}t/yr" for c, d in carriers.items())
+            print(f"  {node_name}: {details} (Total: {sum(carriers.values()):.2f}t/yr)")
 
     return True
 

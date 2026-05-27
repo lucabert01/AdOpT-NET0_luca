@@ -61,7 +61,7 @@ network_truck = pd.read_excel(path_files_node_flux/"node_metrics.xlsx", index_co
 network_railway = pd.read_excel(path_files_node_flux/"node_metrics.xlsx", index_col=0, sheet_name='railway') # train connection and distance
 
 electricity_price = pd.read_csv(path_files_electricity/"electricity_prices_hourly_2024.csv")
-electricity_price = electricity_price.drop(index=range(1416, 1440)).reset_index(drop=True)
+electricity_price = electricity_price.drop(index=range(1416, 1440)).reset_index(drop=True) #2024 is leap year
 
 
 network_location['node_type'] = network_location['node_type'].str.strip()
