@@ -17,7 +17,6 @@ from data_process.utilities.defined_functions import (
     update_network_connection_matrix,
     update_network_size_max_arcs,
     load_climate_data_from_api_robust,
-    load_real_hourly_demand_profiles,
     update_carrier_data,
     process_gamma_sheets_to_csv,
     copy_technology_data_custom,
@@ -29,9 +28,9 @@ from data_process.utilities.defined_functions import (
 
 #----- Scenario parameterization -----#
 ref_year = 2024
-discount_rate = 0.1 # default
+discount_rate = 0.08 # default
 co2_intensity_electricity = 0.288 # default (kg CO2/kWh)
-heat_convert_factor = 2.6 # default
+cop_hp = 2.6 # default
 electricity_import_limit = 100 # default
 heat_import_limit = 200 # default
 max_transport_capacity = 3000
@@ -290,7 +289,7 @@ update_carrier_data(
     path_files_technologies,
     node_names,
     co2_intensity_electricity,
-    heat_convert_factor,
+    cop_hp,
     path_files_node_flux,
     electricity_import_limit,
     heat_import_limit

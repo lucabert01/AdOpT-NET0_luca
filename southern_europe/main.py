@@ -31,7 +31,7 @@ from data_process.utilities.defined_functions import (
 ref_year = 2024
 discount_rate = 0.1 # default
 co2_intensity_electricity = 0.288 # default (kg CO2/kWh)
-heat_convert_factor = 2.6 # default
+cop_hp = 2.6 # default
 electricity_import_limit = 100 # default
 heat_import_limit = 200 # default
 max_transport_capacity = 3000
@@ -282,7 +282,7 @@ update_carrier_data(
     path_files_technologies,
     node_names,
     co2_intensity_electricity,
-    heat_convert_factor,
+    cop_hp,
     path_files_node_flux,
     electricity_import_limit,
     heat_import_limit

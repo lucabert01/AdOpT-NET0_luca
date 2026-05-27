@@ -5,6 +5,13 @@ import os
 import shutil
 from pathlib import Path
 from datetime import datetime
+import pandas as pd
+import numpy as np
+import json
+import os
+import shutil
+from pathlib import Path
+from datetime import datetime
 
 
 def calculate_annual_emission_values(network_emission_flux):
@@ -1342,8 +1349,8 @@ def load_climate_data_from_api_robust(folder_path: str | Path, dataset: str = "J
 def load_real_hourly_demand_profiles(path_files_node_flux, node_name, carrier_name):
     """
     Load real hourly demand profiles for a specific node and carrier from Excel file.
-    Handles both hourly and daily data formats, and uses sheet naming convention: "node_name - node_type"
-    FIXED: Now handles string values in data and skips raw data sheets.
+    Sheet: single sheet in 'emission_profile_emitter.xlsx'
+    Column header format: "node_type - node_name"
 
     Parameters:
         - path_files_node_flux: Path to the directory containing node flux data
@@ -1353,17 +1360,12 @@ def load_real_hourly_demand_profiles(path_files_node_flux, node_name, carrier_na
     Returns:
         - hourly_demand_array: Array of 8760 hourly demand values if found, None if not found
     """
+    excel_file_path = path_files_node_flux / "emission_profile_emitter.xlsx"
 
-    # Define the Excel file path
-    excel_file_path = path_files_node_flux / "emitter_hourly_profile.xlsx"
-
-    # Check if the Excel file exists
     if not excel_file_path.exists():
         print(f"  📊 Real demand profiles file not found: {excel_file_path}")
         return None
 
-    # Create sheet name based on naming convention: "node_name - node_type"
-    # Map carrier_name back to node_type
     carrier_to_node_type = {
         'waste': 'Waste',
         'cement': 'Cement',
@@ -1372,182 +1374,34 @@ def load_real_hourly_demand_profiles(path_files_node_flux, node_name, carrier_na
     }
 
     node_type = carrier_to_node_type.get(carrier_name, carrier_name.title())
-    sheet_name = f"{node_name} - {node_type}"
+    column_name = f"{node_type} - {node_name}"
 
-    # Skip if this looks like a raw data sheet
-    if 'raw' in sheet_name.lower() or 'factor' in sheet_name.lower() or 'metadata' in sheet_name.lower():
-        print(f"  📊 Skipping raw data sheet: '{sheet_name}'")
+    demand_df = pd.read_excel(excel_file_path)
+
+    if column_name not in demand_df.columns:
+        print(f"  ❌ Column '{column_name}' not found. Available columns: {list(demand_df.columns)}")
         return None
 
-    try:
-        # Try to read the sheet with the constructed name
-        demand_df = pd.read_excel(excel_file_path, sheet_name=sheet_name)
-        print(f"  📊 Found real demand data for sheet: '{sheet_name}'")
+    hourly_demand_array = demand_df[column_name].head(8760).values
 
-        # Check if we have the "Demand" column
-        if 'Demand' not in demand_df.columns:
-            print(f"  ❌ No 'Demand' column found in sheet '{sheet_name}'")
-            print(f"     Available columns: {list(demand_df.columns)}")
-            return None
+    if len(hourly_demand_array) != 8760:
+        raise ValueError(f"Expected 8760 rows, got {len(hourly_demand_array)}")
 
-        # FIXED: Check for and handle non-numeric data in Demand column
-        print(f"  🔍 Examining Demand column data types...")
-        demand_column = demand_df['Demand']
+    hourly_demand_array = np.array(hourly_demand_array, dtype=float)
 
-        # Show sample of what's in the demand column
-        print(f"     Sample demand values: {demand_column.head(5).tolist()}")
-        print(f"     Demand column dtype: {demand_column.dtype}")
+    if np.any(np.isnan(hourly_demand_array)):
+        raise ValueError(f"Demand array for '{column_name}' contains NaN values")
 
-        # Convert to numeric, replacing any non-numeric values with NaN
-        demand_numeric = pd.to_numeric(demand_column, errors='coerce')
+    print(f"  ✅ Loaded real demand profile for {node_name} ({carrier_name})")
+    print(f"     Data range: {hourly_demand_array.min():.2f} - {hourly_demand_array.max():.2f} tonnes/hour")
+    print(f"     Annual total: {hourly_demand_array.sum():.2f} tonnes/year")
 
-        # Check how many values were successfully converted
-        valid_count = demand_numeric.notna().sum()
-        total_count = len(demand_numeric)
-        print(f"     Valid numeric values: {valid_count}/{total_count}")
-
-        if valid_count < total_count * 0.8:  # Less than 80% valid data
-            print(f"  ❌ Too many non-numeric values in Demand column ({total_count - valid_count} invalid)")
-            print(f"     Sample invalid values: {demand_column[demand_numeric.isna()].head(3).tolist()}")
-            return None
-
-        # Replace the original column with cleaned numeric data (NaN filled with 0)
-        demand_df['Demand'] = demand_numeric.fillna(0)
-
-        # Determine if this is hourly or daily data based on number of rows
-        num_rows = len(demand_df)
-        print(f"  📊 Data contains {num_rows} rows")
-
-        if num_rows >= 8000:  # Likely hourly data (8760 hours in a year)
-            print(f"  ⏰ Processing as HOURLY data")
-
-            # Extract hourly demand values (first 8760 rows)
-            hourly_demand_raw = demand_df['Demand'].head(8760).values
-
-            # FIXED: Ensure all values are numeric and handle any remaining issues
-            try:
-                # Convert to float array and handle any remaining non-numeric issues
-                hourly_demand_raw = np.array(hourly_demand_raw, dtype=float)
-            except (ValueError, TypeError) as e:
-                print(f"  ❌ Error converting demand data to numeric: {e}")
-                return None
-
-            # Ensure we have exactly 8760 values
-            if len(hourly_demand_raw) == 8760:
-                hourly_demand_array = hourly_demand_raw
-            else:
-                # Pad or truncate as needed
-                hourly_demand_array = np.zeros(8760)
-                hourly_demand_array[:min(len(hourly_demand_raw), 8760)] = hourly_demand_raw[:8760]
-
-                if len(hourly_demand_raw) < 8760:
-                    print(f"  ⚠️  Padded {8760 - len(hourly_demand_raw)} missing hours with zeros")
-
-        elif 300 <= num_rows <= 400:  # Likely daily data (365 days in a year)
-            print(f"  📅 Processing as DAILY data - converting to hourly")
-
-            # Extract daily demand values (first 365 rows)
-            daily_demand_raw = demand_df['Demand'].head(365).values
-
-            # FIXED: Ensure all values are numeric
-            try:
-                daily_demand_raw = np.array(daily_demand_raw, dtype=float)
-            except (ValueError, TypeError) as e:
-                print(f"  ❌ Error converting daily demand data to numeric: {e}")
-                return None
-
-            # Convert daily to hourly by dividing by 24 (assuming daily total needs to be spread across 24 hours)
-            hourly_demand_from_daily = daily_demand_raw / 24.0
-
-            # Create hourly array by repeating each daily value 24 times
-            hourly_demand_array = np.zeros(8760)
-
-            for day in range(min(365, len(daily_demand_raw))):
-                start_hour = day * 24
-                end_hour = min(start_hour + 24, 8760)
-                hourly_demand_array[start_hour:end_hour] = hourly_demand_from_daily[day]
-
-            # If we have less than 365 days, pad with the last available daily value
-            if len(daily_demand_raw) < 365:
-                last_daily_value = hourly_demand_from_daily[-1] if len(hourly_demand_from_daily) > 0 else 0
-                remaining_days = 365 - len(daily_demand_raw)
-                for day in range(remaining_days):
-                    actual_day = len(daily_demand_raw) + day
-                    start_hour = actual_day * 24
-                    end_hour = min(start_hour + 24, 8760)
-                    hourly_demand_array[start_hour:end_hour] = last_daily_value
-
-                print(f"  ⚠️  Padded {remaining_days} missing days with last daily value: {last_daily_value:.2f}")
-
-        else:
-            print(f"  ❌ Unexpected data size: {num_rows} rows (expected ~8760 for hourly or ~365 for daily)")
-            return None
-
-        # Ensure all values are positive (demand can't be negative)
-        hourly_demand_array = np.maximum(hourly_demand_array, 0)
-
-        # FIXED: Additional validation for the final array
-        if np.any(np.isnan(hourly_demand_array)) or np.any(np.isinf(hourly_demand_array)):
-            print(f"  ❌ Final demand array contains NaN or infinite values")
-            return None
-
-        # Convert to appropriate units (assuming data is already in tonnes/hour for hourly data,
-        # or tonnes/day for daily data which we converted to tonnes/hour)
-        # Round to 2 decimal places for consistency
-        hourly_demand_array = np.round(hourly_demand_array, 2)
-
-        print(f"  ✅ Loaded real demand profile for {node_name} ({carrier_name})")
-        print(f"     Data range: {hourly_demand_array.min():.2f} - {hourly_demand_array.max():.2f} tonnes/hour")
-        print(f"     Annual total: {hourly_demand_array.sum():.2f} tonnes/year")
-        print(f"     Non-zero hours: {np.count_nonzero(hourly_demand_array)}/8760")
-
-        return hourly_demand_array
-
-    except Exception as e:
-        print(f"  ❌ Error loading real demand data for sheet '{sheet_name}': {e}")
-        print(f"     Error type: {type(e).__name__}")
-
-        # Try alternative sheet names in case of naming variations
-        alternative_names = [
-            f"{node_name}-{node_type}",  # With dash instead of space-dash-space
-            f"{node_name}_{node_type}",  # With underscore
-            node_name,  # Just node name
-            f"{node_name} {node_type}"  # With space only
-        ]
-
-        print(f"  🔍 Trying alternative sheet names...")
-        for alt_name in alternative_names:
-            try:
-                # Skip raw data sheets
-                if 'raw' in alt_name.lower() or 'factor' in alt_name.lower():
-                    continue
-
-                demand_df = pd.read_excel(excel_file_path, sheet_name=alt_name)
-                print(f"  📊 Found alternative sheet name: '{alt_name}'")
-
-                # Quick check if this sheet has usable data
-                if 'Demand' in demand_df.columns:
-                    demand_test = pd.to_numeric(demand_df['Demand'].head(10), errors='coerce')
-                    if demand_test.notna().sum() > 5:  # At least half of first 10 values are numeric
-                        print(f"  ✅ Alternative sheet '{alt_name}' has usable demand data")
-                        # You could recursively call the function here with the alternative name
-                        # For now, just inform the user
-                        break
-                else:
-                    print(f"  ❌ Alternative sheet '{alt_name}' has no Demand column")
-
-            except Exception as alt_e:
-                print(f"  ❌ Alternative sheet '{alt_name}' failed: {alt_e}")
-                continue
-        else:
-            print(f"  ❌ No alternative sheets worked for {node_name} - {node_type}")
-
-        return None
+    return hourly_demand_array
 
 
 def update_carrier_data(input_data_path, electricity_price_data, network_emission_flux,
                                            path_files_technologies, node_names, co2_intensity_electricity,
-                                           heat_convert_factor, path_files_node_flux,
+                                           cop_hp, path_files_node_flux,
                                            electricity_import_limit=100, heat_import_limit=200):
     """
     Enhanced version of update_carrier_data that uses real hourly demand profiles when available,
@@ -1560,7 +1414,7 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
         - path_files_technologies: Path to the technologies directory containing emission factor JSON files
         - node_names: List of all node names in the network
         - co2_intensity_electricity: CO2 emission factor for electricity (kg CO2/kWh)
-        - heat_convert_factor: Factor to calculate heat price and emission factor from electricity (default: 2.6)
+        - cop_hp: Coefficient of performance of the HP, used to calculate heat price and emission factor from electricity (default: 2.6)
         - path_files_node_flux: Path to the directory containing real hourly demand profiles Excel file
         - electricity_import_limit: Import limit for electricity (default: 100)
         - heat_import_limit: Import limit for heat (default: 200)
@@ -1572,12 +1426,8 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
     # Import the adopt module (assuming it's already imported in main.py)
     import adopt_net0 as adopt
 
-    print(f"\n📊 ENHANCED CARRIER DATA UPDATE WITH REAL DEMAND PROFILES")
-    print(f"🔄 Now supporting both daily and hourly data formats")
-    print(f"=" * 60)
-
     # Calculate heat emission factor
-    co2_intensity_heat = round(co2_intensity_electricity / heat_convert_factor,
+    co2_intensity_heat = round(co2_intensity_electricity / cop_hp,
                                4)  # Round to 4 decimal places for precision
 
     # Update import limits for electricity and heat for all nodes
@@ -1613,8 +1463,8 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
     # Extract the price column
     electricity_prices = electricity_price_data['Day-ahead Price (EUR/MWh)'].values
 
-    # Calculate heat prices (electricity_price / heat_convert_factor)
-    heat_prices = np.round(electricity_prices / heat_convert_factor, 2)  # Round to 2 decimal places
+    # Calculate heat prices (electricity_price / cop_hp)
+    heat_prices = np.round(electricity_prices / cop_hp, 2)  # Round to 2 decimal places
 
     # Update import prices for electricity and heat for all nodes
     adopt.fill_carrier_data(input_data_path,
@@ -1670,7 +1520,6 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
     nodes_with_real_data = []
     nodes_with_averaged_data = []
     nodes_with_hourly_data = []
-    nodes_with_daily_data = []
 
     for _, row in network_emission_flux.iterrows():
         node_name = row['node_name']
@@ -1705,22 +1554,13 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
             else:
                 carrier_name = node_type.lower()
 
-            # *** NEW: Try to load real hourly demand profile with updated function ***
-            print(f"\n🔍 Checking for real demand data: {node_name} - {node_type}")
+            # Try to load real hourly demand profile with updated function ***
             real_hourly_demand = load_real_hourly_demand_profiles(path_files_node_flux, node_name, carrier_name)
 
             if real_hourly_demand is not None:
                 # Use real hourly demand data
                 hourly_demand_array = real_hourly_demand
                 nodes_with_real_data.append(f"{node_name} - {node_type}")
-
-                # Check if this was converted from daily data
-                if np.all(real_hourly_demand[0:24] == real_hourly_demand[0]):  # First 24 hours are same value
-                    nodes_with_daily_data.append(f"{node_name} - {node_type}")
-                    print(f"  ✅ Using REAL DAILY data (converted to hourly) for {node_name} - {node_type}")
-                else:
-                    nodes_with_hourly_data.append(f"{node_name} - {node_type}")
-                    print(f"  ✅ Using REAL HOURLY data for {node_name} - {node_type}")
 
                 # Recalculate annual demand from real data for consistency checks
                 annual_from_real_data = round(hourly_demand_array.sum(), 2)
@@ -1764,21 +1604,20 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
                                     nodes=[node_name])
 
     # Print enhanced summary
-    print(f"\n📊 ENHANCED CARRIER DATA UPDATE SUMMARY:")
+    print(f"\n📊 CARRIER DATA UPDATE SUMMARY:")
     print(f"=" * 60)
     print(f"  - Electricity import limit: {electricity_import_limit} for all nodes")
     print(f"  - Heat import limit: {heat_import_limit} for all nodes")
     print(f"  - Electricity emission factor: {co2_intensity_electricity} kg CO2/kWh for all nodes")
     print(f"  - Heat emission factor: {co2_intensity_heat:.4f} kg CO2/kWh for all nodes")
     print(f"  - Electricity prices: {len(electricity_prices)} hourly values applied to all nodes")
-    print(f"  - Heat prices: derived from electricity prices (electricity_price / {heat_convert_factor})")
+    print(f"  - Heat prices: derived from electricity prices (electricity_price / {cop_hp})")
     print(f"  - Demands updated for {len(node_demands_hourly)} nodes with emissions")
     print(f"  - Total emitters processed: {sum(len(emitters) for emitters in emitter_count_by_node.values())}")
     print(f"  - Emission factors used: {emission_factors}")
 
     print(f"\n📊 DEMAND PROFILE SUMMARY:")
     print(f"  - Nodes with REAL HOURLY data ({len(nodes_with_hourly_data)}): {nodes_with_hourly_data}")
-    print(f"  - Nodes with REAL DAILY data ({len(nodes_with_daily_data)}): {nodes_with_daily_data}")
     print(f"  - Nodes with AVERAGED data ({len(nodes_with_averaged_data)}): {nodes_with_averaged_data}")
     print(f"  - Total nodes with real data: {len(nodes_with_real_data)}")
 
