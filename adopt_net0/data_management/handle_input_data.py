@@ -518,6 +518,34 @@ class DataHandle:
                             f"size_max_defined_per_arc==0, but you defined a file for it for network {network}"
                         )
 
+                if netw_data.opex_var_defined_per_arc:
+                    try:
+                        netw_data.opex_var_arcs = pd.read_csv(
+                            self.data_path
+                            / investment_period
+                            / "network_topology"
+                            / "new"
+                            / network
+                            / "opex_var_arcs.csv",
+                            sep=";",
+                            index_col=0,
+                        )
+                    except FileNotFoundError:
+                        raise FileNotFoundError(
+                            f" opex_var_defined_per_arc==1 for network {network}, a matrix needs to be provided for opex_var_arcs"
+                        )
+                else:
+                    if os.path.isfile(
+                        self.data_path
+                        / investment_period
+                        / "network_topology"
+                        / "new"
+                        / network
+                        / "opex_var_arcs.csv"
+                    ):
+                        warn(
+                            f"size_max_defined_per_arc==0, but you defined a file for it for network {network}"
+                        )
                 netw_data.fit_network_performance()
                 self.network_data[investment_period][network] = netw_data
 

@@ -22,7 +22,8 @@ from data_process.utilities.defined_functions import (
     copy_technology_data_custom,
     update_emitter_ccs_references,
     convert_network_data_indices_to_names,
-    apply_carbon_pricing_to_all_nodes
+    apply_carbon_pricing_to_all_nodes,
+    compute_opex_var_arcs
 )
 
 
@@ -266,18 +267,12 @@ gamma_pipeline_per_arc = process_gamma_sheets_to_csv(
     transport_mode="pipeline"
 )
 
-gamma_truck_per_arc = process_gamma_sheets_to_csv(
-    path_files_network_capex,
-    input_data_path,
-    network_location,
-    transport_mode="truck"
-)
 
-gamma_railway_per_arc = process_gamma_sheets_to_csv(
-    path_files_network_capex,
-    input_data_path,
-    network_location,
-    transport_mode="railway"
+
+
+compute_opex_var_arcs(
+    path_node_metrics=path_files_node_flux / "node_metrics.xlsx",
+    path_output_root=input_data_path / "period1" / "network_topology" / "new",
 )
 
 #----- Update carrier data with pricing, emission factors, and demands -----#

@@ -176,6 +176,7 @@ class Network(ModelComponent):
         # Options
         self.capex_defined_per_arc = netw_data["capex_defined_per_arc"]
         self.size_max_defined_per_arc = netw_data["size_max_defined_per_arc"]
+        self.opex_var_defined_per_arc = netw_data["opex_var_defined_per_arc"]
 
         # General information
         self.connection = []
@@ -183,6 +184,7 @@ class Network(ModelComponent):
         self.size_max_arcs = []
         self.energy_consumption = {}
         self.gamma_per_arc = {}
+        self.opex_var_arcs = {}
 
         self.transported_carrier = netw_data["Performance"]["carrier"]
 
@@ -242,6 +244,18 @@ class Network(ModelComponent):
                     index=self.distance.index,
                     columns=self.distance.columns,
                 )
+
+        time_independent["opex_var_per_arc"] = {}
+        if self.opex_var_defined_per_arc:
+            # Use gammas from file (defined per arc)
+            time_independent["opex_var_per_arc"] = self.opex_var_arcs
+        else:
+            # Use global cost parameters, as defined in the json file
+            time_independent["opex_var_per_arc"] = pd.DataFrame(
+                self.economics["opex_variable"],
+                index=self.distance.index,
+                columns=self.distance.columns,
+            )
 
         # Other
         time_independent["min_transport"] = self.performance_data["min_transport"]
@@ -312,7 +326,7 @@ class Network(ModelComponent):
                 b_arc, b_netw, node_from, node_to
             )
             b_arc = self._define_flow(b_arc, b_netw)
-            b_arc = self._define_opex_arc(b_arc, b_netw, data)
+            b_arc = self._define_opex_arc(b_arc, b_netw, data, node_from, node_to)
             b_arc = self._define_emissions_arc(b_arc, b_netw)
 
             b_arc = self._define_energyconsumption_arc(b_arc, b_netw)
@@ -451,9 +465,7 @@ class Network(ModelComponent):
         """
         economics = self.economics
 
-        b_netw.para_opex_variable = pyo.Param(
-            domain=pyo.Reals, initialize=economics["opex_variable"], mutable=True
-        )
+
         b_netw.para_opex_fixed = pyo.Param(
             domain=pyo.Reals, initialize=economics["opex_fixed"], mutable=True
         )
@@ -804,7 +816,7 @@ class Network(ModelComponent):
 
         return b_arc
 
-    def _define_opex_arc(self, b_arc, b_netw, data):
+    def _define_opex_arc(self, b_arc, b_netw, data, node_from, node_to):
         """
         Defines OPEX per Arc
 
@@ -813,14 +825,14 @@ class Network(ModelComponent):
         :return: pyomo arc block
         """
         b_arc.var_opex_variable = pyo.Var()
-
+        opex_var_arc = self.processed_coeff.time_independent["opex_var_per_arc"].at[node_from, node_to]
         hour_factors = data["hour_factors"]
         nr_timesteps_averaged = data["nr_timesteps_averaged"]
 
         def init_opex_variable(const):
             return b_arc.var_opex_variable == sum(
                 (b_arc.var_flow[t] * nr_timesteps_averaged * hour_factors[t - 1])
-                * b_netw.para_opex_variable
+                * opex_var_arc
                 for t in self.set_t
             )
 

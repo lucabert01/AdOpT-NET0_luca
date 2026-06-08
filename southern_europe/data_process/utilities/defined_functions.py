@@ -1050,6 +1050,50 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
     return True
 
 
+
+
+def compute_opex_var_arcs(path_node_metrics: Path, path_output_root: Path) -> None:
+    """
+    Reads truck and railway distance matrices from node_metrics.xlsx and writes
+    opex_var_arcs.csv to the respective CO2Truck and CO2Railway output folders.
+
+    Formulas are taken from Ouvray 2024:
+        Truck:   opex_var = (5.58  / distance + 0.15) * distance
+        Railway: opex_var = (28.9  / distance + 0.07) * distance
+
+    Zero-distance entries (no arc / same node) are left as 0.
+
+    Parameters
+    ----------
+    path_node_metrics : Path
+        Full path to node_metrics.xlsx.
+    path_output_root : Path
+        Root folder that contains CO2Truck/ and CO2Railway/ sub-folders.
+    """
+
+    def _opex_truck(d: float) -> float:
+        return (5.58 / d + 0.15) * d if d > 0 else 0.0
+
+    def _opex_railway(d: float) -> float:
+        return (28.9 / d + 0.07) * d if d > 0 else 0.0
+
+    truck_dist = pd.read_excel(path_node_metrics, sheet_name="truck", index_col=0)
+    rail_dist  = pd.read_excel(path_node_metrics, sheet_name="railway", index_col=0)
+
+    truck_opex = truck_dist.applymap(_opex_truck)
+    rail_opex  = rail_dist.applymap(_opex_railway)
+
+    path_truck_out   = path_output_root / "CO2Truck"   / "opex_var_arcs.csv"
+    path_railway_out = path_output_root / "CO2Railway" / "opex_var_arcs.csv"
+
+    path_truck_out.parent.mkdir(parents=True, exist_ok=True)
+    path_railway_out.parent.mkdir(parents=True, exist_ok=True)
+
+    truck_opex.to_csv(path_truck_out)
+    rail_opex.to_csv(path_railway_out)
+
+    print(f"Saved truck   opex_var_arcs -> {path_truck_out}")
+    print(f"Saved railway opex_var_arcs -> {path_railway_out}")
 def process_gamma_sheets_to_csv(path_files_network_capex, input_data_path, network_location_df,
                                 transport_mode="pipeline"):
     """
@@ -1067,7 +1111,7 @@ def process_gamma_sheets_to_csv(path_files_network_capex, input_data_path, netwo
     """
 
     # Validate transport mode
-    valid_modes = ["pipeline", "truck", "railway"]
+    valid_modes = ["pipeline"]
     if transport_mode.lower() not in valid_modes:
         raise ValueError(f"transport_mode must be one of {valid_modes}, got: {transport_mode}")
 
@@ -1395,18 +1439,44 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
             print(f"Warning: could not load emission factor for {node_type} ({e}), defaulting to 1.0")
             emission_factors[node_type] = 1.0
 
-    # --- Load real hourly demand profiles once (if the file exists) ---
+    # --- Load hourly profiles from both real_data and synthetic_data sheets ---
     excel_file_path = path_files_node_flux / "emission_profile_emitters.xlsx"
-    profiles_df = pd.read_excel(excel_file_path) if excel_file_path.exists() else None
+
+    profiles_real      = None
+    profiles_synthetic = None
+
+    if excel_file_path.exists():
+        xl = pd.ExcelFile(excel_file_path)
+        if "real_data" in xl.sheet_names:
+            profiles_real = pd.read_excel(xl, sheet_name="real_data")
+        if "synthetic_data" in xl.sheet_names:
+            profiles_synthetic = pd.read_excel(xl, sheet_name="synthetic_data")
+
+    def get_profile(node_type: str, node_name: str) -> tuple[np.ndarray | None, str]:
+        """
+        Look up the hourly profile for a node.
+        Priority: real_data sheet first, then synthetic_data sheet.
+        Returns (array_8760, source_label) or (None, 'missing').
+        """
+        col = f"{node_type} - {node_name}"
+        for df, label in [(profiles_real, "real_data"), (profiles_synthetic, "synthetic_data")]:
+            if df is not None and col in df.columns:
+                arr = df[col].head(8760).values.astype(float)
+                if len(arr) != 8760:
+                    raise ValueError(f"Expected 8760 rows for '{col}' in {label}, got {len(arr)}")
+                if np.any(np.isnan(arr)):
+                    raise ValueError(f"NaN values in profile '{col}' in {label}")
+                return arr, label
+        return None, "missing"
 
     # --- Process demands per node ---
     node_demands_hourly = {}
     node_demands_annual = {}
-    nodes_with_real_data, nodes_with_averaged_data = [], []
+    nodes_with_real_data, nodes_with_synthetic_data, nodes_missing_profile = [], [], []
 
     for _, row in network_emission_flux.iterrows():
-        node_name  = row['node_name']
-        node_type  = row['node_type']
+        node_name       = row['node_name']
+        node_type       = row['node_type']
         annual_emission = row['annual_emission']
 
         if node_type in ('Storage', 'Transport') or annual_emission == 0:
@@ -1417,22 +1487,24 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
         _, carrier_name = node_type_mapping[node_type]
         annual_demand_tonnes = round(annual_emission / emission_factors[node_type] / 1000.0, 2)
 
-        # Try real hourly profile first
-        column_name = f"{node_type} - {node_name}"
-        if profiles_df is not None and column_name in profiles_df.columns:
-            hourly_demand_array = profiles_df[column_name].head(8760).values.astype(float)
-            if len(hourly_demand_array) != 8760:
-                raise ValueError(f"Expected 8760 rows for '{column_name}', got {len(hourly_demand_array)}")
-            if np.any(np.isnan(hourly_demand_array)):
-                raise ValueError(f"NaN values in demand profile for '{column_name}'")
+        hourly_demand_array, source = get_profile(node_type, node_name)
+
+        if source == "real_data":
             annual_demand_tonnes = round(hourly_demand_array.sum(), 2)
-            nodes_with_real_data.append(f"{node_name} - {node_type}")
-            print(f"  ✅ Real profile loaded for {node_name} ({carrier_name}): {hourly_demand_array.sum():.2f} t/yr")
+            nodes_with_real_data.append(f"{node_name} ({node_type})")
+            print(f"  ✅ Real profile      | {node_name} ({carrier_name}): {annual_demand_tonnes:.2f} t/yr")
+
+        elif source == "synthetic_data":
+            annual_demand_tonnes = round(hourly_demand_array.sum(), 2)
+            nodes_with_synthetic_data.append(f"{node_name} ({node_type})")
+            print(f"  🔧 Synthetic profile | {node_name} ({carrier_name}): {annual_demand_tonnes:.2f} t/yr")
+
         else:
-            hourly_rate = round(annual_demand_tonnes / 8760.0, 2)
+            # No profile found in either sheet — fall back to flat and warn
+            hourly_rate = round(annual_demand_tonnes / 8760.0, 6)
             hourly_demand_array = np.full(8760, hourly_rate)
-            nodes_with_averaged_data.append(f"{node_name} - {node_type}")
-            print(f"  📊 Averaged profile for {node_name} ({carrier_name}): {hourly_rate:.2f} t/hr")
+            nodes_missing_profile.append(f"{node_name} ({node_type})")
+            print(f"  ⚠️  No profile found  | {node_name} ({carrier_name}): falling back to flat {hourly_rate:.4f} t/hr")
 
         node_demands_hourly.setdefault(node_name, {}).setdefault(carrier_name, np.zeros(8760))
         node_demands_hourly[node_name][carrier_name] += hourly_demand_array
@@ -1454,8 +1526,10 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
     print(f"  Elec. emission factor    : {co2_intensity_electricity} kg CO2/kWh")
     print(f"  Heat emission factor     : {co2_intensity_heat:.4f} kg CO2/kWh")
     print(f"  Electricity price points : {len(electricity_prices)}")
-    print(f"  Nodes with real profiles : {len(nodes_with_real_data)} — {nodes_with_real_data}")
-    print(f"  Nodes with flat profiles : {len(nodes_with_averaged_data)} — {nodes_with_averaged_data}")
+    print(f"  Nodes with real profiles      ({len(nodes_with_real_data):>2}): {nodes_with_real_data}")
+    print(f"  Nodes with synthetic profiles ({len(nodes_with_synthetic_data):>2}): {nodes_with_synthetic_data}")
+    if nodes_missing_profile:
+        print(f"  ⚠️  Nodes with NO profile     ({len(nodes_missing_profile):>2}): {nodes_missing_profile}")
 
     if node_demands_annual:
         print(f"\nAnnual demand by node (tonnes/year):")
