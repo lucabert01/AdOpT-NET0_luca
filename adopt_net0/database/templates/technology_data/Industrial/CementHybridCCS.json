@@ -1,0 +1,83 @@
+{
+  "tec_type": "CementHybridCCS",
+  "size_min": 0,
+  "size_max": 200,
+  "size_is_int": 0,
+  "decommission": 0,
+  "Economics": {
+    "comment": "CAPEX in EUR/tCLinker/h or as a piecewise function, CAPEX MEA is in EUR/tCO2/h, OPEX_variable in EUR/tonne total output, OPEX_fixed in % of CAPEX_annual",
+    "CAPEX_model": 1,
+    "unit_CAPEX": 676800,
+    "fix_CAPEX": 0,
+    "piecewise_CAPEX": {
+      "bp_x": [
+        0,
+        75,
+        125
+      ],
+      "bp_y": [
+        0,
+        50760000,
+        72350000
+      ]
+    },
+    "other_economics": {
+      "unit_CAPEX_MEA": 1717286,
+      "piecewise_CAPEX_MEA": {
+      "bp_x": [
+        0,
+        4.430,
+        14.77,
+        24.42
+      ],
+      "bp_y": [
+        0,
+        13902000,
+        25360000,
+        26820000
+      ]
+      },
+      "OPEX_fixed_MEA": 0.02,
+      "OPEX_fixed_oxy": 0.16
+    },
+    "OPEX_variable": 7,
+    "OPEX_fixed": 0,
+    "discount_rate": 0.1,
+    "lifetime": 25,
+    "decommission_cost": 0
+  },
+  "Performance": {
+    "comment": "contains fitting data on unit of input, technology types and input/output carriers",
+    "performance_function_type": 2,
+    "clinker_capacity_is_fixed": 0,
+    "prod_capacity_clinker": 80,
+    "co2_out_is_compressed": 1,
+    "phase_of_co2_out": "gas",
+    "input_carrier": [
+      "electricity"
+    ],
+    "main_output_carrier": "clinker",
+    "output_carrier": [
+      "CO2captured",
+      "clinker"
+    ],
+    "emission_factor": 0,
+    "min_part_load": 1,
+    "performance": {
+      "tCO2_tclinker": 0.94,
+      "CCR_oxy": 0.782,
+      "CCR_mea": 0.95
+    }
+  },
+  "Units": {
+    "size": "tonne/hr",
+    "input_carrier": {
+      "heat": "MW",
+      "electricity": "MW"
+    },
+    "output_carrier": {
+      "clinker": "tonne/hr",
+      "CO2captured": "tonne/hr"
+    }
+  }
+}
