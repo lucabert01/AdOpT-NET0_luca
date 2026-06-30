@@ -38,7 +38,8 @@ max_transport_capacity = 3000
 carbon_tax = 150  # euro per tonne CO2
 enable_carbon_pricing = True
 nr_DD_days = 15
-
+node_metrics_suffix = 200  # or "150", "200", "" for the base case. Refers to the cutoff size for truck connections
+node_metrics_file = f"node_metrics_{node_metrics_suffix}.xlsx"
 #----- Create folder for results -----#
 results_data_path = "./userData/"
 # Create input data path and optimisation templates
@@ -55,11 +56,11 @@ path_files_node_flux = path_data_case_study / "geographical_feature"
 path_files_electricity = path_data_case_study / "electricity_metrics"
 path_files_network_capex = path_data_case_study / "network_capex_metrics"
 
-network_location = pd.read_excel(path_files_node_flux/"node_metrics.xlsx", index_col=0, sheet_name='nodes') # nodes
-network_emission_flux = pd.read_excel(path_files_node_flux/"node_metrics.xlsx", index_col=0, sheet_name='nodes') # annual emission fluxes
-network_pipeline = pd.read_excel(path_files_node_flux/"node_metrics.xlsx", index_col=0, sheet_name='pipeline') # pipeline connection and distance
-network_truck = pd.read_excel(path_files_node_flux/"node_metrics.xlsx", index_col=0, sheet_name='truck') # truck connection and distance
-network_railway = pd.read_excel(path_files_node_flux/"node_metrics.xlsx", index_col=0, sheet_name='railway') # train connection and distance
+network_location = pd.read_excel(path_files_node_flux/node_metrics_file, index_col=0, sheet_name='nodes') # nodes
+network_emission_flux = pd.read_excel(path_files_node_flux/node_metrics_file, index_col=0, sheet_name='nodes') # annual emission fluxes
+network_pipeline = pd.read_excel(path_files_node_flux/node_metrics_file, index_col=0, sheet_name='pipeline') # pipeline connection and distance
+network_truck = pd.read_excel(path_files_node_flux/node_metrics_file, index_col=0, sheet_name='truck') # truck connection and distance
+network_railway = pd.read_excel(path_files_node_flux/node_metrics_file, index_col=0, sheet_name='railway') # train connection and distance
 
 electricity_price = pd.read_csv(path_files_electricity/"electricity_prices_hourly_2024.csv")
 electricity_price = electricity_price.drop(index=range(1416, 1440)).reset_index(drop=True) #2024 is leap year
@@ -94,7 +95,7 @@ assign_carriers_to_nodes(input_data_path, network_location, network_emission_flu
 # Update configmodel json
 with open(input_data_path / "ConfigModel.json", "r") as json_file:
     configuration = json.load(json_file)
-configuration["optimization"]["objective"]["value"] = "emissions_minC" # set optimization objective
+configuration["optimization"]["objective"]["value"] = "pareto" # set optimization objective
 configuration["solveroptions"]["mipgap"]["value"] = 0.02 # set MILP gap
 configuration['optimization']['typicaldays']['N']['value'] = nr_DD_days
 with open(input_data_path / "ConfigModel.json", "w") as json_file:
@@ -271,7 +272,7 @@ gamma_pipeline_per_arc = process_gamma_sheets_to_csv(
 
 
 compute_opex_var_arcs(
-    path_node_metrics=path_files_node_flux / "node_metrics.xlsx",
+    path_node_metrics=path_files_node_flux / node_metrics_file,
     path_output_root=input_data_path / "period1" / "network_topology" / "new",
 )
 
