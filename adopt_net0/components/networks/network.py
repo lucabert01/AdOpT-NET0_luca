@@ -824,7 +824,10 @@ class Network(ModelComponent):
         :param b_netw: pyomo network block
         :return: pyomo arc block
         """
+
         b_arc.var_opex_variable = pyo.Var()
+
+
         opex_var_arc = self.processed_coeff.time_independent["opex_var_per_arc"].at[node_from, node_to]
         hour_factors = data["hour_factors"]
         nr_timesteps_averaged = data["nr_timesteps_averaged"]

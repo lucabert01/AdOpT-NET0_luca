@@ -1077,23 +1077,32 @@ def compute_opex_var_arcs(path_node_metrics: Path, path_output_root: Path) -> No
     def _opex_railway(d: float) -> float:
         return (28.9 / d + 0.07) * d if d > 0 else 0.0
 
+    # Build a mapping from node_id -> node_name
+    nodes_df = pd.read_excel(path_node_metrics, sheet_name="nodes")
+    id_to_name = nodes_df.set_index('node_id')['node_name'].to_dict()
+
     truck_dist = pd.read_excel(path_node_metrics, sheet_name="truck", index_col=0)
-    rail_dist  = pd.read_excel(path_node_metrics, sheet_name="railway", index_col=0)
+    rail_dist = pd.read_excel(path_node_metrics, sheet_name="railway", index_col=0)
+
+    # Rename both index and columns using the id -> name mapping
+    truck_dist = truck_dist.rename(index=id_to_name, columns=id_to_name)
+    rail_dist = rail_dist.rename(index=id_to_name, columns=id_to_name)
 
     truck_opex = truck_dist.applymap(_opex_truck)
-    rail_opex  = rail_dist.applymap(_opex_railway)
+    rail_opex = rail_dist.applymap(_opex_railway)
 
-    path_truck_out   = path_output_root / "CO2Truck"   / "opex_var_arcs.csv"
+    path_truck_out = path_output_root / "CO2Truck" / "opex_var_arcs.csv"
     path_railway_out = path_output_root / "CO2Railway" / "opex_var_arcs.csv"
 
     path_truck_out.parent.mkdir(parents=True, exist_ok=True)
     path_railway_out.parent.mkdir(parents=True, exist_ok=True)
 
-    truck_opex.to_csv(path_truck_out)
-    rail_opex.to_csv(path_railway_out)
+    truck_opex.to_csv(path_truck_out, sep=';')
+    rail_opex.to_csv(path_railway_out, sep=';')
 
     print(f"Saved truck   opex_var_arcs -> {path_truck_out}")
     print(f"Saved railway opex_var_arcs -> {path_railway_out}")
+
 def process_gamma_sheets_to_csv(path_files_network_capex, input_data_path, network_location_df,
                                 transport_mode="pipeline"):
     """
