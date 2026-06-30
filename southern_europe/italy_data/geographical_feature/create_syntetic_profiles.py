@@ -83,7 +83,7 @@ def _norm_waste() -> np.ndarray:
       - during a stop: 0.5 flat (one line down, no noise)
     Stops are guaranteed non-overlapping.
     """
-    profile = RNG.uniform(0.9, 1.1, HOURS)      # full capacity with ±10% noise
+    profile = RNG.uniform(0.95, 1.05, HOURS)      # full capacity with ±10% noise
 
     starts: list[int] = []
     for _ in range(2):
