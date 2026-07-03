@@ -9,13 +9,13 @@ from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 
 
 # Import data
-path_data_case_study = Path("../northern_italy_data")
+path_data_case_study = Path("../italy_data")
 
 path_files_gis = path_data_case_study / "raw_data/gis_data"
 path_files_grids = path_data_case_study / "geographical_feature"
 
 italy = gpd.read_file(path_files_gis / "italy_WGS1984.shp") # italy boundary
-fishnet = gpd.read_file(path_files_gis/"fishnet_italy_25km.shp").reset_index().rename(
+fishnet = gpd.read_file(path_files_gis/"fishnet_italy_5km.shp").reset_index().rename(
     columns={"index": "GRID_OID"})
 soil_data = pd.read_csv(path_files_grids / "soil_type_grids_italy.csv")
 anthro_data = pd.read_csv(path_files_grids / "anthropisation_grids_italy.csv")
@@ -37,29 +37,43 @@ fishnet['COST_FACTOR'] = fishnet[['SOIL_FACTOR', 'ANTHRO_FACTOR', 'MORPH_FACTOR'
 # Clip to Italy boundary
 fishnet_clipped = gpd.clip(fishnet, italy)
 
+# ——— Define northern Italy bounding box ———
+# Option A: manual bbox (lon_min, lon_max, lat_min, lat_max) — adjust as needed
+NORTH_LAT_THRESHOLD = 44
+
+# Option B: derive bbox from the data itself (recommended — adapts to your grid)
+northern_subset = fishnet_clipped[fishnet_clipped.geometry.centroid.y > NORTH_LAT_THRESHOLD]
+minx, miny, maxx, maxy = northern_subset.total_bounds
+
+pad = 0.3  # degrees of padding around the bounding box
+xlim = (minx - pad, maxx + pad)
+ylim = (miny - pad, maxy + pad)
+
 # ——— Plot 1: four‐panel row for the individual factors and integrated cost factor ———
 fig, axes = plt.subplots(1, 4, figsize=(24, 6), constrained_layout=False)
 plt.subplots_adjust(wspace=0.05, right=0.85)  # Reduce space between subplots and make room for legend
 
 # Find the global min and max for all four factors to create a consistent color scale
-min_val = min(fishnet_clipped['MORPH_FACTOR'].min(),
-              fishnet_clipped['SOIL_FACTOR'].min(),
-              fishnet_clipped['ANTHRO_FACTOR'].min(),
-              fishnet_clipped['COST_FACTOR'].min())
-max_val = max(fishnet_clipped['MORPH_FACTOR'].max(),
-              fishnet_clipped['SOIL_FACTOR'].max(),
-              fishnet_clipped['ANTHRO_FACTOR'].max(),
-              fishnet_clipped['COST_FACTOR'].max())
+# (using the northern subset so the color scale reflects the zoomed region;
+#  swap to fishnet_clipped if you want the scale to match the full-Italy version)
+min_val = min(northern_subset['MORPH_FACTOR'].min(),
+              northern_subset['SOIL_FACTOR'].min(),
+              northern_subset['ANTHRO_FACTOR'].min(),
+              northern_subset['COST_FACTOR'].min())
+max_val = max(northern_subset['MORPH_FACTOR'].max(),
+              northern_subset['SOIL_FACTOR'].max(),
+              northern_subset['ANTHRO_FACTOR'].max(),
+              northern_subset['COST_FACTOR'].max())
 
 # Create a normalized colormap
 norm = Normalize(vmin=min_val, vmax=max_val)
 cmap = cmc.navia_r  # Using reversed navia colormap for all plots
 
 panel_info = [
-    ('MORPH_FACTOR', 'a) Geomorphological feature'),
-    ('SOIL_FACTOR', 'b) Soil type'),
-    ('ANTHRO_FACTOR', 'c) Anthropization'),
-    ('COST_FACTOR', 'd) Integrated cost factor')
+    ('MORPH_FACTOR', 'Geomorphological feature'),
+    ('SOIL_FACTOR', 'Soil type'),
+    ('ANTHRO_FACTOR', 'Anthropization'),
+    ('COST_FACTOR', 'Integrated cost factor')
 ]
 
 # Create a ScalarMappable for the colorbar
@@ -75,6 +89,10 @@ for i, (col, title) in enumerate(panel_info):
     fishnet_clipped.plot(column=col, ax=ax, cmap=cmap, norm=norm, legend=False)
     fishnet_clipped.boundary.plot(ax=ax, color='gray', linewidth=0.3, alpha=0.5)
 
+    # Zoom to northern Italy
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+
     # Place title at the bottom of the subplot
     ax.set_title(title, y=-0.1, fontsize=12)
     ax.set_axis_off()
@@ -85,7 +103,7 @@ cbar = fig.colorbar(sm, cax=cbar_ax)
 cbar.set_label('Factor Value', fontsize=12)
 cbar.ax.tick_params(labelsize=10)
 
-plt.savefig('italy_incremental_cost_factors_with_integrated.png', dpi=600, bbox_inches='tight')
+plt.savefig('italy_incremental_cost_factors_with_integrated_NORTH.png', dpi=600, bbox_inches='tight')
 plt.show()
 
 # ——— Plot 2: single map for the total cost factor (kept for comparison/standalone use) ———
@@ -95,17 +113,21 @@ italy.boundary.plot(ax=ax, color='black', linewidth=1)
 # Plot without legend first
 fishnet_clipped.plot(column='COST_FACTOR', ax=ax, cmap=cmc.navia_r, legend=False)
 fishnet_clipped.boundary.plot(ax=ax, color='gray', linewidth=0.3, alpha=0.5)
+
+# Zoom to northern Italy
+ax.set_xlim(xlim)
+ax.set_ylim(ylim)
 ax.set_axis_off()
 
 # Add colorbar on the right side with more width
 cbar_ax = fig.add_axes([0.85, 0.2, 0.05, 0.6])  # [left, bottom, width, height] - wider and on right
-sm = plt.cm.ScalarMappable(cmap=cmc.navia_r, norm=plt.Normalize(
-    fishnet_clipped['COST_FACTOR'].min(), fishnet_clipped['COST_FACTOR'].max()))
-cbar = fig.colorbar(sm, cax=cbar_ax)
+sm2 = plt.cm.ScalarMappable(cmap=cmc.navia_r, norm=plt.Normalize(
+    northern_subset['COST_FACTOR'].min(), northern_subset['COST_FACTOR'].max()))
+cbar = fig.colorbar(sm2, cax=cbar_ax)
 cbar.set_label('Cost Factor Value', fontsize=12)
 
 # Adjust figure to make room for the colorbar
 plt.subplots_adjust(right=0.8)
 
-plt.savefig('italy_cost_factor.png', dpi=600, bbox_inches='tight')
+plt.savefig('italy_cost_factor_NORTH.png', dpi=600, bbox_inches='tight')
 plt.show()
