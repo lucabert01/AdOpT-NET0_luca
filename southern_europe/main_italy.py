@@ -30,7 +30,7 @@ from data_process.utilities.defined_functions import (
 #----- Scenario parameterization -----#
 ref_year = 2024
 discount_rate = 0.08 # default
-co2_intensity_electricity = 0.288 # default (kg CO2/kWh)
+co2_intensity_electricity = 0 # default (kg CO2/kWh)
 cop_hp = 2.6 # default
 electricity_import_limit = 100 # default
 heat_import_limit = 200 # default

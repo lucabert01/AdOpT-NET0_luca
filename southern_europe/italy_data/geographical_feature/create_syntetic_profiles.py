@@ -121,12 +121,12 @@ NORM_GENERATORS = {
 # Scaling: normalized profile → tonnes/hour so that annual sum = annual_flux
 # ---------------------------------------------------------------------------
 
-def scale_profile(normalized: np.ndarray, annual_flux_kg: float) -> np.ndarray:
+def scale_profile(normalized: np.ndarray, annual_flux: float) -> np.ndarray:
     """
     Scale normalized profile (dimensionless) to tonnes/hour.
-    sum(result) == annual_flux_kg / 1000  [tonnes/year]
+    sum(result) == annual_flux  [tonnes/year]
     """
-    annual_flux_t = annual_flux_kg / 1000.0
+    annual_flux_t = annual_flux
     total = normalized.sum()
     if total == 0:
         return np.zeros(HOURS)
@@ -270,7 +270,7 @@ def main() -> None:
             continue
         col_header = f"{sector} - {node_name}"
         source = "real_data" if col_header in existing_cols else "synthetic_data"
-        records.append((node_name, sector, round(row["annual_flux"] / 1000, 1), source))
+        records.append((node_name, sector, round(row["annual_flux"], 1), source))
 
     coverage = pd.DataFrame(records, columns=["node_name", "sector", "annual_flux_t", "source"])
     print(coverage.to_string(index=False))

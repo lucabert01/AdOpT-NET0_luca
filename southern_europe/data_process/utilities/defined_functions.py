@@ -130,7 +130,7 @@ def calculate_emitter_capacities(network_emission_flux, path_data_case_study, pa
     for row_position, (idx, row) in enumerate(network_emission_flux.iterrows()):
         node_name = row['node_name']
         node_type = row['node_type']
-        annual_emission = row['annual_emission']  # kg CO2/year
+        annual_emission = row['annual_emission']  # t CO2/year
 
         print(
             f"🔍 DEBUG: Processing row position {row_position} (index {idx}) - Node: {node_name}, Type: {node_type}, Emission: {annual_emission}")
@@ -194,25 +194,25 @@ def calculate_emitter_capacities(network_emission_flux, path_data_case_study, pa
         if capacity == 0.0 and node_type in emission_factors:
             print(f"      🔄 Using fallback method (annual emissions)")
 
-            # Calculate annual demand in kg product/year using the emission factor
-            annual_demand_kg = annual_emission / emission_factors[node_type]  # kg product/year
+            # Calculate annual demand in t product/year using the emission factor
+            annual_demand = annual_emission / emission_factors[node_type]  # t product/year
 
             print(
-                f"🔍 DEBUG: Row position {row_position} calculation - Emission: {annual_emission}, Emission Factor: {emission_factors[node_type]}, Annual Demand: {annual_demand_kg}")
+                f"🔍 DEBUG: Row position {row_position} calculation - Emission: {annual_emission}, Emission Factor: {emission_factors[node_type]}, Annual Demand: {annual_demand}")
 
             if capacity_unit == "tonnes_per_hour":
-                # Convert to tonnes/hour: kg/year -> tonnes/hour
-                # 1 year = 8760 hours, 1 tonne = 1000 kg
-                capacity_tonnes_per_hour = annual_demand_kg / (8760 * 1000)
+                # Convert to tonnes/hour: t/year -> tonnes/hour
+
+                capacity_tonnes_per_hour = annual_demand / (8760 )
                 capacity = round(capacity_tonnes_per_hour, 2)  # Round to 2 decimal places
                 unit_label = "tonnes/hour"
 
             elif capacity_unit == "MW":
                 # Convert to MW assuming typical industrial process energy intensity
-                # Rough estimate: 1 kg product/hour ≈ 0.001 MW (adjustable based on process)
-                # Annual demand kg/year -> hourly demand kg/hour -> MW
-                hourly_demand_kg = annual_demand_kg / 8760  # kg product/hour
-                capacity_mw = hourly_demand_kg * 0.001  # Convert to MW (rough estimate)
+                # Rough estimate: 1 t product/hour ≈ 1 MW (adjustable based on process)
+                # Annual demand t/year -> hourly demand t/hour -> MW
+                hourly_demand= annual_demand / 8760  # t product/hour
+                capacity_mw = hourly_demand * 1  # Convert to MW (rough estimate)
                 capacity = round(capacity_mw, 2)  # Round to 2 decimal places
                 unit_label = "MW"
 
@@ -452,7 +452,7 @@ def assign_mea_technology(network_emission_flux, path_data_case_study):
         if node_type in ["Storage", "Transport"]:
             continue
 
-        # Get the node's calculated annual CO2 emission (kg/year)
+        # Get the node's calculated annual CO2 emission (t/year)
         annual_emission = row["annual_emission"]
 
         # Determine CO2 concentration based on emitter type
@@ -466,8 +466,8 @@ def assign_mea_technology(network_emission_flux, path_data_case_study):
             co2_concentration = 0.15
 
         # Calculate CO2 ranges for each MEA scale based on technology specs
-        # Convert MEA scale from t/h to kg/year for comparison
-        conversion_factor = 1000 * 24 * 365  # t/h to kg/year
+        # Convert MEA scale from t/h to t/year for comparison
+        conversion_factor = 24 * 365  # t/h to kg/year
 
         mea_ranges = {}
         for scale, data in mea_data.items():
@@ -1494,7 +1494,7 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
             continue
 
         _, carrier_name = node_type_mapping[node_type]
-        annual_demand_tonnes = round(annual_emission / emission_factors[node_type] / 1000.0, 2)
+        annual_demand_tonnes = round(annual_emission / emission_factors[node_type], 2)
 
         hourly_demand_array, source = get_profile(node_type, node_name)
 
