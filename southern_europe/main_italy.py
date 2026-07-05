@@ -9,10 +9,7 @@ from data_process.utilities.defined_functions import (
     calculate_emitter_capacities,
     assign_carriers_to_nodes,
     assign_mea_technology,
-    assign_ccs_technologies,
     assign_ccs_technologies_debug,
-    debug_raw_network_data,
-    update_network_distance_matrix,
     update_network_distance_matrix_debug,
     update_network_connection_matrix,
     update_network_size_max_arcs,
@@ -37,7 +34,7 @@ heat_import_limit = 200 # default
 max_transport_capacity = 3000
 carbon_tax = 150  # euro per tonne CO2
 enable_carbon_pricing = True
-nr_DD_days = 15
+nr_DD_days = 0
 node_metrics_suffix = 200  # or "150", "200", "" for the base case. Refers to the cutoff size for truck connections
 node_metrics_file = f"node_metrics_{node_metrics_suffix}.xlsx"
 #----- Create folder for results -----#
@@ -78,13 +75,13 @@ for i, name in enumerate(node_names):
 
 #----- Calculate annual emission values -----#
 # Calculate the actual annual emission values using the specified formula logic
-network_emission_flux = calculate_annual_emission_values(network_emission_flux)
+network_emission_flux = calculate_annual_emission_values(network_emission_flux, path_files_node_flux)
 
 #----- Calculate emitter capacities -----#
 # Calculate initial capacities for emitter technologies based on annual emissions and emission factors
 # Using tonnes/hour units (appropriate for emitters that produce physical products)
 print("Calculating emitter capacities based on annual emissions and emission factors...")
-network_emission_flux = calculate_emitter_capacities(network_emission_flux, path_data_case_study, path_files_node_flux, capacity_unit="tonnes_per_hour")
+network_emission_flux = calculate_emitter_capacities(network_emission_flux)
 
 #----- Update topology json with carriers assignment -----#
 adopt.create_input_data_folder_template(input_data_path)
@@ -358,7 +355,52 @@ if missing_files:
 else:
     print(f"  ✅ All required files present")
 
+import adopt_net0 as adopt
+from pyomo.environ import SolverFactory
 
 m = adopt.ModelHub()
-m.read_data(input_data_path)
-m.quick_solve()
+m.read_data(input_data_path, start_period=0, end_period=1)
+
+m.construct_model()
+m.construct_balances()
+
+# 1. Print the keys to see how adopt_net0 stores the model(s)
+print(f"Available keys in m.model: {m.model.keys()}")
+
+# 2. Extract the actual Pyomo model from the dictionary
+# This grabs the first (and likely only) key in the dictionary
+model_key = list(m.model.keys())[0]
+pyomo_model = m.model[model_key]
+
+# 3. Verify it is now a Pyomo ConcreteModel
+print(f"Type of pyomo_model is now: {type(pyomo_model)}")
+
+# 4. Proceed with solving
+opt = SolverFactory("gurobi_persistent")
+# 1. Revert to the standard set_instance (no symbolic labels)
+opt.set_instance(pyomo_model)
+results = opt.solve(tee=True)
+
+if str(results.solver.termination_condition) == "infeasible":
+    gurobi_model = opt._solver_model
+    gurobi_model.computeIIS()
+    gurobi_model.write("infeasible.ilp")
+    print("IIS written to infeasible.ilp")
+
+    print("\n--- TRANSLATING IIS NAMES ---")
+
+    # 2. List the variables we found in the ILP file
+    var_names = ["x2681", "x2693", "x2697", "x2701", "x2705", "x2718", "x2677"]
+    for v_name in var_names:
+        g_var = gurobi_model.getVarByName(v_name)
+        if g_var is not None:
+            p_var = opt._solver_var_to_pyomo_var_map[g_var]
+            print(f"Variable {v_name} -> {p_var.name}")
+
+    # 3. List the constraints we found in the ILP file
+    con_names = ["x9803", "x10232", "x10402", "x10572", "x10785"]
+    for c_name in con_names:
+        g_con = gurobi_model.getConstrByName(c_name)
+        if g_con is not None:
+            p_con = opt._solver_con_to_pyomo_con_map[g_con]
+            print(f"Constraint {c_name} -> {p_con.name}")

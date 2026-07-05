@@ -13,275 +13,97 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 
-
-def calculate_annual_emission_values(network_emission_flux):
+def load_emission_profiles(path_files_node_flux):
     """
-    Calculate the actual annual emission values for each emitter based on Excel formula logic.
-
-    This function recreates the Excel formula: =IF(ISNUMBER(computed_annual_flux), computed_annual_flux, annual_flux)
-    If 'computed_annual_flux' has a valid number, use it; otherwise use 'annual_flux'.
-
-    Parameters:
-        - network_emission_flux: DataFrame containing emission data with 'annual_flux' and 'computed_annual_flux' columns
-
-    Returns:
-        - network_emission_flux: Updated DataFrame with calculated 'annual_emission' column
+    Load hourly emission profiles from emission_profile_emitters.xlsx (real_data + synthetic_data sheets).
+    Returns (profiles_real, profiles_synthetic) DataFrames (either can be None if missing).
     """
+    excel_file_path = path_files_node_flux / "emission_profile_emitters.xlsx"
 
-    def apply_emission_formula(row):
-        """
-        Apply the Excel formula logic: =IF(ISNUMBER(computed_annual_flux),computed_annual_flux,annual_flux)
-        If 'computed_annual_flux' has a valid number, use it; otherwise use 'annual_flux'
-        """
-        computed_flux = row.get('computed_annual_flux', None)
-        annual_flux = row.get('annual_flux', 0)
+    profiles_real = None
+    profiles_synthetic = None
 
-        # Check if computed_flux is a valid number (not NaN, not None, not empty, not zero)
-        if pd.notna(computed_flux) and computed_flux != 0:
-            return computed_flux
-        else:
-            return annual_flux
+    if excel_file_path.exists():
+        xl = pd.ExcelFile(excel_file_path)
+        if "real_data" in xl.sheet_names:
+            profiles_real = pd.read_excel(xl, sheet_name="real_data")
+        if "synthetic_data" in xl.sheet_names:
+            profiles_synthetic = pd.read_excel(xl, sheet_name="synthetic_data")
 
-    # Apply the logic to create the annual_emission column
-    network_emission_flux['annual_emission'] = network_emission_flux.apply(apply_emission_formula, axis=1)
+    return profiles_real, profiles_synthetic
+
+
+def get_profile(node_type: str, node_name: str, profiles_real, profiles_synthetic) -> tuple[np.ndarray | None, str]:
+    """
+    Look up the hourly profile for a node.
+    Priority: real_data sheet first, then synthetic_data sheet.
+    Returns (array_8760, source_label) or (None, 'missing').
+    """
+    col = f"{node_type} - {node_name}"
+    for df, label in [(profiles_real, "real_data"), (profiles_synthetic, "synthetic_data")]:
+        if df is not None and col in df.columns:
+            arr = df[col].head(8760).values.astype(float)
+            if len(arr) != 8760:
+                raise ValueError(f"Expected 8760 rows for '{col}' in {label}, got {len(arr)}")
+            if np.any(np.isnan(arr)):
+                raise ValueError(f"NaN values in profile '{col}' in {label}")
+            return arr, label
+    return None, "missing"
+
+def calculate_annual_emission_values(network_emission_flux, path_files_node_flux):
+    """
+    Compute annual_emission (sum of hourly profile) and capacity (max of hourly profile)
+    for each row, using the real_data/synthetic_data profiles.
+    """
+    profiles_real, profiles_synthetic = load_emission_profiles(path_files_node_flux)
+
+    annual_emissions = []
+    capacities = []
+
+    for _, row in network_emission_flux.iterrows():
+        profile, _ = get_profile(row['node_type'], row['node_name'], profiles_real, profiles_synthetic)
+        annual_emissions.append(profile.sum())
+        capacities.append(profile.max())
+
+    network_emission_flux['annual_emission'] = annual_emissions
+    network_emission_flux['capacity'] = capacities
 
     return network_emission_flux
 
-
-def calculate_emitter_capacities(network_emission_flux, path_data_case_study, path_files_node_flux,
-                                 capacity_unit="tonnes_per_hour"):
+def calculate_emitter_capacities(network_emission_flux):
     """
-    Calculate initial capacities for emitter technologies based on:
-    1. Maximum demand value from Excel sheet (if available)
-    2. Annual emissions and emission factors (fallback method)
-
-    ENHANCED: Uses real demand data when available, handles multiple emitters per node properly.
+    Set 'emitter_capacity' from the 'capacity' column already computed from the
+    hourly profile (max value, from calculate_annual_emission_values).
 
     Parameters:
-        - network_emission_flux: DataFrame containing emission data with 'annual_emission' column
-        - path_data_case_study: Path to the case study data directory
-        - path_files_node_flux: Path to the directory containing real hourly demand profiles Excel file
-        - capacity_unit: Unit for capacity calculation - "MW" or "tonnes_per_hour" (default)
+        - network_emission_flux: DataFrame with 'annual_emission' and 'capacity' columns
 
     Returns:
         - network_emission_flux: Updated DataFrame with 'emitter_capacity' column
     """
-    # Ensure annual_emission column exists
     if 'annual_emission' not in network_emission_flux.columns:
         raise ValueError("'annual_emission' column not found. Please run calculate_annual_emission_values() first.")
+    if 'capacity' not in network_emission_flux.columns:
+        raise ValueError("'capacity' column not found. Please run calculate_annual_emission_values() first.")
 
-    # Define mapping from node_type to technology file and emission factor key path
-    node_type_mapping = {
-        'Waste': ('Emitter/WasteToEnergyEmitter.json', ['Performance', 'emission_factor']),
-        'Cement': ('Emitter/CementEmitter.json', ['Performance', 'emission_factor']),
-        'Refining': ('Emitter/RefineryEmitter.json', ['Performance', 'emission_factor']),
-        'Other': ('Emitter/UnspecifiedEmitter.json', ['Performance', 'emission_factor'])
-    }
-
-    # Load emission factors from JSON files
-    emission_factors = {}
-    for node_type, (filename, factor_key_path) in node_type_mapping.items():
-        tech_file_path = path_data_case_study / "technologies" / filename
-        if tech_file_path.exists():
-            with open(tech_file_path, 'r') as f:
-                tech_data = json.load(f)
-
-                # Navigate through the nested structure
-                try:
-                    current_data = tech_data
-                    for key in factor_key_path:
-                        current_data = current_data[key]
-
-                    emission_factors[node_type] = current_data
-                    print(f"✅ Loaded emission factor for {node_type}: {current_data}")
-                except KeyError as e:
-                    print(f"Warning: Key path {factor_key_path} not found in {filename} (missing: {e})")
-                    emission_factors[node_type] = 1.0  # Default value
-        else:
-            print(f"Warning: Technology file {filename} not found at {tech_file_path}")
-            emission_factors[node_type] = 1.0  # Default value
-
-    # Initialize capacity column
-    network_emission_flux['emitter_capacity'] = 0.0
-
-    print(f"🔍 DEBUG: DataFrame shape before processing: {network_emission_flux.shape}")
-    print(f"🔍 DEBUG: DataFrame index: {network_emission_flux.index.tolist()}")
-
-    # Define Excel file path for real demand data
-    excel_file_path = path_files_node_flux / "emitter_hourly_profile.xlsx"
-    excel_exists = excel_file_path.exists()
-
-    if excel_exists:
-        print(f"📊 Excel file found: {excel_file_path}")
-    else:
-        print(f"📊 Excel file not found: {excel_file_path} - using fallback method for all nodes")
-
-    # Create carrier name mapping
-    carrier_to_node_type = {
-        'waste': 'Waste',
-        'cement': 'Cement',
-        'refined_product': 'Refining',
-        'industrial_product': 'Other'
-    }
-
-    node_type_to_carrier = {v: k for k, v in carrier_to_node_type.items()}
-
-    # Calculate capacities for each emitter - Use enumerate to get unique row positions
-    for row_position, (idx, row) in enumerate(network_emission_flux.iterrows()):
-        node_name = row['node_name']
+    capacities = []
+    for _, row in network_emission_flux.iterrows():
         node_type = row['node_type']
-        annual_emission = row['annual_emission']  # t CO2/year
+        annual_emission = row['annual_emission']
+        profile_capacity = row['capacity']
 
-        print(
-            f"🔍 DEBUG: Processing row position {row_position} (index {idx}) - Node: {node_name}, Type: {node_type}, Emission: {annual_emission}")
-
-        # Skip non-emitter nodes
-        if node_type in ['Storage', 'Transport'] or annual_emission == 0:
-            print(f"🔍 DEBUG: Skipping row position {row_position} - non-emitter or zero emission")
+        if node_type in ('Storage', 'Transport') or annual_emission == 0:
+            capacities.append(0.0)
             continue
 
-        capacity = 0.0
-        method_used = "unknown"
+        if pd.isna(profile_capacity) or profile_capacity <= 0:
+            raise ValueError(
+                f"Missing or invalid capacity for node '{row['node_name']}' ({node_type}): {profile_capacity}"
+            )
 
-        # Method 1: Try to get capacity from Excel sheet (if available)
-        if excel_exists and node_type in node_type_to_carrier:
-            carrier_name = node_type_to_carrier[node_type]
-            sheet_name = f"{node_name} - {node_type}"
+        capacities.append(round(profile_capacity, 2))
 
-            try:
-                print(f"  📊 Attempting to load sheet: '{sheet_name}'")
-                demand_df = pd.read_excel(excel_file_path, sheet_name=sheet_name)
-
-                if 'Demand' in demand_df.columns:
-                    # Convert to numeric, replacing any non-numeric values with NaN
-                    demand_numeric = pd.to_numeric(demand_df['Demand'], errors='coerce')
-
-                    # Check if we have valid data
-                    valid_count = demand_numeric.notna().sum()
-                    total_count = len(demand_numeric)
-
-                    if valid_count > total_count * 0.8:  # At least 80% valid data
-                        # Get maximum demand value (capacity is the peak demand)
-                        max_demand_value = demand_numeric.max()
-
-                        if pd.notna(max_demand_value) and max_demand_value > 0:
-                            if capacity_unit == "tonnes_per_hour":
-                                capacity = round(max_demand_value, 2)  # Assume data is already in tonnes/hour
-                                unit_label = "tonnes/hour"
-                            elif capacity_unit == "MW":
-                                # Convert from tonnes/hour to MW (rough estimate)
-                                capacity_mw = max_demand_value * 0.001  # Adjust conversion factor as needed
-                                capacity = round(capacity_mw, 2)
-                                unit_label = "MW"
-                            else:
-                                raise ValueError(f"Unsupported capacity_unit: {capacity_unit}")
-
-                            method_used = f"excel_max_demand ({max_demand_value:.2f} from sheet)"
-                            print(
-                                f"      ✅ Using Excel max demand: {max_demand_value:.2f} -> capacity: {capacity:.2f} {unit_label}")
-                        else:
-                            print(f"      ⚠️  Excel sheet has no valid positive demand values")
-                    else:
-                        print(
-                            f"      ⚠️  Excel sheet has too many invalid values ({total_count - valid_count} invalid)")
-                else:
-                    print(f"      ⚠️  Excel sheet has no 'Demand' column")
-
-            except Exception as e:
-                print(f"      ⚠️  Could not load Excel sheet '{sheet_name}': {e}")
-
-        # Method 2: Fallback to calculation from annual emissions (original method)
-        if capacity == 0.0 and node_type in emission_factors:
-            print(f"      🔄 Using fallback method (annual emissions)")
-
-            # Calculate annual demand in t product/year using the emission factor
-            annual_demand = annual_emission / emission_factors[node_type]  # t product/year
-
-            print(
-                f"🔍 DEBUG: Row position {row_position} calculation - Emission: {annual_emission}, Emission Factor: {emission_factors[node_type]}, Annual Demand: {annual_demand}")
-
-            if capacity_unit == "tonnes_per_hour":
-                # Convert to tonnes/hour: t/year -> tonnes/hour
-
-                capacity_tonnes_per_hour = annual_demand / (8760 )
-                capacity = round(capacity_tonnes_per_hour, 2)  # Round to 2 decimal places
-                unit_label = "tonnes/hour"
-
-            elif capacity_unit == "MW":
-                # Convert to MW assuming typical industrial process energy intensity
-                # Rough estimate: 1 t product/hour ≈ 1 MW (adjustable based on process)
-                # Annual demand t/year -> hourly demand t/hour -> MW
-                hourly_demand= annual_demand / 8760  # t product/hour
-                capacity_mw = hourly_demand * 1  # Convert to MW (rough estimate)
-                capacity = round(capacity_mw, 2)  # Round to 2 decimal places
-                unit_label = "MW"
-
-            else:
-                raise ValueError(f"Unsupported capacity_unit: {capacity_unit}")
-
-            method_used = f"annual_emissions_calculation"
-
-        # Set capacity using iloc to handle duplicate indices properly
-        if capacity > 0:
-            network_emission_flux.iloc[
-                row_position, network_emission_flux.columns.get_loc('emitter_capacity')] = capacity
-
-            print(
-                f"🔍 DEBUG: Set capacity {capacity} for row position {row_position} (index {idx}, Node: {node_name}, Type: {node_type})")
-            print(f"Node {node_name} ({node_type}): "
-                  f"Method: {method_used}, "
-                  f"Capacity: {capacity:.2f} {unit_label}")
-        else:
-            print(f"      ❌ Could not determine capacity for {node_name} ({node_type})")
-
-    # Debug: Check final capacities to verify different values for different emitters
-    print(f"🔍 FINAL DEBUG: Capacity verification by node and type:")
-    capacity_by_node_type = {}
-    method_summary = {"excel_max_demand": 0, "annual_emissions_calculation": 0, "failed": 0}
-
-    for row_position, (idx, row) in enumerate(network_emission_flux.iterrows()):
-        if row['node_type'] not in ['Storage', 'Transport'] and row['annual_emission'] > 0:
-            key = f"{row['node_name']}_{row['node_type']}"
-            capacity_by_node_type[key] = row['emitter_capacity']
-            print(f"  {key}: {row['emitter_capacity']:.2f} (row_pos: {row_position}, idx: {idx})")
-
-            # Count methods used (approximate based on capacity values)
-            if row['emitter_capacity'] > 0:
-                # Check if this looks like it came from Excel (typically higher values) or calculation
-                if excel_exists:
-                    method_summary["excel_max_demand"] += 1
-                else:
-                    method_summary["annual_emissions_calculation"] += 1
-            else:
-                method_summary["failed"] += 1
-
-    # Check for duplicate capacities at the same node
-    nodes_with_multiple_emitters = {}
-    for key, capacity in capacity_by_node_type.items():
-        node_name = key.split('_')[0]
-        if node_name not in nodes_with_multiple_emitters:
-            nodes_with_multiple_emitters[node_name] = []
-        nodes_with_multiple_emitters[node_name].append((key, capacity))
-
-    for node_name, emitters in nodes_with_multiple_emitters.items():
-        if len(emitters) > 1:
-            capacities = [cap for _, cap in emitters]
-            if len(set(capacities)) == 1:  # All capacities are the same
-                print(f"⚠️  WARNING: Node {node_name} has multiple emitters with identical capacities:")
-                for emitter_key, capacity in emitters:
-                    print(f"    {emitter_key}: {capacity}")
-                print(f"    This may indicate that Excel sheets weren't found for individual emitters")
-            else:
-                print(f"✅ SUCCESS: Node {node_name} has multiple emitters with different capacities:")
-                for emitter_key, capacity in emitters:
-                    print(f"    {emitter_key}: {capacity}")
-
-    # Summary
-    print(f"\n📊 CAPACITY CALCULATION SUMMARY:")
-    print(f"  Excel max demand method: {method_summary['excel_max_demand']} emitters")
-    print(f"  Annual emissions calculation: {method_summary['annual_emissions_calculation']} emitters")
-    print(f"  Failed to calculate: {method_summary['failed']} emitters")
-    print(f"  Total processed: {sum(method_summary.values())} emitters")
+    network_emission_flux['emitter_capacity'] = capacities
 
     return network_emission_flux
 
@@ -411,21 +233,21 @@ def assign_carriers_to_nodes(input_data_path, network_location, network_emission
 def assign_mea_technology(network_emission_flux, path_data_case_study):
     """
     Determines appropriate MEA (Monoethanolamine) carbon capture technology scale
-    for emitter nodes based on their annual CO2 emissions.
+    for emitter nodes based on their emitter capacity (t/h).
 
-    This function analyzes emission data for each node and determines the appropriate
+    This function analyzes capacity data for each node and determines the appropriate
     MEA technology scale (small, medium, large), adding it to a new column 'mea_technology'.
 
     Parameters:
-        - network_emission_flux: DataFrame containing node information and emission data with 'annual_emission' column
+        - network_emission_flux: DataFrame containing node information and 'emitter_capacity' column (t/h)
         - path_data_case_study: Path to the case study data directory
 
     Returns:
         - network_emission_flux: Updated DataFrame with mea_technology column added
     """
-    # Ensure annual_emission column exists
-    if 'annual_emission' not in network_emission_flux.columns:
-        raise ValueError("'annual_emission' column not found. Please run calculate_annual_emission_values() first.")
+    # Ensure emitter_capacity column exists
+    if 'emitter_capacity' not in network_emission_flux.columns:
+        raise ValueError("'emitter_capacity' column not found. Please run calculate_emitter_capacities() first.")
 
     # Define paths to different MEA technology scales
     mea_paths = {
@@ -445,15 +267,14 @@ def assign_mea_technology(network_emission_flux, path_data_case_study):
 
     # Process each row in the network_emission_flux DataFrame
     for idx, row in network_emission_flux.iterrows():
-        node_name = row['node_name']
         node_type = row['node_type']
 
         # Skip non-emitter nodes (Storage and Transport)
         if node_type in ["Storage", "Transport"]:
             continue
 
-        # Get the node's calculated annual CO2 emission (t/year)
-        annual_emission = row["annual_emission"]
+        # Get the node's capacity (t/h)
+        capacity = row["emitter_capacity"]
 
         # Determine CO2 concentration based on emitter type
         if node_type in ["Waste"]:
@@ -465,20 +286,17 @@ def assign_mea_technology(network_emission_flux, path_data_case_study):
         else:
             co2_concentration = 0.15
 
-        # Calculate CO2 ranges for each MEA scale based on technology specs
-        # Convert MEA scale from t/h to t/year for comparison
-        conversion_factor = 24 * 365  # t/h to kg/year
-
+        # Calculate CO2 capacity ranges (t/h) for each MEA scale based on technology specs
         mea_ranges = {}
         for scale, data in mea_data.items():
-            min_co2 = co2_concentration * data["size_min"] * conversion_factor
-            max_co2 = co2_concentration * data["size_max"] * conversion_factor
+            min_co2 = co2_concentration * data["size_min"]
+            max_co2 = co2_concentration * data["size_max"]
             mea_ranges[scale] = (min_co2, max_co2)
 
-        # Find the MEA scale that matches the node's emission range
+        # Find the MEA scale that matches the node's capacity range
         suitable_mea = None
         for scale, (min_co2, max_co2) in mea_ranges.items():
-            if min_co2 <= annual_emission <= max_co2:
+            if min_co2 <= capacity <= max_co2:
                 suitable_mea = scale
                 break
 
@@ -486,10 +304,10 @@ def assign_mea_technology(network_emission_flux, path_data_case_study):
         if suitable_mea is None:
             distances = {}
             for scale, (min_co2, max_co2) in mea_ranges.items():
-                if annual_emission < min_co2:
-                    distances[scale] = min_co2 - annual_emission
-                elif annual_emission > max_co2:
-                    distances[scale] = annual_emission - max_co2
+                if capacity < min_co2:
+                    distances[scale] = min_co2 - capacity
+                elif capacity > max_co2:
+                    distances[scale] = capacity - max_co2
 
             suitable_mea = min(distances, key=distances.get)
 
@@ -499,114 +317,6 @@ def assign_mea_technology(network_emission_flux, path_data_case_study):
 
     return network_emission_flux
 
-
-def assign_ccs_technologies(network_location, network_emission_flux, path_data_case_study, input_data_path):
-    """
-    Assigns appropriate technologies to nodes based on their type and previously determined MEA technology.
-    Handles nodes with multiple emitters by accumulating all required technologies.
-
-    FIXED: Ensures proper data types and JSON serialization for DataHandle compatibility.
-
-    Parameters:
-        - network_location: DataFrame containing node information
-        - network_emission_flux: DataFrame containing emission data, MEA technology assignments, and calculated capacities
-        - path_data_case_study: Path to the case study data directory
-        - input_data_path: Path to the input data directory
-
-    Returns:
-        - None
-    """
-    # Ensure capacity column exists
-    if 'emitter_capacity' not in network_emission_flux.columns:
-        raise ValueError("'emitter_capacity' column not found. Please run calculate_emitter_capacities() first.")
-
-    # Group by unique node names to handle multiple emitters per node
-    unique_nodes = network_location['node_name'].unique()
-
-    for node_name in unique_nodes:
-        # Get all rows for this node
-        node_rows = network_location[network_location['node_name'] == node_name]
-
-        # Initialize technology dictionaries with proper data types
-        existing_techs_dict = {}
-        new_techs_list = []
-
-        # Process each row for this node
-        for idx, row in node_rows.iterrows():
-            node_type = row['node_type']
-
-            if node_type == "Storage":
-                # Storage nodes get permanent CO2 storage technology as "new"
-                storage_tech_path = path_data_case_study / "technologies/Sink/PermanentStorage_CO2_simple.json"
-                if storage_tech_path.exists():
-                    new_techs_list.append("PermanentStorage_CO2_simple")
-                    print(f"Found storage technology at: {storage_tech_path}")
-                else:
-                    print(f"Warning: Storage technology file not found at {storage_tech_path}")
-                    # Check if it's in the main technologies folder
-                    alt_storage_path = path_data_case_study / "technologies/PermanentStorage_CO2_simple.json"
-                    if alt_storage_path.exists():
-                        new_techs_list.append("PermanentStorage_CO2_simple")
-                        print(f"Found storage technology at alternative path: {alt_storage_path}")
-                    else:
-                        new_techs_list.append("PermanentStorage_CO2_simple")  # Add anyway, let system handle
-
-            elif node_type == "Transport":
-                # Transport nodes don't require specific technologies
-                pass
-
-            else:  # Emitter nodes (Waste, Cement, Refining, Other)
-                # For emitter nodes, we add the emitter technology with calculated capacity as "existing"
-
-                # Get the calculated capacity for this specific emitter
-                emitter_row = network_emission_flux[
-                    (network_emission_flux['node_name'] == node_name) &
-                    (network_emission_flux['node_type'] == node_type)
-                    ]
-
-                if not emitter_row.empty:
-                    capacity = float(emitter_row['emitter_capacity'].iloc[0])  # Ensure it's a Python float
-                else:
-                    capacity = 0.0
-                    print(f"Warning: No capacity data found for {node_name} ({node_type})")
-
-                # Assign appropriate emitter technology based on node type with calculated capacity
-                if node_type == "Waste":
-                    existing_techs_dict["WasteToEnergyEmitter"] = capacity
-                elif node_type == "Cement":
-                    existing_techs_dict["CementEmitter"] = capacity
-                elif node_type == "Refining":
-                    existing_techs_dict["RefineryEmitter"] = capacity
-                elif node_type == "Other":
-                    existing_techs_dict["UnspecifiedEmitter"] = capacity
-
-                print(f"Assigned {node_type} emitter to {node_name} with capacity: {capacity:.2f}")
-
-        # Remove duplicates from new_techs_list
-        new_techs_list = list(set(new_techs_list))
-
-        # Read the node's current Technology.json file
-        tech_file_path = input_data_path / "period1" / "node_data" / node_name / "Technologies.json"
-
-        # FIXED: Ensure all values are proper Python types (not numpy types) for JSON serialization
-        # Convert any numpy types to native Python types
-        existing_techs_clean = {}
-        for tech_name, capacity in existing_techs_dict.items():
-            existing_techs_clean[str(tech_name)] = float(capacity)  # Ensure string keys and float values
-
-        new_techs_clean = [str(tech) for tech in new_techs_list]  # Ensure string elements
-
-        technologies = {
-            "existing": existing_techs_clean,
-            "new": new_techs_clean,
-        }
-
-        # Write updated technologies to the file with proper JSON serialization
-        with open(tech_file_path, "w") as json_file:
-            json.dump(technologies, json_file, indent=4, ensure_ascii=False)
-
-        print(
-            f"Technologies assigned to {node_name}: existing={list(existing_techs_clean.keys())} (with capacities), new={new_techs_clean}")
 
 def find_technology_file(tech_name, search_path):
     """Find a technology file in the search path and its subdirectories"""
@@ -1399,6 +1109,7 @@ def load_climate_data_from_api_robust(folder_path: str | Path, dataset: str = "J
     return successful_nodes, failed_nodes, offshore_nodes
 
 
+
 def update_carrier_data(input_data_path, electricity_price_data, network_emission_flux,
                         path_files_technologies, node_names, co2_intensity_electricity,
                         cop_hp, path_files_node_flux,
@@ -1448,35 +1159,8 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
             print(f"Warning: could not load emission factor for {node_type} ({e}), defaulting to 1.0")
             emission_factors[node_type] = 1.0
 
-    # --- Load hourly profiles from both real_data and synthetic_data sheets ---
-    excel_file_path = path_files_node_flux / "emission_profile_emitters.xlsx"
-
-    profiles_real      = None
-    profiles_synthetic = None
-
-    if excel_file_path.exists():
-        xl = pd.ExcelFile(excel_file_path)
-        if "real_data" in xl.sheet_names:
-            profiles_real = pd.read_excel(xl, sheet_name="real_data")
-        if "synthetic_data" in xl.sheet_names:
-            profiles_synthetic = pd.read_excel(xl, sheet_name="synthetic_data")
-
-    def get_profile(node_type: str, node_name: str) -> tuple[np.ndarray | None, str]:
-        """
-        Look up the hourly profile for a node.
-        Priority: real_data sheet first, then synthetic_data sheet.
-        Returns (array_8760, source_label) or (None, 'missing').
-        """
-        col = f"{node_type} - {node_name}"
-        for df, label in [(profiles_real, "real_data"), (profiles_synthetic, "synthetic_data")]:
-            if df is not None and col in df.columns:
-                arr = df[col].head(8760).values.astype(float)
-                if len(arr) != 8760:
-                    raise ValueError(f"Expected 8760 rows for '{col}' in {label}, got {len(arr)}")
-                if np.any(np.isnan(arr)):
-                    raise ValueError(f"NaN values in profile '{col}' in {label}")
-                return arr, label
-        return None, "missing"
+    # --- Load hourly profiles (shared helper) ---
+    profiles_real, profiles_synthetic = load_emission_profiles(path_files_node_flux)
 
     # --- Process demands per node ---
     node_demands_hourly = {}
@@ -1494,9 +1178,8 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
             continue
 
         _, carrier_name = node_type_mapping[node_type]
-        annual_demand_tonnes = round(annual_emission / emission_factors[node_type], 2)
 
-        hourly_demand_array, source = get_profile(node_type, node_name)
+        hourly_demand_array, source = get_profile(node_type, node_name, profiles_real, profiles_synthetic)
 
         if source == "real_data":
             annual_demand_tonnes = round(hourly_demand_array.sum(), 2)
@@ -1507,13 +1190,12 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
             annual_demand_tonnes = round(hourly_demand_array.sum(), 2)
             nodes_with_synthetic_data.append(f"{node_name} ({node_type})")
             print(f"  🔧 Synthetic profile | {node_name} ({carrier_name}): {annual_demand_tonnes:.2f} t/yr")
-
         else:
-            # No profile found in either sheet — fall back to flat and warn
-            hourly_rate = round(annual_demand_tonnes / 8760.0, 6)
-            hourly_demand_array = np.full(8760, hourly_rate)
             nodes_missing_profile.append(f"{node_name} ({node_type})")
-            print(f"  ⚠️  No profile found  | {node_name} ({carrier_name}): falling back to flat {hourly_rate:.4f} t/hr")
+            raise ValueError(
+                f"❌ No profile found for {node_name} ({carrier_name}). "
+                f"Unsupported or missing source type: '{source}'."
+            )
 
         node_demands_hourly.setdefault(node_name, {}).setdefault(carrier_name, np.zeros(8760))
         node_demands_hourly[node_name][carrier_name] += hourly_demand_array
@@ -1830,94 +1512,94 @@ def debug_raw_network_data(network_data_dict):
                 print(f"    {col} unique values: {unique_vals}")
 
 
-# ===== Enhanced copy_technology_data_custom with debugging =====
-def copy_technology_data_custom_debug(input_data_path, path_files_technologies, network_emission_flux=None):
-    """
-    Enhanced version with comprehensive debugging
-    """
-    print("\n🔍 DEBUG: Starting technology file copying with enhanced debugging...")
-
-    # Read topology
-    with open(input_data_path / "Topology.json", "r") as f:
-        topology = json.load(f)
-
-    print(f"🔍 Topology loaded: {len(topology['nodes'])} nodes, {len(topology['investment_periods'])} periods")
-
-    # Copy technology files for each node in each period
-    for period in topology["investment_periods"]:
-        print(f"\n📁 Processing period: {period}")
-
-        for node in topology["nodes"]:
-            print(f"\n🔧 Processing node: {node}")
-
-            # Read Technologies.json for this node
-            tech_file_path = input_data_path / period / "node_data" / node / "Technologies.json"
-
-            if not tech_file_path.exists():
-                print(f"  ❌ Technologies.json not found: {tech_file_path}")
-                continue
-
-            try:
-                with open(tech_file_path, "r") as f:
-                    technologies_at_node = json.load(f)
-
-                print(f"  📄 Technologies.json loaded successfully")
-                print(f"    existing: {technologies_at_node.get('existing', 'NOT_FOUND')}")
-                print(f"    new: {technologies_at_node.get('new', 'NOT_FOUND')}")
-
-            except Exception as e:
-                print(f"  ❌ Error reading Technologies.json: {e}")
-                continue
-
-            # Get technology lists
-            existing_techs = list(technologies_at_node["existing"].keys()) if technologies_at_node["existing"] else []
-
-            if isinstance(technologies_at_node["new"], dict):
-                new_techs = list(technologies_at_node["new"].keys())
-            elif isinstance(technologies_at_node["new"], list):
-                new_techs = technologies_at_node["new"]
-            else:
-                new_techs = []
-
-            all_techs = existing_techs + new_techs
-            print(f"    Total technologies to copy: {len(all_techs)} - {all_techs}")
-
-            # Create technology_data directory
-            tech_data_dir = input_data_path / period / "node_data" / node / "technology_data"
-            tech_data_dir.mkdir(parents=True, exist_ok=True)
-            print(f"    Technology data directory: {tech_data_dir}")
-
-            # Copy each technology file
-            for tech_name in all_techs:
-                print(f"      🔍 Looking for: {tech_name}")
-
-                source_file = find_technology_file(tech_name, path_files_technologies)
-                if source_file:
-                    dest_file = tech_data_dir / f"{tech_name}.json"
-                    try:
-                        shutil.copy2(source_file, dest_file)
-
-                        # Verify the copied file
-                        if dest_file.exists():
-                            file_size = dest_file.stat().st_size
-                            print(f"        ✅ Copied successfully: {source_file} -> {dest_file} ({file_size} bytes)")
-
-                            # Quick validation of JSON content
-                            try:
-                                with open(dest_file, 'r') as f:
-                                    test_json = json.load(f)
-                                print(f"        ✅ JSON validation passed")
-                            except Exception as e:
-                                print(f"        ⚠️  JSON validation failed: {e}")
-                        else:
-                            print(f"        ❌ File not found after copy")
-
-                    except Exception as e:
-                        print(f"        ❌ Copy failed: {e}")
-                else:
-                    print(f"        ❌ Source file not found in {path_files_technologies}")
-
-    print("\n🔍 Technology file copying debugging completed")
+# # ===== Enhanced copy_technology_data_custom with debugging =====
+# def copy_technology_data_custom_debug(input_data_path, path_files_technologies, network_emission_flux=None):
+#     """
+#     Enhanced version with comprehensive debugging
+#     """
+#     print("\n🔍 DEBUG: Starting technology file copying with enhanced debugging...")
+#
+#     # Read topology
+#     with open(input_data_path / "Topology.json", "r") as f:
+#         topology = json.load(f)
+#
+#     print(f"🔍 Topology loaded: {len(topology['nodes'])} nodes, {len(topology['investment_periods'])} periods")
+#
+#     # Copy technology files for each node in each period
+#     for period in topology["investment_periods"]:
+#         print(f"\n📁 Processing period: {period}")
+#
+#         for node in topology["nodes"]:
+#             print(f"\n🔧 Processing node: {node}")
+#
+#             # Read Technologies.json for this node
+#             tech_file_path = input_data_path / period / "node_data" / node / "Technologies.json"
+#
+#             if not tech_file_path.exists():
+#                 print(f"  ❌ Technologies.json not found: {tech_file_path}")
+#                 continue
+#
+#             try:
+#                 with open(tech_file_path, "r") as f:
+#                     technologies_at_node = json.load(f)
+#
+#                 print(f"  📄 Technologies.json loaded successfully")
+#                 print(f"    existing: {technologies_at_node.get('existing', 'NOT_FOUND')}")
+#                 print(f"    new: {technologies_at_node.get('new', 'NOT_FOUND')}")
+#
+#             except Exception as e:
+#                 print(f"  ❌ Error reading Technologies.json: {e}")
+#                 continue
+#
+#             # Get technology lists
+#             existing_techs = list(technologies_at_node["existing"].keys()) if technologies_at_node["existing"] else []
+#
+#             if isinstance(technologies_at_node["new"], dict):
+#                 new_techs = list(technologies_at_node["new"].keys())
+#             elif isinstance(technologies_at_node["new"], list):
+#                 new_techs = technologies_at_node["new"]
+#             else:
+#                 new_techs = []
+#
+#             all_techs = existing_techs + new_techs
+#             print(f"    Total technologies to copy: {len(all_techs)} - {all_techs}")
+#
+#             # Create technology_data directory
+#             tech_data_dir = input_data_path / period / "node_data" / node / "technology_data"
+#             tech_data_dir.mkdir(parents=True, exist_ok=True)
+#             print(f"    Technology data directory: {tech_data_dir}")
+#
+#             # Copy each technology file
+#             for tech_name in all_techs:
+#                 print(f"      🔍 Looking for: {tech_name}")
+#
+#                 source_file = find_technology_file(tech_name, path_files_technologies)
+#                 if source_file:
+#                     dest_file = tech_data_dir / f"{tech_name}.json"
+#                     try:
+#                         shutil.copy2(source_file, dest_file)
+#
+#                         # Verify the copied file
+#                         if dest_file.exists():
+#                             file_size = dest_file.stat().st_size
+#                             print(f"        ✅ Copied successfully: {source_file} -> {dest_file} ({file_size} bytes)")
+#
+#                             # Quick validation of JSON content
+#                             try:
+#                                 with open(dest_file, 'r') as f:
+#                                     test_json = json.load(f)
+#                                 print(f"        ✅ JSON validation passed")
+#                             except Exception as e:
+#                                 print(f"        ⚠️  JSON validation failed: {e}")
+#                         else:
+#                             print(f"        ❌ File not found after copy")
+#
+#                     except Exception as e:
+#                         print(f"        ❌ Copy failed: {e}")
+#                 else:
+#                     print(f"        ❌ Source file not found in {path_files_technologies}")
+#
+#     print("\n🔍 Technology file copying debugging completed")
 
 
 # Add this function to your defined_functions.py file:
