@@ -50,10 +50,12 @@ def get_profile(node_type: str, node_name: str, profiles_real, profiles_syntheti
             return arr, label
     return None, "missing"
 
+
 def calculate_annual_emission_values(network_emission_flux, path_files_node_flux):
     """
     Compute annual_emission (sum of hourly profile) and capacity (max of hourly profile)
     for each row, using the real_data/synthetic_data profiles.
+    Skips calculation for 'Transport' and 'Storage' node types.
     """
     profiles_real, profiles_synthetic = load_emission_profiles(path_files_node_flux)
 
@@ -61,7 +63,22 @@ def calculate_annual_emission_values(network_emission_flux, path_files_node_flux
     capacities = []
 
     for _, row in network_emission_flux.iterrows():
-        profile, _ = get_profile(row['node_type'], row['node_name'], profiles_real, profiles_synthetic)
+        node_type = row['node_type']
+        node_name = row['node_name']
+
+        # Skip profile calculation for Transport and Storage
+        if node_type in ['Transport', 'Storage']:
+            annual_emissions.append(None)
+            capacities.append(None)
+            continue
+
+        profile, source = get_profile(node_type, node_name, profiles_real, profiles_synthetic)
+
+        if profile is None:
+            raise ValueError(
+                f"No profile found for '{node_type} - {node_name}' in real_data or synthetic_data sheets."
+            )
+
         annual_emissions.append(profile.sum())
         capacities.append(profile.max())
 
@@ -70,6 +87,7 @@ def calculate_annual_emission_values(network_emission_flux, path_files_node_flux
 
     return network_emission_flux
 
+    return network_emission_flux
 def calculate_emitter_capacities(network_emission_flux):
     """
     Set 'emitter_capacity' from the 'capacity' column already computed from the

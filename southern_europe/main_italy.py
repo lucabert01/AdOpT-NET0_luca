@@ -359,7 +359,7 @@ import adopt_net0 as adopt
 from pyomo.environ import SolverFactory
 
 m = adopt.ModelHub()
-m.read_data(input_data_path, start_period=0, end_period=1)
+m.read_data(input_data_path, start_period=0, end_period=8759)
 
 m.construct_model()
 m.construct_balances()
