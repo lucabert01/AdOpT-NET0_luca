@@ -80,7 +80,7 @@ def calculate_annual_emission_values(network_emission_flux, path_files_node_flux
             )
 
         annual_emissions.append(profile.sum())
-        capacities.append(profile.max())
+        capacities.append(profile.max()*1.01)
 
     network_emission_flux['annual_emission'] = annual_emissions
     network_emission_flux['capacity'] = capacities
