@@ -10,7 +10,7 @@ from pathlib import Path
 # 1. DYNAMIC PATH HANDLING (GIT-SAFE)
 # ==========================================
 SCRIPT_DIR = Path(__file__).resolve().parent
-EXCEL_PATH = SCRIPT_DIR.parent / "italy_data" / "geographical_feature" / "node_metrics.xlsx"
+EXCEL_PATH = SCRIPT_DIR.parent / "italy_data" / "geographical_feature" / "node_metrics_150.xlsx"
 
 if not EXCEL_PATH.exists():
     raise FileNotFoundError(f"Critical Error: Could not locate Excel file at: {EXCEL_PATH}")
