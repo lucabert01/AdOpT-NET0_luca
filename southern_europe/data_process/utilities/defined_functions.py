@@ -1291,7 +1291,9 @@ def assign_ccs_technologies_debug(network_location, network_emission_flux, path_
                 print(f"      Transport node - no technologies")
                 pass
 
-            else:  # Emitter nodes
+
+            else:  # Emitter nodes (Waste, Cement, Refining, Other)
+
                 emitter_row = network_emission_flux[
                     (network_emission_flux['node_name'] == node_name) &
                     (network_emission_flux['node_type'] == node_type)
@@ -1299,21 +1301,14 @@ def assign_ccs_technologies_debug(network_location, network_emission_flux, path_
 
                 print(f"      Emitter rows found: {len(emitter_row)}")
 
-                if not emitter_row.empty:
-                    capacity = float(emitter_row['emitter_capacity'].iloc[0])
-                    print(f"      Capacity: {capacity} (type: {type(capacity)})")
-                else:
-                    capacity = 0.0
-                    print(f"      Warning: No capacity data found")
-
                 if node_type == "Waste":
-                    existing_techs_dict["WasteToEnergyEmitter"] = capacity
+                    new_techs_list.append("WasteToEnergyEmitter")
                 elif node_type == "Cement":
-                    existing_techs_dict["CementEmitter"] = capacity
+                    new_techs_list.append("CementEmitter")
                 elif node_type == "Refining":
-                    existing_techs_dict["RefineryEmitter"] = capacity
+                    new_techs_list.append("RefineryEmitter")
                 elif node_type == "Other":
-                    existing_techs_dict["UnspecifiedEmitter"] = capacity
+                    new_techs_list.append("UnspecifiedEmitter")
 
         # Data type validation and conversion
         print(f"  Before cleaning - existing: {existing_techs_dict}")
