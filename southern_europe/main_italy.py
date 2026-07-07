@@ -34,8 +34,8 @@ heat_import_limit = 200 # default
 max_transport_capacity = 3000
 carbon_tax = 150  # euro per tonne CO2
 enable_carbon_pricing = True
-nr_DD_days = 0
-node_metrics_suffix = 200  # or "150", "200", "" for the base case. Refers to the cutoff size for truck connections
+nr_DD_days = 15
+node_metrics_suffix = 150  # or "150", "200", "" for the base case. Refers to the cutoff size for truck connections
 node_metrics_file = f"node_metrics_{node_metrics_suffix}.xlsx"
 #----- Create folder for results -----#
 results_data_path = "./userData/"
@@ -92,7 +92,7 @@ assign_carriers_to_nodes(input_data_path, network_location, network_emission_flu
 # Update configmodel json
 with open(input_data_path / "ConfigModel.json", "r") as json_file:
     configuration = json.load(json_file)
-configuration["optimization"]["objective"]["value"] = "pareto" # set optimization objective
+configuration["optimization"]["objective"]["value"] = "costs" # set optimization objective
 configuration["solveroptions"]["mipgap"]["value"] = 0.02 # set MILP gap
 configuration['optimization']['typicaldays']['N']['value'] = nr_DD_days
 with open(input_data_path / "ConfigModel.json", "w") as json_file:
