@@ -30,7 +30,7 @@ path_files_node_flux = path_data_case_study / "geographical_feature"
 italy = gpd.read_file(path_files_gis / "italy_WGS1984.shp")
 nodes_selected = gpd.read_file(path_files_gis / "all_nodes_italy.shp")
 routes_pipeline = gpd.read_file(path_files_gis / "routes_distances_pipelines.shp")
-routes_railway = gpd.read_file(path_files_gis / "truck_italy_150.shp")  # TODO: point to actual railway shapefile
+routes_railway = gpd.read_file(path_files_gis / "routes_distances_railway.shp")  # TODO: point to actual railway shapefile
 routes_truck = gpd.read_file(path_files_gis / "truck_italy_150.shp")
 
 # Load network matrices for transport directions

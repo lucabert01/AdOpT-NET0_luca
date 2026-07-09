@@ -714,7 +714,7 @@ def main():
     path_data_case_study = Path('../italy_data')
     path_files_gis = path_data_case_study / 'raw_data' / 'gis_data'
     nodes_shp_path = path_files_gis / 'italy_WGS1984.shp'
-    results_data_path = Path('../Results_CCSchainOptimization/20251113121620-1')
+    results_data_path = Path('../Results_CCSchainOptimization/202607061310065')
     h5_file_path = results_data_path / 'optimization_results.h5'
 
     # Check files exist
