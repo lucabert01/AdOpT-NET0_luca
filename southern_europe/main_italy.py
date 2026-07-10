@@ -29,10 +29,10 @@ ref_year = 2024
 discount_rate = 0.08 # default
 co2_intensity_electricity = 0 # default (kg CO2/kWh)
 cop_hp = 2.6 # default
-electricity_import_limit = 100 # default
-heat_import_limit = 200 # default
+electricity_import_limit = 1000 # default
+heat_import_limit = 3000 # default
 max_transport_capacity = 3000
-carbon_tax = 150  # euro per tonne CO2
+carbon_tax = 200  # euro per tonne CO2
 enable_carbon_pricing = True
 nr_DD_days = 15
 node_metrics_suffix = 150  # or "150", "200", "" for the base case. Refers to the cutoff size for truck connections
@@ -43,7 +43,7 @@ result_path = "./Results_CCSchainOptimization"
 input_data_path = Path("Italy_CaseStudy")
 input_data_path.mkdir(parents=True, exist_ok=True)
 adopt.create_optimization_templates(input_data_path)
-
+objective = "emissions_net"
 #----- Import data-----#
 path_data_case_study = Path("./italy_data")
 
@@ -92,11 +92,13 @@ assign_carriers_to_nodes(input_data_path, network_location, network_emission_flu
 # Update configmodel json
 with open(input_data_path / "ConfigModel.json", "r") as json_file:
     configuration = json.load(json_file)
-configuration["optimization"]["objective"]["value"] = "costs" # set optimization objective
+configuration["optimization"]["objective"]["value"] = objective # set optimization objective
 configuration["solveroptions"]["mipgap"]["value"] = 0.02 # set MILP gap
 configuration['optimization']['typicaldays']['N']['value'] = nr_DD_days
 configuration['reporting']['save_summary_path']['value'] = result_path
 configuration['reporting']['save_path']['value'] = result_path
+configuration['reporting']['case_name']['value'] = f"{objective}"
+
 with open(input_data_path / "ConfigModel.json", "w") as json_file:
     json.dump(configuration, json_file, indent=4)
 
@@ -362,47 +364,50 @@ from pyomo.environ import SolverFactory
 
 m = adopt.ModelHub()
 m.read_data(input_data_path, start_period=0, end_period=8759)
-
-m.construct_model()
-m.construct_balances()
-
-# 1. Print the keys to see how adopt_net0 stores the model(s)
-print(f"Available keys in m.model: {m.model.keys()}")
-
-# 2. Extract the actual Pyomo model from the dictionary
-# This grabs the first (and likely only) key in the dictionary
-model_key = list(m.model.keys())[0]
-pyomo_model = m.model[model_key]
-
-# 3. Verify it is now a Pyomo ConcreteModel
-print(f"Type of pyomo_model is now: {type(pyomo_model)}")
-
-# 4. Proceed with solving
-opt = SolverFactory("gurobi_persistent")
-# 1. Revert to the standard set_instance (no symbolic labels)
-opt.set_instance(pyomo_model)
-results = opt.solve(tee=True)
-
-if str(results.solver.termination_condition) == "infeasible":
-    gurobi_model = opt._solver_model
-    gurobi_model.computeIIS()
-    gurobi_model.write("infeasible.ilp")
-    print("IIS written to infeasible.ilp")
-
-    print("\n--- TRANSLATING IIS NAMES ---")
-
-    # 2. List the variables we found in the ILP file
-    var_names = ["x2681", "x2693", "x2697", "x2701", "x2705", "x2718", "x2677"]
-    for v_name in var_names:
-        g_var = gurobi_model.getVarByName(v_name)
-        if g_var is not None:
-            p_var = opt._solver_var_to_pyomo_var_map[g_var]
-            print(f"Variable {v_name} -> {p_var.name}")
-
-    # 3. List the constraints we found in the ILP file
-    con_names = ["x9803", "x10232", "x10402", "x10572", "x10785"]
-    for c_name in con_names:
-        g_con = gurobi_model.getConstrByName(c_name)
-        if g_con is not None:
-            p_con = opt._solver_con_to_pyomo_con_map[g_con]
-            print(f"Constraint {c_name} -> {p_con.name}")
+m.quick_solve()
+# m.construct_model()
+# m.construct_balances()
+#
+# # 1. Print the keys to see how adopt_net0 stores the model(s)
+# print(f"Available keys in m.model: {m.model.keys()}")
+#
+# # 2. Extract the actual Pyomo model from the dictionary
+# # This grabs the first (and likely only) key in the dictionary
+# model_key = list(m.model.keys())[0]
+# pyomo_model = m.model[model_key]
+#
+# # 3. Verify it is now a Pyomo ConcreteModel
+# print(f"Type of pyomo_model is now: {type(pyomo_model)}")
+#
+# # 4. Proceed with solving
+# opt = SolverFactory("gurobi_persistent")
+# # 1. Revert to the standard set_instance (no symbolic labels)
+# opt.set_instance(pyomo_model)
+# results = opt.solve(tee=True)
+#
+# if str(results.solver.termination_condition) == "infeasible":
+#     gurobi_model = opt._solver_model
+#     gurobi_model.computeIIS()
+#     gurobi_model.write("infeasible.ilp")
+#     print("IIS written to infeasible.ilp")
+#
+#     print("\n--- TRANSLATING IIS NAMES ---")
+#
+#     # 2. List the variables we found in the ILP file
+#     var_names = ["x22419965", "x22455001", "x22560109", "x22595145", "x22630181",
+#                  "x22665217", "x22700058", "x22702961", "x22420061", "x22560205",
+#                  "x22595241", "x22630277", "x22665313", "x22700082"]
+#     for v_name in var_names:
+#         g_var = gurobi_model.getVarByName(v_name)
+#         if g_var is not None:
+#             p_var = opt._solver_var_to_pyomo_var_map[g_var]
+#             print(f"Variable {v_name} -> {p_var.name}")
+#
+#     con_names = ["x49408983", "x49409079", "x49522650", "x49522674", "x58696942",
+#                  "x58696966", "x60185972", "x60185996", "x61675002", "x61675026",
+#                  "x63452813", "x63456893"]
+#     for c_name in con_names:
+#         g_con = gurobi_model.getConstrByName(c_name)
+#         if g_con is not None:
+#             p_con = opt._solver_con_to_pyomo_con_map[g_con]
+#             print(f"Constraint {c_name} -> {p_con.name}")
