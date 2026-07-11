@@ -43,7 +43,7 @@ result_path = "./Results_CCSchainOptimization"
 input_data_path = Path("Italy_CaseStudy")
 input_data_path.mkdir(parents=True, exist_ok=True)
 adopt.create_optimization_templates(input_data_path)
-objective = "emissions_net"
+objective = "emissions_minC"
 #----- Import data-----#
 path_data_case_study = Path("./italy_data")
 
@@ -93,7 +93,7 @@ assign_carriers_to_nodes(input_data_path, network_location, network_emission_flu
 with open(input_data_path / "ConfigModel.json", "r") as json_file:
     configuration = json.load(json_file)
 configuration["optimization"]["objective"]["value"] = objective # set optimization objective
-configuration["solveroptions"]["mipgap"]["value"] = 0.02 # set MILP gap
+configuration["solveroptions"]["mipgap"]["value"] = 0.01 # set MILP gap
 configuration['optimization']['typicaldays']['N']['value'] = nr_DD_days
 configuration['reporting']['save_summary_path']['value'] = result_path
 configuration['reporting']['save_path']['value'] = result_path
