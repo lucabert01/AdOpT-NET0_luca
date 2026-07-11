@@ -26,6 +26,10 @@ warnings.filterwarnings('ignore')
 path_data_case_study = Path("../italy_data")
 path_files_gis = path_data_case_study / "raw_data/gis_data"
 path_files_node_flux = path_data_case_study / "geographical_feature"
+path_files_grids = path_data_case_study / "geographical_feature"
+path_cost_factor_table = Path(
+    "../../adopt_net0/database/data/networks/enhanced_co2_transport_cost_model/cost_factor_table.xlsx"
+)
 
 italy = gpd.read_file(path_files_gis / "italy_WGS1984.shp")
 nodes_selected = gpd.read_file(path_files_gis / "all_nodes_italy.shp")
@@ -390,6 +394,53 @@ truck_directions = get_route_directionality_fixed(routes_truck, network_truck, '
 railway_directions = get_route_directionality_fixed(routes_railway, network_railway, 'Railway')
 
 # ============================================================
+# Integrated cost factor grid (grayscale background), same calculation as
+# cost_factor_grid_map_italy.py
+# ============================================================
+COST_FACTOR_PIPELINE_CATEGORY = 300
+
+fishnet_cost = gpd.read_file(path_files_gis / "fishnet_italy_5km.shp").reset_index().rename(
+    columns={"index": "GRID_OID"})
+soil_data = pd.read_csv(path_files_grids / "soil_type_grids_italy.csv")
+anthro_data = pd.read_csv(path_files_grids / "anthropisation_grids_italy.csv")
+morpho_data = pd.read_csv(path_files_grids / "morphological_feature_grids_italy.csv")
+cost_factor_table = pd.read_excel(path_cost_factor_table)
+
+
+def get_cost_coefficients(table: pd.DataFrame, category: float) -> dict:
+    """Look up (or interpolate) the k-coefficients for a given pipeline_category."""
+    table = table.sort_values("pipeline_category").reset_index(drop=True)
+    exact_match = table.loc[table["pipeline_category"] == category]
+    if not exact_match.empty:
+        return exact_match.iloc[0].to_dict()
+    coeffs = {"pipeline_category": category}
+    for col in table.columns:
+        if col == "pipeline_category":
+            continue
+        coeffs[col] = float(np.interp(category, table["pipeline_category"], table[col]))
+    return coeffs
+
+
+cost_coeffs = get_cost_coefficients(cost_factor_table, COST_FACTOR_PIPELINE_CATEGORY)
+
+fishnet_cost = (fishnet_cost
+                .merge(soil_data, on="GRID_OID")
+                .merge(anthro_data, on="GRID_OID")
+                .merge(morpho_data, on="GRID_OID"))
+
+fishnet_cost['SOIL_FACTOR'] = (cost_coeffs['k_soil_non_rock'] * fishnet_cost['NON_ROCK_S']
+                                + cost_coeffs['k_soil_rock'] * fishnet_cost['ROCK_S'])
+fishnet_cost['ANTHRO_FACTOR'] = (cost_coeffs['k_anthro_non_anthropised'] * fishnet_cost['NON_ANTHROPISED_A']
+                                  + cost_coeffs['k_anthro_anthropised'] * fishnet_cost['ANTHROPISED_A'])
+fishnet_cost['MORPH_FACTOR'] = (cost_coeffs['k_morpho_plain'] * fishnet_cost['PLAIN_M']
+                                 + cost_coeffs['k_morpho_hill'] * fishnet_cost['HILL_M']
+                                 + cost_coeffs['k_morpho_mountain'] * fishnet_cost['MOUNTAIN_M'])
+fishnet_cost['COST_FACTOR'] = fishnet_cost[['SOIL_FACTOR', 'ANTHRO_FACTOR', 'MORPH_FACTOR']].sum(axis=1)
+
+fishnet_cost_clipped = gpd.clip(fishnet_cost, italy)
+bw_cmap = plt.cm.Greys
+
+# ============================================================
 # PLOT 1 — Overview (all modes, simple lines, no arrows)
 # ============================================================
 fig1, ax1 = plt.subplots(figsize=(10, 10))
@@ -421,6 +472,41 @@ ax1.legend(handles=route_legend + node_legend, loc='upper center', bbox_to_ancho
 fig1.tight_layout(rect=[0, 0.05, 1, 1])
 fig1.savefig("italy_overview.png", dpi=300, bbox_inches='tight', facecolor='white', pad_inches=0.2)
 print("Saved: italy_overview.png")
+
+# ============================================================
+# PLOT 1b — Full overview with integrated cost factor background (grayscale)
+# ============================================================
+fig1b, ax1b = plt.subplots(figsize=(10, 10))
+
+fishnet_cost_clipped.plot(column='COST_FACTOR', ax=ax1b, cmap=bw_cmap, legend=False, zorder=0)
+fishnet_cost_clipped.boundary.plot(ax=ax1b, color='gray', linewidth=0.3, alpha=0.5, zorder=1)
+italy.boundary.plot(ax=ax1b, color='black', linewidth=1, alpha=0.7, zorder=2)
+
+ax1b.set_xlim(map_bounds['minx'], map_bounds['maxx'])
+ax1b.set_ylim(map_bounds['miny'], map_bounds['maxy'])
+ax1b.set_title(f'Full overview — integrated cost factor (pipeline category {COST_FACTOR_PIPELINE_CATEGORY})',
+               fontsize=16, fontweight='bold')
+ax1b.set_xlabel('Longitude', fontsize=12)
+ax1b.set_ylabel('Latitude', fontsize=12)
+ax1b.tick_params(axis='both', labelsize=11)
+ax1b.set_aspect('equal')
+
+for idx, route in routes_pipeline.iterrows():
+    plot_simple_route(ax1b, route, route_colors['pipeline'], linewidth=1.2, alpha=1.0)
+for idx, route in routes_truck.iterrows():
+    plot_simple_route(ax1b, route, route_colors['truck'], linewidth=1.0, alpha=1.0)
+for idx, route in routes_railway.iterrows():
+    plot_simple_route(ax1b, route, route_colors['railway'], linewidth=1.2, alpha=1.0)
+
+draw_nodes_by_type(ax1b, nodes_selected, markersize=70, legend=False)
+
+ax1b.legend(handles=route_legend + node_legend, loc='upper center', bbox_to_anchor=(0.5, -0.10),
+            ncol=6, fontsize=12, frameon=True, fancybox=True, shadow=True, markerscale=1.3,
+            handletextpad=0.6, columnspacing=1.2)
+
+fig1b.tight_layout(rect=[0, 0.05, 1, 1])
+fig1b.savefig("italy_overview_cost_factor.png", dpi=300, bbox_inches='tight', facecolor='white', pad_inches=0.2)
+print("Saved: italy_overview_cost_factor.png")
 
 # ============================================================
 # PLOT 2 — Pipeline network (standalone)

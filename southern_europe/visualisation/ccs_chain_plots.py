@@ -7,6 +7,20 @@ Produces five figures from a solved optimization_results.h5:
                                         (pipeline/truck/railway), emitters colored
                                         by whether CCS was installed, transport
                                         hubs and the storage site.
+  1b. ccs_chain_network_map_sized_by_capacity.png - same map, but emitter bubble
+                                        area scales with technology capacity
+                                        (design "size" field, t/h).
+  1c. ccs_chain_network_map_cost_factor.png - same built network + CCS status,
+                                        on the grayscale integrated cost-factor
+                                        grid (as in cost_factor_grid_map_italy.py).
+  1d. ccs_chain_network_map_trunk_highlight.png - one specific chain of built
+                                        arcs (default: the Piacenza -> Modena-H ->
+                                        HERAMBIENTE Spa -> Ravenna -> Casalborsetti
+                                        -> Porto Corsini trunk) highlighted in bold
+                                        against the rest of the network, muted.
+
+  All maps share the same base style (Italy fill/boundary, fixed lon/lat extent,
+  axis labels) as routes_connection.py, via setup_base_map().
   2. ccs_chain_emitter_zoom_<node>.png - captured vs. emitted CO2 for one
                                         CCS-equipped waste-to-energy plant.
   2b. ccs_chain_inflow_<node>.png     - hourly CO2 received at a node (e.g. a
@@ -74,10 +88,14 @@ STAGE_LABELS = ["Capture", "Transport", "Storage"]
 # ============================================================
 # Paths
 # ============================================================
-RESULTS_H5 = Path("../Results_CCSchainOptimization/20260710104256-1/optimization_results.h5")
+RESULTS_H5 = Path("../Results_CCSchainOptimization/20260710184058_emissions_minC-1/optimization_results.h5")
 
 path_data_case_study = Path("../italy_data")
 path_files_gis = path_data_case_study / "raw_data/gis_data"
+path_files_grids = path_data_case_study / "geographical_feature"
+path_cost_factor_table = Path(
+    "../../adopt_net0/database/data/networks/enhanced_co2_transport_cost_model/cost_factor_table.xlsx"
+)
 
 GIS_NODES = path_files_gis / "all_nodes_italy.shp"
 ITALY_SHP = path_files_gis / "italy_WGS1984.shp"
@@ -87,6 +105,65 @@ ROUTES = {
     "CO2Railway": path_files_gis / "routes_distances_railway.shp",
 }
 OUT_DIR = Path(__file__).resolve().parent
+
+# Same map extent used throughout routes_connection.py, so every map in this
+# project reads as one consistent system.
+MAP_BOUNDS = {"minx": 6.5, "maxx": 14.0, "miny": 43.5, "maxy": 47.0}
+COST_FACTOR_PIPELINE_CATEGORY = 300
+BW_CMAP = plt.cm.Greys
+
+
+def setup_base_map(ax, italy: gpd.GeoDataFrame, title: str):
+    """Base map styling matching routes_connection.py exactly: same Italy
+    boundary/fill, same fixed extent, same axis labels/grid."""
+    italy.boundary.plot(ax=ax, color="black", linewidth=1, alpha=0.7)
+    italy.plot(ax=ax, color="lightgray", alpha=0.2)
+    ax.set_xlim(MAP_BOUNDS["minx"], MAP_BOUNDS["maxx"])
+    ax.set_ylim(MAP_BOUNDS["miny"], MAP_BOUNDS["maxy"])
+    ax.set_title(title, fontsize=16, fontweight="bold")
+    ax.set_xlabel("Longitude", fontsize=12)
+    ax.set_ylabel("Latitude", fontsize=12)
+    ax.tick_params(axis="both", labelsize=11)
+    ax.grid(True, alpha=0.3, linestyle="--")
+    ax.set_aspect("equal")
+
+
+def compute_cost_factor_grid(italy: gpd.GeoDataFrame, category: float = COST_FACTOR_PIPELINE_CATEGORY):
+    """Integrated cost factor fishnet grid, same calculation as
+    cost_factor_grid_map_italy.py / routes_connection.py."""
+    fishnet = gpd.read_file(path_files_gis / "fishnet_italy_5km.shp").reset_index().rename(
+        columns={"index": "GRID_OID"})
+    soil_data = pd.read_csv(path_files_grids / "soil_type_grids_italy.csv")
+    anthro_data = pd.read_csv(path_files_grids / "anthropisation_grids_italy.csv")
+    morpho_data = pd.read_csv(path_files_grids / "morphological_feature_grids_italy.csv")
+    cost_factor_table = pd.read_excel(path_cost_factor_table)
+
+    table = cost_factor_table.sort_values("pipeline_category").reset_index(drop=True)
+    exact_match = table.loc[table["pipeline_category"] == category]
+    if not exact_match.empty:
+        coeffs = exact_match.iloc[0].to_dict()
+    else:
+        coeffs = {"pipeline_category": category}
+        for col in table.columns:
+            if col == "pipeline_category":
+                continue
+            coeffs[col] = float(np.interp(category, table["pipeline_category"], table[col]))
+
+    fishnet = (fishnet
+               .merge(soil_data, on="GRID_OID")
+               .merge(anthro_data, on="GRID_OID")
+               .merge(morpho_data, on="GRID_OID"))
+
+    fishnet["SOIL_FACTOR"] = (coeffs["k_soil_non_rock"] * fishnet["NON_ROCK_S"]
+                               + coeffs["k_soil_rock"] * fishnet["ROCK_S"])
+    fishnet["ANTHRO_FACTOR"] = (coeffs["k_anthro_non_anthropised"] * fishnet["NON_ANTHROPISED_A"]
+                                 + coeffs["k_anthro_anthropised"] * fishnet["ANTHROPISED_A"])
+    fishnet["MORPH_FACTOR"] = (coeffs["k_morpho_plain"] * fishnet["PLAIN_M"]
+                                + coeffs["k_morpho_hill"] * fishnet["HILL_M"]
+                                + coeffs["k_morpho_mountain"] * fishnet["MOUNTAIN_M"])
+    fishnet["COST_FACTOR"] = fishnet[["SOIL_FACTOR", "ANTHRO_FACTOR", "MORPH_FACTOR"]].sum(axis=1)
+
+    return gpd.clip(fishnet, italy)
 
 
 # ============================================================
@@ -114,27 +191,55 @@ def load_built_arcs(h5_path: Path) -> pd.DataFrame:
 
 
 def load_ccs_status(h5_path: Path) -> pd.DataFrame:
+    """
+    Per-emitter CCS status, plus total annual emissions (captured + vented).
+
+    Total emissions is the true measure of a plant's scale -- unlike the
+    design "size" field (a free technology-capacity decision variable that,
+    for "existing=0" generic techs, is NOT tied to real historical output).
+
+    IMPORTANT: design/nodes/.../emissions_pos is NOT an annual total -- it's
+    the raw unweighted sum over the 360 clustered representative hours (confirmed
+    by comparing it directly to the node's carrier "demand", which sums to the
+    correct real annual value only after expansion). Both emissions_pos and
+    captured CO2 must be pulled from operation/technology_operation (the
+    per-timestep series) and expanded back to the full 8760-hour year via
+    k_means_specs/sequence before summing -- same treatment for both, or the
+    two terms end up on inconsistent scales.
+    """
     rows = []
     with h5py.File(h5_path, "r") as f:
+        seq = f["k_means_specs"]["period1"]["sequence"][()]
         nodes = f["design"]["nodes"]["period1"]
+        op = f["operation"]["technology_operation"]["period1"]
         for node_name in nodes.keys():
+            size = 0.0
             size_ccs = 0.0
             capex_ccs = 0.0
+            total_emissions = 0.0
             has_emitter_tech = False
             for tech in nodes[node_name].keys():
                 g = nodes[node_name][tech]
                 keys = list(g.keys())
                 if "size_ccs" in keys:
                     has_emitter_tech = True
+                    size += float(g["size"][()][0])
                     size_ccs += float(g["size_ccs"][()][0])
                     capex_ccs += float(g["capex_ccs"][()][0])
+                    emitted_clustered = op[node_name][tech]["emissions_pos"][()]
+                    emitted_annual = float(emitted_clustered[seq - 1].sum())
+                    captured_clustered = op[node_name][tech]["CO2captured_var_output_ccs"][()]
+                    captured_annual = float(captured_clustered[seq - 1].sum())
+                    total_emissions += captured_annual + emitted_annual
             if has_emitter_tech:
                 rows.append(
                     {
                         "node": node_name,
+                        "size": size,
                         "size_ccs": size_ccs,
                         "capex_ccs": capex_ccs,
                         "ccs_installed": size_ccs > 0,
+                        "total_emissions": total_emissions,
                     }
                 )
     return pd.DataFrame(rows)
@@ -325,8 +430,7 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
 
-    italy.plot(ax=ax, color=LAND, alpha=0.9, zorder=0)
-    italy.boundary.plot(ax=ax, color=INK_SECONDARY, linewidth=1, alpha=0.8, zorder=1)
+    setup_base_map(ax, italy, "Optimized CO$_2$ Capture, Transport & Storage Network — Northern Italy")
 
     # --- routes, drawn truck/rail first so pipeline (usually dominant) sits on top ---
     draw_order = ["CO2Truck", "CO2Railway", "CO2_Pipeline"]
@@ -376,16 +480,6 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
                 ax.scatter(point.x, point.y, marker="o", s=90, facecolors="none",
                            edgecolor=STATUS_MUTED, linewidth=1.8, zorder=21)
 
-    minx, miny, maxx, maxy = nodes_unique.total_bounds
-    pad = 0.4
-    ax.set_xlim(minx - pad, maxx + pad)
-    ax.set_ylim(miny - pad, maxy + pad)
-    ax.set_axis_off()
-    ax.set_title(
-        "Optimized CO$_2$ Capture, Transport & Storage Network — Northern Italy",
-        fontsize=16, weight="bold", color=INK_PRIMARY, pad=16,
-    )
-
     legend_handles = [
         Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
         Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
@@ -400,7 +494,7 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
                markersize=17, label="CO$_2$ storage", linestyle="None"),
     ]
     ax.legend(
-        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.02),
+        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.14),
         ncol=4, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
     )
 
@@ -418,8 +512,365 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
         bbox=dict(boxstyle="round,pad=0.6", facecolor="white", edgecolor=GRIDLINE, alpha=0.92),
     )
 
-    fig.tight_layout(rect=[0, 0.03, 1, 1])
+    fig.tight_layout(rect=[0, 0.09, 1, 1])
     out_file = OUT_DIR / "ccs_chain_network_map.png"
+    fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
+    plt.close(fig)
+    print(f"Saved: {out_file}")
+
+
+# ============================================================
+# PLOT 1b - Network map with emitter bubble size ~ emitter capacity
+# ============================================================
+def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
+                                size_range=(25, 900)):
+    """Same map as plot_main_map, but each emitter's marker area scales with
+    its total annual emissions (captured + vented, t/year) instead of a fixed
+    radius -- the true measure of plant scale (see load_ccs_status). Route
+    linewidth also scales with each arc's built size (e.g. pipeline capacity),
+    same as plot_main_map."""
+    italy = gpd.read_file(ITALY_SHP)
+    nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
+    name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
+    ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
+    size_map = dict(zip(ccs_df["node"], ccs_df["total_emissions"]))
+
+    s_min, s_max = size_range
+    max_capacity = ccs_df["total_emissions"].max() if len(ccs_df) else 1
+    max_capacity = max_capacity if max_capacity > 0 else 1
+
+    def marker_area(capacity):
+        # sqrt-compressed: emissions here span ~3,900 to ~874,000 t/yr (~220x).
+        # Pure linear-area scaling crushes everything below ~10,000 t/yr to
+        # within a couple of points of s_min, making them look identical.
+        # Compressing by sqrt keeps the ordering monotonic while spreading out
+        # the small end enough to stay distinguishable.
+        frac = (capacity / max_capacity) ** 0.5
+        return s_min + (s_max - s_min) * frac
+
+    fig, ax = plt.subplots(figsize=(12.5, 12))
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+
+    setup_base_map(ax, italy, "CO$_2$ Network — Emitter Bubble Size ~ Total Annual Emissions")
+
+    # routes, linewidth scaled by built size (e.g. pipeline capacity) within each mode
+    max_size_by_net = built_arcs.groupby("network")["size"].max().to_dict()
+    for ntype in ["CO2Truck", "CO2Railway", "CO2_Pipeline"]:
+        sub = built_arcs[built_arcs["network"] == ntype]
+        color = MODE_COLORS[ntype]
+        max_size = max_size_by_net.get(ntype, 1) or 1
+        for _, r in sub.iterrows():
+            geom = r["geometry"]
+            if geom is None:
+                continue
+            lw = 1.0 + 2.5 * (r["size"] / max_size)
+            gpd.GeoSeries([geom]).plot(ax=ax, color=color, linewidth=lw, alpha=0.75, zorder=5)
+
+    for _, row in nodes_unique.iterrows():
+        name, ntype_raw, point = row["node_name"], row["node_type"], row.geometry
+        if ntype_raw == "Storage":
+            ax.scatter(point.x, point.y, marker="*", s=480, color=STORAGE_COLOR,
+                       edgecolor="white", linewidth=1.4, zorder=25)
+        elif ntype_raw == "Transport":
+            ax.scatter(point.x, point.y, marker="s", s=100, color=TRANSPORT_COLOR,
+                       edgecolor="white", linewidth=1.2, zorder=20)
+        else:
+            area = marker_area(size_map.get(name, 0))
+            installed = ccs_map.get(name, False)
+            if installed:
+                ax.scatter(point.x, point.y, marker="o", s=area, color=STATUS_GOOD,
+                           edgecolor="white", linewidth=1.2, alpha=0.85, zorder=22)
+            else:
+                ax.scatter(point.x, point.y, marker="o", s=area, facecolors="none",
+                           edgecolor=STATUS_MUTED, linewidth=1.8, zorder=21)
+
+    legend_handles = [
+        Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
+        Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
+        Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=STATUS_GOOD, markeredgecolor="white",
+               markersize=11, label="Emitter — CCS installed", linestyle="None"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="none", markeredgecolor=STATUS_MUTED,
+               markersize=11, markeredgewidth=1.8, label="Emitter — no CCS", linestyle="None"),
+        Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
+               markersize=10, label="Transport hub", linestyle="None"),
+        Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
+               markersize=17, label="CO$_2$ storage", linestyle="None"),
+    ]
+    legend1 = ax.legend(
+        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.35, -0.13),
+        ncol=2, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
+        title="Mode / node type", title_fontsize=11,
+    )
+    ax.add_artist(legend1)
+
+    # --- bubble-size legend (reference capacities) ---
+    ref_fracs = [0.25, 0.6, 1.0]
+    ref_vals = [round(max_capacity * f) for f in ref_fracs]
+    size_handles = [
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=INK_MUTED, markeredgecolor="white",
+               markeredgewidth=1.0, linestyle="None",
+               markersize=2 * (marker_area(v) / 3.14159) ** 0.5, label=f"{v:,.0f} t/yr")
+        for v in ref_vals
+    ]
+    ax.legend(
+        handles=size_handles, loc="upper center", bbox_to_anchor=(0.75, -0.13),
+        ncol=1, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
+        title="Total annual emissions", title_fontsize=11, labelspacing=1.6, borderpad=1.1,
+    )
+
+    n_installed = int(ccs_df["ccs_installed"].sum())
+    n_total = len(ccs_df)
+    kpi_text = (
+        f"{n_installed}/{n_total} emitters equipped with CCS\n"
+        f"Network capex: €{summary['cost_capex_netws'] / 1e6:,.0f}M"
+    )
+    ax.text(
+        0.02, 0.02, kpi_text, transform=ax.transAxes, fontsize=11, color=INK_PRIMARY,
+        va="bottom", ha="left",
+        bbox=dict(boxstyle="round,pad=0.6", facecolor="white", edgecolor=GRIDLINE, alpha=0.92),
+    )
+
+    fig.tight_layout(rect=[0, 0.14, 1, 1])
+    out_file = OUT_DIR / "ccs_chain_network_map_sized_by_capacity.png"
+    fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
+    plt.close(fig)
+    print(f"Saved: {out_file}")
+
+
+# ============================================================
+# PLOT 1c - Network map with grayscale integrated cost-factor background
+# ============================================================
+def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
+    """Same built network + CCS-status map as plot_main_map, but with the
+    integrated cost-factor grid (grayscale) as background, matching the
+    pipeline-connections plot in cost_factor_grid_map_italy.py."""
+    italy = gpd.read_file(ITALY_SHP)
+    fishnet_clipped = compute_cost_factor_grid(italy)
+    nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
+    name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
+    ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
+
+    fig, ax = plt.subplots(figsize=(12.5, 12))
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+
+    fishnet_clipped.plot(column="COST_FACTOR", ax=ax, cmap=BW_CMAP, legend=False, zorder=0)
+    fishnet_clipped.boundary.plot(ax=ax, color="gray", linewidth=0.3, alpha=0.5, zorder=1)
+    setup_base_map(ax, italy, f"CO$_2$ Network on Integrated Cost Factor (pipeline category {COST_FACTOR_PIPELINE_CATEGORY})")
+
+    draw_order = ["CO2Truck", "CO2Railway", "CO2_Pipeline"]
+    max_size_by_net = built_arcs.groupby("network")["size"].max().to_dict()
+    for ntype in draw_order:
+        sub = built_arcs[built_arcs["network"] == ntype]
+        color = MODE_COLORS[ntype]
+        max_size = max_size_by_net.get(ntype, 1) or 1
+        for _, r in sub.iterrows():
+            geom = r["geometry"]
+            if geom is None:
+                continue
+            from_point = name_to_point.get(r["from"])
+            coords = _oriented_coords(geom, from_point) if from_point else list(geom.coords)
+            lw = 1.3 + 2.7 * (r["size"] / max_size)
+            gpd.GeoSeries([LineString(coords)]).plot(ax=ax, color=color, linewidth=lw, alpha=0.9, zorder=5)
+
+            point, (dx, dy) = _point_and_tangent_at_fraction(coords, 0.55)
+            norm = (dx ** 2 + dy ** 2) ** 0.5
+            if norm > 0:
+                ux, uy = dx / norm, dy / norm
+                arrow_len = 0.10
+                start = (point[0] - ux * arrow_len / 2, point[1] - uy * arrow_len / 2)
+                end = (point[0] + ux * arrow_len / 2, point[1] + uy * arrow_len / 2)
+                ax.annotate(
+                    "", xy=end, xytext=start,
+                    arrowprops=dict(arrowstyle="-|>", color=color, lw=1.5, mutation_scale=13),
+                    zorder=6,
+                )
+
+    for _, row in nodes_unique.iterrows():
+        name, ntype_raw, point = row["node_name"], row["node_type"], row.geometry
+        if ntype_raw == "Storage":
+            ax.scatter(point.x, point.y, marker="*", s=480, color=STORAGE_COLOR,
+                       edgecolor="white", linewidth=1.4, zorder=25)
+        elif ntype_raw == "Transport":
+            ax.scatter(point.x, point.y, marker="s", s=100, color=TRANSPORT_COLOR,
+                       edgecolor="white", linewidth=1.2, zorder=20)
+        else:
+            installed = ccs_map.get(name, False)
+            if installed:
+                ax.scatter(point.x, point.y, marker="o", s=100, color=STATUS_GOOD,
+                           edgecolor="white", linewidth=1.2, zorder=22)
+            else:
+                ax.scatter(point.x, point.y, marker="o", s=90, facecolors="none",
+                           edgecolor=STATUS_MUTED, linewidth=1.8, zorder=21)
+
+    legend_handles = [
+        Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
+        Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
+        Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=STATUS_GOOD, markeredgecolor="white",
+               markersize=11, label="Emitter — CCS installed", linestyle="None"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="none", markeredgecolor=STATUS_MUTED,
+               markersize=11, markeredgewidth=1.8, label="Emitter — no CCS", linestyle="None"),
+        Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
+               markersize=10, label="Transport hub", linestyle="None"),
+        Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
+               markersize=17, label="CO$_2$ storage", linestyle="None"),
+    ]
+    ax.legend(
+        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.14),
+        ncol=4, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
+    )
+
+    sm = plt.cm.ScalarMappable(
+        cmap=BW_CMAP,
+        norm=plt.Normalize(fishnet_clipped["COST_FACTOR"].min(), fishnet_clipped["COST_FACTOR"].max()),
+    )
+    cbar = fig.colorbar(sm, ax=ax, fraction=0.04, pad=0.02)
+    cbar.set_label("Cost Factor Value", fontsize=11)
+
+    n_installed = int(ccs_df["ccs_installed"].sum())
+    n_total = len(ccs_df)
+    total_capture = ccs_df["size_ccs"].sum()
+    kpi_text = (
+        f"{n_installed}/{n_total} emitters equipped with CCS\n"
+        f"{total_capture:,.0f} t/h captured CO$_2$ capacity\n"
+        f"Network capex: €{summary['cost_capex_netws'] / 1e6:,.0f}M"
+    )
+    ax.text(
+        0.02, 0.02, kpi_text, transform=ax.transAxes, fontsize=11, color=INK_PRIMARY,
+        va="bottom", ha="left",
+        bbox=dict(boxstyle="round,pad=0.6", facecolor="white", edgecolor=GRIDLINE, alpha=0.92),
+    )
+
+    fig.tight_layout(rect=[0, 0.09, 1, 1])
+    out_file = OUT_DIR / "ccs_chain_network_map_cost_factor.png"
+    fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
+    plt.close(fig)
+    print(f"Saved: {out_file}")
+
+
+# ============================================================
+# PLOT 1d - Trunk line highlighted against the rest of the network
+# ============================================================
+TRUNK_PATH_DEFAULT = [
+    "Piacenza",
+    "Modena-H",
+    "HERAMBIENTE Spa -Termovalorizzatore",
+    "Ravenna",
+    "Eni S.p.A Casalborsetti",
+    "Porto Corsini",
+]
+TRUNK_COLOR = "#d03b3b"
+
+
+def plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary, trunk_path: list = None):
+    """Highlights one specific chain of built arcs (e.g. the main trunk line
+    carrying most flow toward storage) in bold against the rest of the network,
+    which is shown in its normal per-mode colors (no dimming/fading)."""
+    trunk_path = trunk_path or TRUNK_PATH_DEFAULT
+    trunk_pairs = set(zip(trunk_path[:-1], trunk_path[1:]))
+
+    italy = gpd.read_file(ITALY_SHP)
+    nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
+    name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
+    ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
+
+    fig, ax = plt.subplots(figsize=(12.5, 12))
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+
+    setup_base_map(ax, italy, "CO$_2$ Network — Trunk Line to Storage Highlighted")
+
+    # --- context: every built arc, normal per-mode color (no dimming) ---
+    for _, r in built_arcs.iterrows():
+        geom = r["geometry"]
+        if geom is None or (r["from"], r["to"]) in trunk_pairs:
+            continue
+        gpd.GeoSeries([geom]).plot(ax=ax, color=MODE_COLORS[r["network"]], linewidth=1.2, alpha=0.9, zorder=3)
+
+    # --- trunk: bold, on top, with arrows ---
+    for a, b in zip(trunk_path[:-1], trunk_path[1:]):
+        match = built_arcs[(built_arcs["from"] == a) & (built_arcs["to"] == b)]
+        if match.empty:
+            print(f"Warning: no built arc found for trunk leg {a} -> {b}")
+            continue
+        r = match.iloc[0]
+        geom = r["geometry"]
+        from_point = name_to_point.get(a)
+        coords = _oriented_coords(geom, from_point) if from_point else list(geom.coords)
+        gpd.GeoSeries([LineString(coords)]).plot(ax=ax, color=TRUNK_COLOR, linewidth=4.5, alpha=0.95, zorder=8)
+
+        point, (dx, dy) = _point_and_tangent_at_fraction(coords, 0.55)
+        norm = (dx ** 2 + dy ** 2) ** 0.5
+        if norm > 0:
+            ux, uy = dx / norm, dy / norm
+            arrow_len = 0.12
+            start = (point[0] - ux * arrow_len / 2, point[1] - uy * arrow_len / 2)
+            end = (point[0] + ux * arrow_len / 2, point[1] + uy * arrow_len / 2)
+            ax.annotate(
+                "", xy=end, xytext=start,
+                arrowprops=dict(arrowstyle="-|>", color=TRUNK_COLOR, lw=2.2, mutation_scale=20),
+                zorder=9,
+            )
+
+    # --- nodes: usual CCS-status styling, with a highlight ring + label on the trunk ---
+    for _, row in nodes_unique.iterrows():
+        name, ntype_raw, point = row["node_name"], row["node_type"], row.geometry
+        on_trunk = name in trunk_path
+
+        if ntype_raw == "Storage":
+            ax.scatter(point.x, point.y, marker="*", s=520 if on_trunk else 480, color=STORAGE_COLOR,
+                       edgecolor=(TRUNK_COLOR if on_trunk else "white"), linewidth=(2.5 if on_trunk else 1.4),
+                       zorder=25)
+        elif ntype_raw == "Transport":
+            ax.scatter(point.x, point.y, marker="s", s=130 if on_trunk else 90, color=TRANSPORT_COLOR,
+                       edgecolor=(TRUNK_COLOR if on_trunk else "white"), linewidth=(2.5 if on_trunk else 1.2),
+                       alpha=(1.0 if on_trunk else 0.5), zorder=20)
+        else:
+            installed = ccs_map.get(name, False)
+            color = STATUS_GOOD if installed else "none"
+            edge = STATUS_MUTED if not installed else "white"
+            ax.scatter(point.x, point.y, marker="o", s=130 if on_trunk else 80, color=color,
+                       edgecolor=(TRUNK_COLOR if on_trunk else edge), linewidth=(2.8 if on_trunk else 1.4),
+                       alpha=(1.0 if on_trunk else 0.55), zorder=(22 if on_trunk else 18))
+
+    legend_handles = [
+        Line2D([0], [0], color=TRUNK_COLOR, lw=4.5, label="Trunk line"),
+        Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=2, label="Pipeline"),
+        Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=2, label="Truck"),
+        Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=2, label="Railway"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=STATUS_GOOD, markeredgecolor="white",
+               markersize=11, label="Emitter — CCS installed", linestyle="None"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="none", markeredgecolor=STATUS_MUTED,
+               markersize=11, markeredgewidth=1.8, label="Emitter — no CCS", linestyle="None"),
+        Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
+               markersize=10, label="Transport hub", linestyle="None"),
+        Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
+               markersize=17, label="CO$_2$ storage", linestyle="None"),
+    ]
+    ax.legend(
+        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.14),
+        ncol=4, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
+    )
+
+    trunk_arcs = built_arcs[
+        built_arcs.apply(lambda r: (r["from"], r["to"]) in trunk_pairs, axis=1)
+    ]
+    kpi_text = (
+        f"Trunk: {' → '.join(trunk_path)}\n"
+        f"Trunk capacity: {trunk_arcs['size'].min():,.0f}–{trunk_arcs['size'].max():,.0f} t/h\n"
+        f"Trunk capex: €{trunk_arcs['capex'].sum() / 1e6:,.0f}M"
+    )
+    ax.text(
+        0.02, 0.02, kpi_text, transform=ax.transAxes, fontsize=10, color=INK_PRIMARY,
+        va="bottom", ha="left",
+        bbox=dict(boxstyle="round,pad=0.6", facecolor="white", edgecolor=TRUNK_COLOR, alpha=0.92),
+    )
+
+    fig.tight_layout(rect=[0, 0.09, 1, 1])
+    out_file = OUT_DIR / "ccs_chain_network_map_trunk_highlight.png"
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")
@@ -439,7 +890,7 @@ def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str 
     emitted_full = emitted[seq - 1]
     hours = np.arange(len(captured_full))
 
-    fig, ax = plt.subplots(figsize=(11.5, 4.8))
+    fig, ax = plt.subplots(figsize=(7, 4))
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
 
@@ -460,10 +911,10 @@ def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str 
     ax.spines["bottom"].set_color(GRIDLINE)
     ax.tick_params(colors=INK_SECONDARY)
 
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=2, frameon=True,
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=2, frameon=True,
               fontsize=10.5, edgecolor=GRIDLINE)
 
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+    fig.tight_layout(rect=[0, 0.07, 1, 1])
     out_file = OUT_DIR / f"ccs_chain_emitter_zoom_{node_name.replace(' ', '_')}.png"
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
@@ -663,7 +1114,10 @@ def main():
     cost_breakdown = compute_cost_breakdown(RESULTS_H5)
 
     plot_main_map(built_arcs, nodes_gdf, ccs_df, summary)
-    plot_emitter_zoom(RESULTS_H5, node_name="SILLA 2", tech_name="WasteToEnergyEmitter")
+    plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary)
+    plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary)
+    plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary)
+    plot_emitter_zoom(RESULTS_H5, node_name="SILLA 2", tech_name="WasteToEnergyEmitter_existing")
     plot_node_inflow(RESULTS_H5, node_name="Eni S.p.A Casalborsetti")
     plot_cost_breakdown(cost_breakdown, per_tonne=True)
     plot_cost_breakdown(cost_breakdown, per_tonne=False)

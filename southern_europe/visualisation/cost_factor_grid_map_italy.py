@@ -74,6 +74,9 @@ routes_pipeline = routes_pipeline.to_crs(italy.crs)
 
 pipeline_color = cmc.navia(0.15)  # matches route_colors['pipeline'] in routes_connection.py
 
+# Background (cost-factor grid) is grayscale; node/route colors above are untouched
+bw_cmap = plt.cm.Greys
+
 
 def get_route_directionality_fixed(routes_gdf, network_matrix, route_type):
     """Determine flow direction for each route, matching routes_connection.py exactly."""
@@ -372,7 +375,7 @@ plt.show()
 fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 italy.boundary.plot(ax=ax, color='black', linewidth=1)
 
-fishnet_clipped.plot(column='COST_FACTOR', ax=ax, cmap=cmc.navia_r, legend=False)
+fishnet_clipped.plot(column='COST_FACTOR', ax=ax, cmap=bw_cmap, legend=False)
 fishnet_clipped.boundary.plot(ax=ax, color='gray', linewidth=0.3, alpha=0.5)
 
 for idx, route in routes_pipeline.iterrows():
@@ -396,7 +399,7 @@ ax.set_axis_off()
 ax.set_title(f"Cost factor with pipeline network — pipeline category {PIPELINE_CATEGORY}", fontsize=12)
 
 cbar_ax = fig.add_axes([0.85, 0.2, 0.05, 0.6])
-sm3 = plt.cm.ScalarMappable(cmap=cmc.navia_r, norm=plt.Normalize(
+sm3 = plt.cm.ScalarMappable(cmap=bw_cmap, norm=plt.Normalize(
     northern_subset['COST_FACTOR'].min(), northern_subset['COST_FACTOR'].max()))
 cbar = fig.colorbar(sm3, cax=cbar_ax)
 cbar.set_label('Cost Factor Value', fontsize=12)
