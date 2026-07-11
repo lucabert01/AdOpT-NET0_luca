@@ -358,6 +358,7 @@ else:
     print(f"  ✅ All required files present")
 
 import adopt_net0 as adopt
+import pyomo.environ as pyo
 from pyomo.environ import SolverFactory
 
 m = adopt.ModelHub()
@@ -377,6 +378,21 @@ pyomo_model = m.model[model_key]
 # 3. Verify it is now a Pyomo ConcreteModel
 print(f"Type of pyomo_model is now: {type(pyomo_model)}")
 
+# ----- DIAGNOSTIC: force CCS installation at ROBILANTE to test true (in)feasibility -----
+# Robilante's only available CCS size class (MEA_large) requires size_ccs >= 142.6 t/h
+# if installed at all (para_size_min_ccs). The pure emissions_net objective run put
+# size_ccs=0 there; this forces the "installed" branch of the disjunction to see
+# whether that's a real infeasibility or just an unexploited optimization opportunity.
+b_robilante = (
+    pyomo_model.periods["period1"]
+    .node_blocks["ROBILANTE cement plant"]
+    .tech_blocks_active["CementEmitter_existing"]
+)
+b_robilante.const_force_ccs_installed = pyo.Constraint(
+    expr=b_robilante.var_size_ccs >= b_robilante.para_size_min_ccs
+)
+print(f"Forced CCS at Robilante: size_ccs >= {b_robilante.para_size_min_ccs.value}")
+
 # 4. Proceed with solving
 opt = SolverFactory("gurobi_persistent")
 # 1. Revert to the standard set_instance (no symbolic labels)
@@ -389,20 +405,22 @@ if str(results.solver.termination_condition) == "infeasible":
     gurobi_model.write("infeasible.ilp")
     print("IIS written to infeasible.ilp")
 
-    print("\n--- TRANSLATING IIS NAMES ---")
+    print("\n--- IIS CONSTRAINTS (auto-translated to Pyomo names) ---")
+    for g_con in gurobi_model.getConstrs():
+        if g_con.IISConstr:
+            p_con = opt._solver_con_to_pyomo_con_map.get(g_con)
+            print(f"  {g_con.ConstrName} -> {p_con.name if p_con is not None else '(no pyomo mapping)'}")
 
-    # 2. List the variables we found in the ILP file
-    var_names = ["x2681", "x2693", "x2697", "x2701", "x2705", "x2718", "x2677"]
-    for v_name in var_names:
-        g_var = gurobi_model.getVarByName(v_name)
-        if g_var is not None:
-            p_var = opt._solver_var_to_pyomo_var_map[g_var]
-            print(f"Variable {v_name} -> {p_var.name}")
-
-    # 3. List the constraints we found in the ILP file
-    con_names = ["x9803", "x10232", "x10402", "x10572", "x10785"]
-    for c_name in con_names:
-        g_con = gurobi_model.getConstrByName(c_name)
-        if g_con is not None:
-            p_con = opt._solver_con_to_pyomo_con_map[g_con]
-            print(f"Constraint {c_name} -> {p_con.name}")
+    print("\n--- IIS VARIABLE BOUNDS (auto-translated to Pyomo names) ---")
+    for g_var in gurobi_model.getVars():
+        if g_var.IISLB or g_var.IISUB:
+            p_var = opt._solver_var_to_pyomo_var_map.get(g_var)
+            bound_type = "/".join(
+                b for b, flag in [("LB", g_var.IISLB), ("UB", g_var.IISUB)] if flag
+            )
+            print(f"  {g_var.VarName} ({bound_type}) -> {p_var.name if p_var is not None else '(no pyomo mapping)'}")
+else:
+    print(f"\nSolve status: {results.solver.termination_condition}")
+    print(f"emissions_net with CCS forced at Robilante: {pyomo_model.periods['period1'].var_emissions_net.value}")
+    print("(compare against the unconstrained stage-1 minimum of ~4,699,803 t to see whether forcing "
+          "CCS here made the objective worse, better, or unchanged)")
