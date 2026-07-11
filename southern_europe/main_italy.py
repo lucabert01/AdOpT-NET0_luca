@@ -395,14 +395,13 @@ b_robilante.const_force_ccs_installed = pyo.Constraint(
 )
 print(f"Forced CCS at Robilante: size_ccs >= {b_robilante.para_size_min_ccs.value}")
 
-# 4. Proceed with solving
-opt = SolverFactory("gurobi_persistent")
-# 1. Revert to the standard set_instance (no symbolic labels)
-opt.set_instance(pyomo_model)
-results = opt.solve(tee=True)
+m.solve()
 
-if str(results.solver.termination_condition) == "infeasible":
-    gurobi_model = opt._solver_model
+if m.solution.solver.termination_condition in [
+    pyo.TerminationCondition.infeasible,
+    pyo.TerminationCondition.infeasibleOrUnbounded,
+]:
+    gurobi_model = m.solver._solver_model
     gurobi_model.computeIIS()
     gurobi_model.write("infeasible.ilp")
     print("IIS written to infeasible.ilp")
@@ -410,19 +409,16 @@ if str(results.solver.termination_condition) == "infeasible":
     print("\n--- IIS CONSTRAINTS (auto-translated to Pyomo names) ---")
     for g_con in gurobi_model.getConstrs():
         if g_con.IISConstr:
-            p_con = opt._solver_con_to_pyomo_con_map.get(g_con)
+            p_con = m.solver._solver_con_to_pyomo_con_map.get(g_con)
             print(f"  {g_con.ConstrName} -> {p_con.name if p_con is not None else '(no pyomo mapping)'}")
 
     print("\n--- IIS VARIABLE BOUNDS (auto-translated to Pyomo names) ---")
     for g_var in gurobi_model.getVars():
         if g_var.IISLB or g_var.IISUB:
-            p_var = opt._solver_var_to_pyomo_var_map.get(g_var)
-            bound_type = "/".join(
-                b for b, flag in [("LB", g_var.IISLB), ("UB", g_var.IISUB)] if flag
-            )
+            p_var = m.solver._solver_var_to_pyomo_var_map.get(g_var)
+            bound_type = "/".join(b for b, flag in [("LB", g_var.IISLB), ("UB", g_var.IISUB)] if flag)
             print(f"  {g_var.VarName} ({bound_type}) -> {p_var.name if p_var is not None else '(no pyomo mapping)'}")
 else:
-    print(f"\nSolve status: {results.solver.termination_condition}")
+    print(f"\nSolve status: {m.solution.solver.termination_condition}")
     print(f"emissions_net with CCS forced at Robilante: {pyomo_model.periods['period1'].var_emissions_net.value}")
-    print("(compare against the unconstrained stage-1 minimum of ~4,699,803 t to see whether forcing "
-          "CCS here made the objective worse, better, or unchanged)")
+    print("(compare against the unconstrained stage-1 minimum of ~4,699,803 t)")
