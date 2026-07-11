@@ -29,10 +29,10 @@ ref_year = 2024
 discount_rate = 0.08 # default
 co2_intensity_electricity = 0 # default (kg CO2/kWh)
 cop_hp = 2.6 # default
-electricity_import_limit = 100 # default
-heat_import_limit = 200 # default
+electricity_import_limit = 1000 # default
+heat_import_limit = 3000 # default
 max_transport_capacity = 3000
-carbon_tax = 150  # euro per tonne CO2
+carbon_tax = 200  # euro per tonne CO2
 enable_carbon_pricing = True
 nr_DD_days = 15
 node_metrics_suffix = 150  # or "150", "200", "" for the base case. Refers to the cutoff size for truck connections
@@ -43,7 +43,7 @@ result_path = "./Results_CCSchainOptimization"
 input_data_path = Path("Italy_CaseStudy")
 input_data_path.mkdir(parents=True, exist_ok=True)
 adopt.create_optimization_templates(input_data_path)
-
+objective = "emissions_net"
 #----- Import data-----#
 path_data_case_study = Path("./italy_data")
 
@@ -92,11 +92,13 @@ assign_carriers_to_nodes(input_data_path, network_location, network_emission_flu
 # Update configmodel json
 with open(input_data_path / "ConfigModel.json", "r") as json_file:
     configuration = json.load(json_file)
-configuration["optimization"]["objective"]["value"] = "costs" # set optimization objective
+configuration["optimization"]["objective"]["value"] = objective # set optimization objective
 configuration["solveroptions"]["mipgap"]["value"] = 0.02 # set MILP gap
 configuration['optimization']['typicaldays']['N']['value'] = nr_DD_days
 configuration['reporting']['save_summary_path']['value'] = result_path
 configuration['reporting']['save_path']['value'] = result_path
+configuration['reporting']['case_name']['value'] = f"{objective}"
+
 with open(input_data_path / "ConfigModel.json", "w") as json_file:
     json.dump(configuration, json_file, indent=4)
 
