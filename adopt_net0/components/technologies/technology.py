@@ -355,10 +355,7 @@ class Technology(ModelComponent):
             self.ccs_component.bounds["output"][car] = np.column_stack(
                 (
                     np.zeros(shape=(time_steps)),
-                    np.ones(shape=(time_steps))
-                    * self.ccs_component.processed_coeff.time_independent[
-                        "capture_rate"
-                    ],
+                    np.ones(shape=(time_steps)),
                 )
             )
 
