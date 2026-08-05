@@ -1130,7 +1130,7 @@ def load_climate_data_from_api_robust(folder_path: str | Path, dataset: str = "J
 
 def update_carrier_data(input_data_path, electricity_price_data, network_emission_flux,
                         path_files_technologies, node_names, co2_intensity_electricity,
-                        cop_hp, path_files_node_flux,
+                        cop_hp, levelized_capex_hp, path_files_node_flux,
                         electricity_import_limit=100, heat_import_limit=200):
 
     import adopt_net0 as adopt
@@ -1151,7 +1151,7 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
 
     # --- Electricity & heat prices ---
     electricity_prices = electricity_price_data['Day-ahead Price (EUR/MWh)'].values
-    heat_prices = np.round(electricity_prices / cop_hp, 2)
+    heat_prices = np.round(levelized_capex_hp + electricity_prices / cop_hp, 2)
 
     adopt.fill_carrier_data(input_data_path, value_or_data=electricity_prices,
                             columns=['Import price'], carriers=['electricity'], nodes=node_names)

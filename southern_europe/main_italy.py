@@ -29,6 +29,7 @@ ref_year = 2024
 discount_rate = 0.08 # default
 co2_intensity_electricity = 0 # default (kg CO2/kWh)
 cop_hp = 2.6 # default
+levelized_capex_hp = 13 #computed from DanishEnergyAgency large HP excess heat
 electricity_import_limit = 1000 # default
 heat_import_limit = 3000 # default
 max_transport_capacity = 3000
@@ -287,6 +288,7 @@ update_carrier_data(
     node_names,
     co2_intensity_electricity,
     cop_hp,
+    levelized_capex_hp,
     path_files_node_flux,
     electricity_import_limit,
     heat_import_limit
