@@ -451,7 +451,7 @@ class CementHybridCCS(Technology):
                     unit_capex_compressor_cpu_data.loc["unit_capex_compressor", phase]
                 )
                 unit_capex_cpu = float(
-                    unit_capex_cpu_data.loc["unit_capex_cpu", phase]
+                    unit_capex_compressor_cpu_data.loc["unit_capex_cpu", phase]
                 )
                 b_tec.para_unit_capex_annual = pyo.Param(
                     domain=pyo.Reals,

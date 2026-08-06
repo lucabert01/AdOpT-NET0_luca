@@ -5,11 +5,11 @@
   "size_is_int": 0,
   "decommission": 0,
   "Economics": {
-    "comment": "CAPEX in EUR/tCLinker/h or as a piecewise function, CAPEX MEA is in EUR/tCO2/h, OPEX_variable in EUR/tonne total output, OPEX_fixed in % of CAPEX_annual",
-    "CAPEX_model": 1,
-    "unit_CAPEX": 676800,
-    "fix_CAPEX": 0,
-    "piecewise_CAPEX": {
+    "comment": "CAPEX in EUR/(t clinker/h)/year or as a piecewise function, CAPEX_MEA in EUR/(tCO2/h)/year, OPEX_variable in EUR/tonne total output, OPEX_fixed in % of CAPEX_annual. NOTE: this technology's _define_capex_parameters/_define_opex fully override the base Technology class, so top-level fix_capex/opex_variable/opex_fixed below are NOT actually read -- only capex_model, unit_capex, piecewise_capex, discount_rate, lifetime, decommission_cost, and everything under other_economics are used. They are kept here only for schema consistency with other technology files.",
+    "capex_model": 1,
+    "unit_capex": 676800,
+    "fix_capex": 0,
+    "piecewise_capex": {
       "bp_x": [
         0,
         75,
@@ -22,26 +22,29 @@
       ]
     },
     "other_economics": {
-      "unit_CAPEX_MEA": 1717286,
-      "piecewise_CAPEX_MEA": {
-      "bp_x": [
-        0,
-        4.430,
-        14.77,
-        24.42
-      ],
-      "bp_y": [
-        0,
-        13902000,
-        25360000,
-        26820000
-      ]
+      "comment": "opex_var_oxy and opex_var_MEA are placeholders (0) -- no source data was available for these; replace with real EUR/tonne CO2 (or relevant unit) variable opex figures before solving with this technology.",
+      "unit_capex_MEA": 1717286,
+      "piecewise_capex_MEA": {
+        "bp_x": [
+          0,
+          4.430,
+          14.77,
+          24.42
+        ],
+        "bp_y": [
+          0,
+          13902000,
+          25360000,
+          26820000
+        ]
       },
-      "OPEX_fixed_MEA": 0.02,
-      "OPEX_fixed_oxy": 0.16
+      "opex_var_oxy": 0,
+      "opex_var_MEA": 0,
+      "opex_fixed_oxy": 0.16,
+      "opex_fixed_MEA": 0.02
     },
-    "OPEX_variable": 7,
-    "OPEX_fixed": 0,
+    "opex_variable": 0,
+    "opex_fixed": 0,
     "discount_rate": 0.1,
     "lifetime": 25,
     "decommission_cost": 0
@@ -72,7 +75,6 @@
   "Units": {
     "size": "tonne/hr",
     "input_carrier": {
-      "heat": "MW",
       "electricity": "MW"
     },
     "output_carrier": {

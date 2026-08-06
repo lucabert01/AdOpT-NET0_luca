@@ -38,6 +38,41 @@ enable_carbon_pricing = True
 nr_DD_days = 15
 node_metrics_suffix = 150  # or "150", "200", "" for the base case. Refers to the cutoff size for truck connections
 node_metrics_file = f"node_metrics_{node_metrics_suffix}.xlsx"
+
+#----- Emitter technology selection per sector -----#
+# Which technology option(s) to make available at each emitter sector's nodes. Each
+# entry is a technology name matching a filename (without ".json") under
+# italy_data/technologies/Emitter/.
+tech_for_cement = ["CementEmitter"]        # or ["CementHybridCCS"], or both together
+tech_for_waste = ["WasteToEnergyEmitter"]  # placeholder for future alternative waste technologies
+tech_for_refining = ["RefineryEmitter"]
+tech_for_other = ["UnspecifiedEmitter"]
+
+# If True, each sector's technology is modeled as "existing": sunk, non-decommissionable,
+# fixed at the node's current output capacity (the original behavior) -- this requires
+# exactly one technology selected per sector, since two technologies can't both be "the"
+# existing plant at a node. If False, ALL technologies selected for a sector are modeled
+# as "new": buildable, freely sized within their own JSON's size_min/size_max, competing
+# with each other (and, if tech_as_existing was previously used to build up existing
+# capacity, with that) to meet the sector's carrier demand.
+tech_as_existing = True
+
+technology_selection = {
+    "Cement": tech_for_cement,
+    "Waste": tech_for_waste,
+    "Refining": tech_for_refining,
+    "Other": tech_for_other,
+}
+
+if tech_as_existing:
+    for sector, techs in technology_selection.items():
+        if len(techs) != 1:
+            raise ValueError(
+                f"tech_as_existing=True requires exactly one technology per sector "
+                f"(a node's 'existing' plant can't be two technologies at once), but "
+                f"'{sector}' has {len(techs)}: {techs}. Either trim it to one "
+                f"technology or set tech_as_existing=False."
+            )
 #----- Create folder for results -----#
 result_path = "./Results_CCSchainOptimization"
 # Create input data path and optimisation templates
@@ -124,7 +159,8 @@ network_emission_flux = assign_mea_technology(network_emission_flux, path_data_c
 
 # Then assign CCS technologies, passing both DataFrames
 # Note: This now uses the calculated capacities from calculate_emitter_capacities()
-assign_ccs_technologies_debug(network_location, network_emission_flux, path_data_case_study, input_data_path)
+assign_ccs_technologies_debug(network_location, network_emission_flux, path_data_case_study, input_data_path,
+                               technology_selection, tech_as_existing)
 
 
 # ===== DEBUG 1: After assign_ccs_technologies() =====
@@ -163,7 +199,7 @@ for node in debug_nodes:
 copy_technology_data_custom(input_data_path, path_files_technologies, network_emission_flux)
 
 # Update CCS references in emitter technologies to match determined MEA sizes
-update_emitter_ccs_references(input_data_path, network_emission_flux)
+update_emitter_ccs_references(input_data_path, network_emission_flux, technology_selection)
 
 #----- Add networks -----#
 new_network_types = ["CO2_Pipeline", "CO2Truck", "CO2Railway"]

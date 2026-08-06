@@ -13,6 +13,18 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 
+# Default emitter-technology-per-sector selection, matching the original hardcoded
+# behavior (one fixed technology per sector, assigned as "existing"). Used as the
+# fallback for callers (main.py, main_greece_test.py) that don't pass their own
+# technology_selection -- main_italy.py passes an explicit, configurable one.
+DEFAULT_TECHNOLOGY_SELECTION = {
+    "Waste": ["WasteToEnergyEmitter"],
+    "Cement": ["CementEmitter"],
+    "Refining": ["RefineryEmitter"],
+    "Other": ["UnspecifiedEmitter"],
+}
+
+
 def load_emission_profiles(path_files_node_flux):
     """
     Load hourly emission profiles from emission_profile_emitters.xlsx (real_data + synthetic_data sheets).
@@ -133,7 +145,7 @@ def assign_carriers_to_nodes(input_data_path, network_location, network_emission
     Carrier assignment rules:
     - All nodes get: electricity, heat, CO2captured (except Transport nodes)
     - Transport nodes get: electricity, CO2captured only (no heat)
-    - Cement nodes also get: cement
+    - Cement nodes also get: clinker
     - Waste nodes also get: waste
     - Refining nodes also get: refined_product
     - Other nodes also get: industrial_product
@@ -157,7 +169,7 @@ def assign_carriers_to_nodes(input_data_path, network_location, network_emission
 
     # Mapping from emitter node_type to specific carriers
     emitter_carriers = {
-        'Cement': 'cement',
+        'Cement': 'clinker',
         'Waste': 'waste',
         'Refining': 'refined_product',
         'Other': 'industrial_product'
@@ -420,21 +432,38 @@ def copy_technology_data_custom(input_data_path, path_files_technologies, networ
     print("Technology data copying completed.")
 
 
-def update_emitter_ccs_references(input_data_path, network_emission_flux):
+def update_emitter_ccs_references(input_data_path, network_emission_flux, technology_selection=None):
     """
     Updates the CCS references in emitter technology files to match the determined MEA technology size.
     This function ensures that each emitter's CCS section points to the correct MEA technology
     as determined by the assign_mea_technology function.
 
+    Only technologies whose copied JSON already defines a Performance.ccs block are touched --
+    e.g. CementHybridCCS has no "ccs" key (its capture is built into the technology model itself,
+    not the generic bolt-on MEA retrofit), so it is left untouched rather than having a fake ccs
+    block force-created on it.
+
     Parameters:
         - input_data_path: Path to the input data directory
         - network_emission_flux: DataFrame containing emission data and MEA technology assignments
+        - technology_selection: dict mapping node_type ("Waste", "Cement", "Refining", "Other") to
+          the list of technology names assigned to that sector (see assign_ccs_technologies_debug)
     """
+    if technology_selection is None:
+        technology_selection = DEFAULT_TECHNOLOGY_SELECTION
+
     # Read topology to get nodes and periods
     with open(input_data_path / "Topology.json", "r") as f:
         topology = json.load(f)
 
     print("Updating CCS references in emitter technologies...")
+
+    co2_concentration_by_type = {
+        "Waste": 0.07,
+        "Cement": 0.20,
+        "Refining": 0.25,
+        "Other": 0.15,
+    }
 
     for period in topology["investment_periods"]:
         for node in topology["nodes"]:
@@ -444,59 +473,45 @@ def update_emitter_ccs_references(input_data_path, network_emission_flux):
             # Check each emitter type at this node
             for _, emission_row in node_emission_rows.iterrows():
                 node_type = emission_row['node_type']
-                if node_type in ['Waste', 'Cement', 'Refining', 'Other']:
-                    mea_tech = emission_row.get('mea_technology')
-                    if pd.notna(mea_tech):
-                        mea_tech_name = Path(mea_tech).stem  # e.g., 'MEA_medium' or 'MEA_large'
+                if node_type not in technology_selection:
+                    continue
 
-                        # Determine the emitter technology file to update
-                        emitter_tech_name = None
-                        if node_type == "Waste":
-                            emitter_tech_name = "WasteToEnergyEmitter"
-                        elif node_type == "Cement":
-                            emitter_tech_name = "CementEmitter"
-                        elif node_type == "Refining":
-                            emitter_tech_name = "RefineryEmitter"
-                        elif node_type == "Other":
-                            emitter_tech_name = "UnspecifiedEmitter"
+                mea_tech = emission_row.get('mea_technology')
+                if not pd.notna(mea_tech):
+                    continue
 
-                        if emitter_tech_name:
-                            tech_file_path = input_data_path / period / "node_data" / node / "technology_data" / f"{emitter_tech_name}.json"
+                mea_tech_name = Path(mea_tech).stem  # e.g., 'MEA_medium' or 'MEA_large'
 
-                            if tech_file_path.exists():
-                                # Read the technology file
-                                with open(tech_file_path, 'r') as f:
-                                    tech_data = json.load(f)
+                for emitter_tech_name in technology_selection[node_type]:
+                    tech_file_path = input_data_path / period / "node_data" / node / "technology_data" / f"{emitter_tech_name}.json"
 
-                                # Ensure CCS section exists and update it
-                                if "Performance" not in tech_data:
-                                    tech_data["Performance"] = {}
+                    if not tech_file_path.exists():
+                        print(f"  ❌ Technology file not found: {tech_file_path}")
+                        continue
 
-                                if "ccs" not in tech_data["Performance"]:
-                                    tech_data["Performance"]["ccs"] = {}
+                    # Read the technology file
+                    with open(tech_file_path, 'r') as f:
+                        tech_data = json.load(f)
 
-                                # Update the CCS section with the determined MEA technology
-                                tech_data["Performance"]["ccs"]["possible"] = 1
-                                tech_data["Performance"]["ccs"]["ccs_type"] = mea_tech_name
+                    # Technologies without a pre-existing "ccs" block (e.g. CementHybridCCS)
+                    # manage their own capture internally -- don't force one onto them.
+                    if "Performance" not in tech_data or "ccs" not in tech_data["Performance"]:
+                        print(f"  ⏭️  Skipped {emitter_tech_name} at {node} (no generic CCS retrofit block)")
+                        continue
 
-                                # Set CO2 concentration based on emitter type (if not already set)
-                                if "co2_concentration" not in tech_data["Performance"]["ccs"]:
-                                    if node_type == "Waste":
-                                        tech_data["Performance"]["ccs"]["co2_concentration"] = 0.07
-                                    elif node_type == "Cement":
-                                        tech_data["Performance"]["ccs"]["co2_concentration"] = 0.20
-                                    elif node_type == "Refining":
-                                        tech_data["Performance"]["ccs"]["co2_concentration"] = 0.25
-                                    elif node_type == "Other":
-                                        tech_data["Performance"]["ccs"]["co2_concentration"] = 0.15
+                    # Update the CCS section with the determined MEA technology
+                    tech_data["Performance"]["ccs"]["possible"] = 1
+                    tech_data["Performance"]["ccs"]["ccs_type"] = mea_tech_name
 
-                                # Write back the updated file
-                                with open(tech_file_path, 'w') as f:
-                                    json.dump(tech_data, f, indent=2)
+                    # Set CO2 concentration based on emitter type (if not already set)
+                    if "co2_concentration" not in tech_data["Performance"]["ccs"]:
+                        tech_data["Performance"]["ccs"]["co2_concentration"] = co2_concentration_by_type[node_type]
 
-                                print(f"  ✅ Updated {emitter_tech_name} at {node} to use CCS: {mea_tech_name}")
-                            else:
-                                print(f"  ❌ Technology file not found: {tech_file_path}")
+                    # Write back the updated file
+                    with open(tech_file_path, 'w') as f:
+                        json.dump(tech_data, f, indent=2)
+
+                    print(f"  ✅ Updated {emitter_tech_name} at {node} to use CCS: {mea_tech_name}")
 
     print("CCS reference updates completed.")
 
@@ -1161,7 +1176,7 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
     # --- Load emission factors from technology JSON files ---
     node_type_mapping = {
         'Waste':    ('Emitter/WasteToEnergyEmitter.json', 'waste'),
-        'Cement':   ('Emitter/CementEmitter.json',        'cement'),
+        'Cement':   ('Emitter/CementEmitter.json',        'clinker'),
         'Refining': ('Emitter/RefineryEmitter.json',      'refined_product'),
         'Other':    ('Emitter/UnspecifiedEmitter.json',   'industrial_product'),
     }
@@ -1251,10 +1266,24 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
 # Add these debug enhancements to your utility functions:
 
 # ===== Enhanced assign_ccs_technologies function with debugging =====
-def assign_ccs_technologies_debug(network_location, network_emission_flux, path_data_case_study, input_data_path):
+def assign_ccs_technologies_debug(network_location, network_emission_flux, path_data_case_study, input_data_path,
+                                   technology_selection=None, tech_as_existing=True):
     """
     Enhanced version with comprehensive debugging
+
+    :param dict technology_selection: maps node_type ("Waste", "Cement", "Refining",
+        "Other") to a list of technology names (matching filenames under
+        italy_data/technologies/Emitter/, without ".json") to make available at that
+        sector's nodes.
+    :param bool tech_as_existing: if True, each sector's (single) selected technology
+        is assigned as "existing" with size fixed at the node's current emitter
+        capacity (the original/sunk-asset behavior). If False, all selected
+        technologies are assigned as "new" (buildable, freely sized between their own
+        JSON size_min/size_max) and compete to meet the sector's carrier demand.
     """
+    if technology_selection is None:
+        technology_selection = DEFAULT_TECHNOLOGY_SELECTION
+
     print("\n🔍 DEBUG: Starting assign_ccs_technologies with enhanced debugging...")
 
     # Debug input data
@@ -1306,14 +1335,14 @@ def assign_ccs_technologies_debug(network_location, network_emission_flux, path_
                     capacity = 0.0
                     print(f"      Warning: No capacity data found")
 
-                if node_type == "Waste":
-                    existing_techs_dict["WasteToEnergyEmitter"] = capacity
-                elif node_type == "Cement":
-                    existing_techs_dict["CementEmitter"] = capacity
-                elif node_type == "Refining":
-                    existing_techs_dict["RefineryEmitter"] = capacity
-                elif node_type == "Other":
-                    existing_techs_dict["UnspecifiedEmitter"] = capacity
+                selected_techs = technology_selection.get(node_type, [])
+                print(f"      Selected technologies for {node_type}: {selected_techs} "
+                      f"(as {'existing' if tech_as_existing else 'new'})")
+                if tech_as_existing:
+                    for tech_name in selected_techs:
+                        existing_techs_dict[tech_name] = capacity
+                else:
+                    new_techs_list.extend(selected_techs)
 
         # Data type validation and conversion
         print(f"  Before cleaning - existing: {existing_techs_dict}")
