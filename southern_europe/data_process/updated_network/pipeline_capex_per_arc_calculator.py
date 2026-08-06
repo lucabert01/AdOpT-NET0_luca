@@ -44,7 +44,7 @@ def main():
     print("This script calculates gamma1 and gamma2 values for every possible arc")
     print("in the network and saves them as matrices in an Excel file.")
     print("Gamma3 and gamma4 matrices will be created with zeros.")
-    print("\n🌊 SPECIAL CONFIGURATION: Arc 42-43 will be processed as OFFSHORE terrain")
+    print("\n🌊 SPECIAL CONFIGURATION: Arc Eni S.p.A Casalborsetti -> Porto Corsini will be processed as OFFSHORE terrain")
     print("🏞️  All other arcs will be processed as ONSHORE terrain")
     print("\n🔇 VERBOSE OUTPUT: Cost model calculations are suppressed for cleaner output")
     print("📊 UPDATED BEHAVIOR: Failed calculations will be set to 0 instead of NaN")
@@ -82,7 +82,7 @@ def main():
             print(f"   Sample arcs: {possible_arcs[:5]}")  # Show first 5 arcs
 
         # Check for offshore arc
-        offshore_arcs = [(f, t) for f, t in possible_arcs if determine_arc_terrain(f, t) == "Offshore"]
+        offshore_arcs = [(f, t) for f, t in possible_arcs if determine_arc_terrain(f, t, data_dict) == "Offshore"]
         if offshore_arcs:
             print(f"   🌊 Offshore arcs detected: {offshore_arcs}")
         else:
@@ -176,8 +176,8 @@ def main():
         print(f"   Zero values: {len(possible_arcs) - gamma1_nonzero} arcs")
 
         # Show terrain breakdown
-        onshore_arcs = [(f, t) for f, t in possible_arcs if determine_arc_terrain(f, t) == "Onshore"]
-        offshore_arcs = [(f, t) for f, t in possible_arcs if determine_arc_terrain(f, t) == "Offshore"]
+        onshore_arcs = [(f, t) for f, t in possible_arcs if determine_arc_terrain(f, t, data_dict) == "Onshore"]
+        offshore_arcs = [(f, t) for f, t in possible_arcs if determine_arc_terrain(f, t, data_dict) == "Offshore"]
 
         print(f"\n🌍 Terrain breakdown:")
         print(f"   🏞️  Onshore arcs: {len(onshore_arcs)}")

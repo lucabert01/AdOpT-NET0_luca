@@ -550,6 +550,20 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore"):
         tuple: (gamma1, gamma2) values, returns (0, 0) if calculation fails
     """
 
+    # The offshore tie-in arc from "Eni S.p.A Casalborsetti" to the storage site
+    # "Porto Corsini" is forced to near-zero cost instead of going through the cost
+    # model. gamma1=0 keeps the arc in the simple linear capex formulation (no
+    # disjunctive big-M), and gamma2 is set to one tenth of the smallest gamma2 among
+    # all other pipeline arcs (132,736.25 EUR/(t/h) -> 13,273.625 EUR/(t/h)) so sizing
+    # this arc still carries a small cost rather than being unbounded.
+    node_names = data_dict['network_nodes']['node_name']
+    from_node_name = node_names.get(from_node)
+    to_node_name = node_names.get(to_node)
+    if from_node_name == "Eni S.p.A Casalborsetti" and to_node_name == "Porto Corsini":
+        print(f"      💸 Arc {from_node_name} → {to_node_name}: forced near-zero cost override "
+              f"(gamma1=0, gamma2=13273.625)")
+        return 0, 13273.625
+
     pipeline_name = f"{from_node}_{to_node}"
 
     # Get pipeline length using shared function
@@ -694,7 +708,7 @@ def create_gamma_matrices(data_dict, terrain_function=None):
     for from_node, to_node in possible_arcs:
         # Determine terrain for this arc
         if terrain_function is not None:
-            terrain = terrain_function(from_node, to_node)
+            terrain = terrain_function(from_node, to_node, data_dict)
         else:
             terrain = "Onshore"  # Default terrain
 
@@ -931,33 +945,29 @@ def print_section_header(title, width=80):
     print(f"{'=' * width}")
 
 
-def determine_arc_terrain(from_node, to_node):
+def determine_arc_terrain(from_node, to_node, data_dict):
     """
     Determine the terrain type for specific arcs in this case study.
 
     This function contains case-specific logic for the Italy study:
-    - Arc 42-43 (from [42] onshore terminal Eni S.p.A Casalborsetti to [43] offshore storage site Porto Corsini) is offshore
+    - The arc from the onshore terminal "Eni S.p.A Casalborsetti" to the offshore
+      storage site "Porto Corsini" is offshore
     - All other arcs are onshore
 
-    Argc:
+    Args:
         from_node: Source node ID
         to_node: Target node ID
+        data_dict: Dictionary containing all network data (used to resolve node
+            names via data_dict['network_nodes']['node_name'])
 
     Returns:
-        str: "Offshore" for arc 42-43, "Onshore" for all others
+        str: "Offshore" for the Casalborsetti -> Porto Corsini arc, "Onshore" for all others
     """
-    try:
-        # Convert to int if needed for comparison
-        from_node_int = int(from_node)
-        to_node_int = int(to_node)
+    node_names = data_dict['network_nodes']['node_name']
+    from_node_name = node_names.get(from_node)
+    to_node_name = node_names.get(to_node)
 
-        # Check if this is an offshore arc
-        if (from_node_int == 42 and to_node_int == 43):
-            return "Offshore"
-        else:
-            return "Onshore"
-
-    except (ValueError, TypeError):
-        # If conversion fails, default to onshore
-        print(f"⚠️  Warning: Could not parse node IDs {from_node}, {to_node}. Defaulting to Onshore.")
+    if from_node_name == "Eni S.p.A Casalborsetti" and to_node_name == "Porto Corsini":
+        return "Offshore"
+    else:
         return "Onshore"
