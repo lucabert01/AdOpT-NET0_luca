@@ -3,6 +3,7 @@ import numpy as np
 import json
 import os
 import shutil
+import sys
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
@@ -12,6 +13,31 @@ import os
 import shutil
 from pathlib import Path
 from datetime import datetime
+
+# CostsFun_Share is a sibling project (not an installed package) holding the
+# Oeuvray et al. (2024) -based container-truck/train cost model used by
+# update_capex_gamma2_per_arc() and compute_opex_var_arcs() below.
+def _find_costsfun_share_path() -> Path:
+    """Walk up from this file until a sibling 'CostsFun_Share' directory is found."""
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "CostsFun_Share"
+        if candidate.is_dir():
+            return candidate
+    raise ImportError(
+        "Could not find the 'CostsFun_Share' directory (expected as a sibling of the "
+        "repo root, alongside 'adopt_net0/' and 'southern_europe/'). It provides "
+        "truck_costs_per_capacity()/train_costs_per_capacity(), used by "
+        "compute_opex_var_arcs() and update_capex_gamma2_per_arc()."
+    )
+
+
+_COSTSFUN_SHARE_PATH = _find_costsfun_share_path()
+if str(_COSTSFUN_SHARE_PATH) not in sys.path:
+    sys.path.insert(0, str(_COSTSFUN_SHARE_PATH))
+from co2_container_transport_costs import (
+    truck_costs_per_capacity,
+    train_costs_per_capacity,
+)
 
 # Default emitter-technology-per-sector selection, matching the original hardcoded
 # behavior (one fixed technology per sector, assigned as "existing"). Used as the
@@ -795,14 +821,29 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
 
 
 
-def compute_opex_var_arcs(path_node_metrics: Path, path_output_root: Path) -> None:
+def compute_opex_var_arcs(
+    path_node_metrics: Path, path_output_root: Path, discount_rate: float = 0.08
+) -> None:
     """
     Reads truck and railway distance matrices from node_metrics.xlsx and writes
     opex_var_arcs.csv to the respective CO2Truck and CO2Railway output folders.
 
-    Formulas are taken from Ouvray 2024:
-        Truck:   opex_var = (5.58  / distance + 0.15) * distance
-        Railway: opex_var = (28.9  / distance + 0.07) * distance
+    Truck: uses the mechanistic, usage-based variable-opex rate (fuel,
+    maintenance, driver time, per-km HGVT) from
+    CostsFun_Share/co2_container_transport_costs.py::truck_costs_per_capacity(),
+    itself calibrated against the Oeuvray et al. (2024) published fit
+    (Table C.1). This replaced the previous flat-fit formula
+    (5.58/d + 0.15)*d, which conflated capacity cost (capex) and usage cost
+    (opex_var) into a single number; the two are now split, with the
+    capacity part going into gamma2/gamma4 (see
+    update_capex_gammas_truck_railway()).
+
+    Railway: written as all zeros. For container-based train, the
+    equivalent usage-based costs (transshipment, weighing, rail linehaul)
+    are folded into gamma2/gamma4 instead of kept as a separate per-tonne
+    rate (rail capacity is normally bought as a single bundled per-isotainer
+    service rather than operated/fuelled directly) - see
+    update_capex_gammas_truck_railway().
 
     Zero-distance entries (no arc / same node) are left as 0.
 
@@ -812,13 +853,18 @@ def compute_opex_var_arcs(path_node_metrics: Path, path_output_root: Path) -> No
         Full path to node_metrics.xlsx.
     path_output_root : Path
         Root folder that contains CO2Truck/ and CO2Railway/ sub-folders.
+    discount_rate : float
+        Discount rate passed to truck_costs_per_capacity() (does not affect
+        variable opex, kept for consistency with update_capex_gammas_truck_railway()).
     """
 
     def _opex_truck(d: float) -> float:
-        return (5.58 / d + 0.15) * d if d > 0 else 0.0
+        if d <= 0:
+            return 0.0
+        return truck_costs_per_capacity(d, discount_rate)["variable_opex_eur_per_t"]
 
     def _opex_railway(d: float) -> float:
-        return (28.9 / d + 0.07) * d if d > 0 else 0.0
+        return 0.0
 
     # Build a mapping from node_id -> node_name
     nodes_df = pd.read_excel(path_node_metrics, sheet_name="nodes")
@@ -831,8 +877,8 @@ def compute_opex_var_arcs(path_node_metrics: Path, path_output_root: Path) -> No
     truck_dist = truck_dist.rename(index=id_to_name, columns=id_to_name)
     rail_dist = rail_dist.rename(index=id_to_name, columns=id_to_name)
 
-    truck_opex = truck_dist.applymap(_opex_truck)
-    rail_opex = rail_dist.applymap(_opex_railway)
+    truck_opex = truck_dist.map(_opex_truck)
+    rail_opex = rail_dist.map(_opex_railway)
 
     path_truck_out = path_output_root / "CO2Truck" / "opex_var_arcs.csv"
     path_railway_out = path_output_root / "CO2Railway" / "opex_var_arcs.csv"
@@ -845,6 +891,95 @@ def compute_opex_var_arcs(path_node_metrics: Path, path_output_root: Path) -> No
 
     print(f"Saved truck   opex_var_arcs -> {path_truck_out}")
     print(f"Saved railway opex_var_arcs -> {path_railway_out}")
+
+
+def update_capex_gamma2_per_arc(
+    path_node_metrics: Path,
+    path_output_root: Path,
+    path_network_data: Path,
+    discount_rate: float = 0.08,
+) -> None:
+    """
+    Writes per-arc gamma1.csv/gamma2.csv/gamma3.csv/gamma4.csv for CO2Truck
+    and CO2Railway, using the capacity-based capex + fixed-opex from
+    CostsFun_Share/co2_container_transport_costs.py, and sets
+    capex_defined_per_arc=1 in CO2Truck.json/CO2Railway.json so the solver
+    reads these files instead of the (distance-independent) global gamma
+    scalars in the JSON.
+
+    Background: the network cost model (adopt_net0/components/networks/network.py)
+    computes each arc's capex as
+        gamma1 + gamma2*size + gamma3*distance + gamma4*size*distance
+    where size is in t/h. Since gamma2, gamma3, gamma4 must vary per arc
+    with that arc's own distance (a longer trip needs proportionally more
+    trucks/isotainers per unit of guaranteed t/h capacity - it's not just a
+    fixed per-unit-capacity cost), the whole (capex + fixed_opex) at that
+    arc's distance is put directly into gamma2 (evaluated AT that distance),
+    with gamma1=gamma3=gamma4=0 (this cost model has no size-independent or
+    pure-per-km term, so there's nothing to put there).
+
+    Units: for this case study, CO2Truck.json/CO2Railway.json use
+    discount_rate=0, lifetime=1 with fraction_of_year_modelled=1 (main_italy.py
+    runs start_period=0, end_period=8759, i.e. a full year), so
+    annualize(0, 1, 1) == 1: gamma2 is used with NO extra annualization by
+    the solver, matching the fact that truck_costs_per_capacity()/
+    train_costs_per_capacity() already return annualized EUR/(t/h)/y values
+    directly.
+
+    Parameters
+    ----------
+    path_node_metrics : Path
+        Full path to node_metrics.xlsx (same source as compute_opex_var_arcs).
+    path_output_root : Path
+        Root folder that contains CO2Truck/ and CO2Railway/ sub-folders,
+        typically input_data_path / "period1" / "network_topology" / "new".
+    path_network_data : Path
+        Folder containing the (already copied, e.g. via adopt.copy_network_data)
+        CO2Truck.json and CO2Railway.json for this run, typically
+        input_data_path / "period1" / "network_data".
+    discount_rate : float
+        Discount rate passed to truck_costs_per_capacity()/train_costs_per_capacity().
+    """
+
+    def _capex_plus_fixed_opex(d: float, cost_fn) -> float:
+        if d <= 0:
+            return 0.0
+        r = cost_fn(d, discount_rate)
+        return r["capex_eur_per_tph_y"] + r["fixed_opex_eur_per_tph_y"]
+
+    # Build a mapping from node_id -> node_name (same as compute_opex_var_arcs)
+    nodes_df = pd.read_excel(path_node_metrics, sheet_name="nodes")
+    id_to_name = nodes_df.set_index('node_id')['node_name'].to_dict()
+
+    truck_dist = pd.read_excel(path_node_metrics, sheet_name="truck", index_col=0)
+    rail_dist = pd.read_excel(path_node_metrics, sheet_name="railway", index_col=0)
+    truck_dist = truck_dist.rename(index=id_to_name, columns=id_to_name)
+    rail_dist = rail_dist.rename(index=id_to_name, columns=id_to_name)
+
+    truck_gamma2 = truck_dist.map(lambda d: _capex_plus_fixed_opex(d, truck_costs_per_capacity))
+    rail_gamma2 = rail_dist.map(lambda d: _capex_plus_fixed_opex(d, train_costs_per_capacity))
+
+    for subfolder, dist_df, gamma2_df in [
+        ("CO2Truck", truck_dist, truck_gamma2),
+        ("CO2Railway", rail_dist, rail_gamma2),
+    ]:
+        out_dir = path_output_root / subfolder
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        zeros_df = pd.DataFrame(0.0, index=dist_df.index, columns=dist_df.columns)
+        zeros_df.to_csv(out_dir / "gamma1.csv", sep=';')
+        gamma2_df.to_csv(out_dir / "gamma2.csv", sep=';')
+        zeros_df.to_csv(out_dir / "gamma3.csv", sep=';')
+        zeros_df.to_csv(out_dir / "gamma4.csv", sep=';')
+        print(f"Saved per-arc gamma1-4 for {subfolder} -> {out_dir}")
+
+        json_path = path_network_data / f"{subfolder}.json"
+        with open(json_path, "r") as f:
+            data = json.load(f)
+        data["capex_defined_per_arc"] = 1
+        with open(json_path, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"Set capex_defined_per_arc=1 -> {json_path}")
 
 def process_gamma_sheets_to_csv(path_files_network_capex, input_data_path, network_location_df,
                                 transport_mode="pipeline"):

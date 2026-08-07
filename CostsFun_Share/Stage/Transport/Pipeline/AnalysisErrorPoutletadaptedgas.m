@@ -1,0 +1,52 @@
+terrain = 2;
+phase = 1;
+
+error_Poutlet_adapted_gas_perc_min = min(Terrain(terrain).Phase(1).Data.error_Poutlet_adapted_gas_perc);
+error_Poutlet_adapted_gas_perc_max = max(Terrain(terrain).Phase(1).Data.error_Poutlet_adapted_gas_perc);
+error_Poutlet_adapted_gas_perc_avg = mean(Terrain(terrain).Phase(1).Data.error_Poutlet_adapted_gas_perc);
+error_Ecomp_perc_min = min(Terrain(terrain).Phase(1).Data.error_Ecomp_perc);
+error_Ecomp_perc_max = max(Terrain(terrain).Phase(1).Data.error_Ecomp_perc);
+error_Ecomp_perc_avg = mean(Terrain(terrain).Phase(1).Data.error_Ecomp_perc);
+error_Wcomp_perc_min = min(Terrain(terrain).Phase(1).Data.error_Wcomp_perc);
+error_Wcomp_perc_max = max(Terrain(terrain).Phase(1).Data.error_Wcomp_perc);
+error_Wcomp_perc_avg = mean(Terrain(terrain).Phase(1).Data.error_Wcomp_perc);
+error_Icomp_perc_min = min(Terrain(terrain).Phase(1).Data.error_Icomp_perc);
+error_Icomp_perc_max = max(Terrain(terrain).Phase(1).Data.error_Icomp_perc);
+error_Icomp_perc_avg = mean(Terrain(terrain).Phase(1).Data.error_Icomp_perc);
+error_OCcomp_perc_min = min(Terrain(terrain).Phase(1).Data.error_OCcomp_perc);
+error_OCcomp_perc_max = max(Terrain(terrain).Phase(1).Data.error_OCcomp_perc);
+error_OCcomp_perc_avg = mean(Terrain(terrain).Phase(1).Data.error_OCcomp_perc);
+error_ECcomp_perc_min = min(Terrain(terrain).Phase(1).Data.error_ECcomp_perc);
+error_ECcomp_perc_max = max(Terrain(terrain).Phase(1).Data.error_ECcomp_perc);
+error_ECcomp_perc_avg = mean(Terrain(terrain).Phase(1).Data.error_ECcomp_perc);
+error_LC_perc_min = min(Terrain(terrain).Phase(1).Data.error_LC_perc);
+error_LC_perc_max = max(Terrain(terrain).Phase(1).Data.error_LC_perc);
+error_LC_perc_avg = mean(Terrain(terrain).Phase(1).Data.error_LC_perc);
+error_LCtrans_perc_min = min(Terrain(terrain).Phase(1).Data.error_LCtrans_perc);
+error_LCtrans_perc_max = max(Terrain(terrain).Phase(1).Data.error_LCtrans_perc);
+error_LCtrans_perc_avg = mean(Terrain(terrain).Phase(1).Data.error_LCtrans_perc);
+error_LCcomp_perc_min = min(Terrain(terrain).Phase(1).Data.error_LCcomp_perc);
+error_LCcomp_perc_max = max(Terrain(terrain).Phase(1).Data.error_LCcomp_perc);
+error_LCcomp_perc_avg = mean(Terrain(terrain).Phase(1).Data.error_LCcomp_perc);
+
+A = [error_Poutlet_adapted_gas_perc_avg, error_Poutlet_adapted_gas_perc_min, error_Poutlet_adapted_gas_perc_max;
+    error_Ecomp_perc_avg, error_Ecomp_perc_min, error_Ecomp_perc_max;
+    error_Wcomp_perc_avg, error_Wcomp_perc_min, error_Wcomp_perc_max;
+    error_Icomp_perc_avg, error_Icomp_perc_min, error_Icomp_perc_max;
+    error_OCcomp_perc_avg, error_OCcomp_perc_min, error_OCcomp_perc_max;
+    error_ECcomp_perc_avg, error_ECcomp_perc_min, error_ECcomp_perc_max;
+    error_LC_perc_avg, error_LC_perc_min, error_LC_perc_max;
+    error_LCtrans_perc_avg, error_LCtrans_perc_min, error_LCtrans_perc_max;
+    error_LCcomp_perc_avg, error_LCcomp_perc_min, error_LCcomp_perc_max];
+
+T = table(A(:,1),A(:,2),A(:,3),'VariableNames',{'Average','Min','Max'},...
+    'RowNames',{'Poutlet_adapted_gas','Ecomp','Wcomp','Icomp','OCcomp', ...
+    'ECcomp','LC','LCtrans','LCcomp'});
+
+% for i = 1:height(Terrain(1).Phase(1).Data)
+% 
+%                           DataGas.error_ECcomp_perc(i) = (DataGas.ECcomp_EUR_per_y_wrong(i) - DataGas.ECcomp_EUR_per_y(i)).*100./ DataGas.ECcomp_EUR_per_y(i);
+%                         DataGas.error_LC_perc(i) = (DataGas.LC_EUR_per_t_wrong(i) - DataGas.LC_EUR_per_t(i)).*100./ DataGas.LC_EUR_per_t(i);
+%                         DataGas.error_LCtrans_perc(i) = (DataGas.LCtrans_EUR_per_t_wrong(i) - DataGas.LCtrans(i)).*100./ DataGas.LCtrans(i);
+%                         DataGas.error_LCcomp_perc(i) = (DataGas.LCcomp_EUR_per_t_wrong(i) - DataGas.LCcomp_EUR_per_t(i)).*100./ DataGas.LCcomp_EUR_per_t(i);
+%                
