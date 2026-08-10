@@ -24,7 +24,7 @@
     ],
     "output_ratios": {
     },
-    "emission_factor": 1,
+    "emission_factor": 0.89,
     "min_part_load": 0,
     "ccs": {
       "possible": 1,

@@ -18,6 +18,8 @@ from data_process.utilities.defined_functions import (
     process_gamma_sheets_to_csv,
     copy_technology_data_custom,
     update_emitter_ccs_references,
+    load_sector_reference_values,
+    update_cement_hybrid_ccs_capacities,
     convert_network_data_indices_to_names,
     apply_carbon_pricing_to_all_nodes,
     compute_opex_var_arcs,
@@ -49,13 +51,9 @@ tech_for_waste = ["WasteToEnergyEmitter"]  # placeholder for future alternative 
 tech_for_refining = ["RefineryEmitter"]
 tech_for_other = ["UnspecifiedEmitter"]
 
-# If True, each sector's technology is modeled as "existing": sunk, non-decommissionable,
-# fixed at the node's current output capacity (the original behavior) -- this requires
-# exactly one technology selected per sector, since two technologies can't both be "the"
-# existing plant at a node. If False, ALL technologies selected for a sector are modeled
-# as "new": buildable, freely sized within their own JSON's size_min/size_max, competing
-# with each other (and, if tech_as_existing was previously used to build up existing
-# capacity, with that) to meet the sector's carrier demand.
+# If True, each sector's technology is modeled as "existing"(this requires
+# exactly one technology selected per sector). If False, ALL technologies selected for a sector are modeled
+# as "new"
 tech_as_existing = True
 
 technology_selection = {
@@ -74,6 +72,13 @@ if tech_as_existing:
                 f"'{sector}' has {len(techs)}: {techs}. Either trim it to one "
                 f"technology or set tech_as_existing=False."
             )
+# Used just for the conversion from emissions to actual product demand
+REFERENCE_EMITTER_TECHNOLOGIES = {
+    "Cement": ["CementEmitter"],
+    "Waste": ["WasteToEnergyEmitter"],
+    "Refining": ["RefineryEmitter"],
+    "Other": ["UnspecifiedEmitter"],
+}
 #----- Create folder for results -----#
 result_path = "./Results_CCSchainOptimization"
 # Create input data path and optimisation templates
@@ -89,6 +94,22 @@ path_files_networks = path_data_case_study / "networks"
 path_files_node_flux = path_data_case_study / "geographical_feature"
 path_files_electricity = path_data_case_study / "electricity_metrics"
 path_files_network_capex = path_data_case_study / "network_capex_metrics"
+
+#----- Reference emission factors per sector (t CO2 emitted / t product output) -----#
+# emission_profile_emitters.xlsx holds hourly CO2 EMISSION rates (t CO2/h) for every
+# emitter. These factors convert that into each sector's real PRODUCT output rate
+
+print("\nLoading sector emission factors from emitter technology JSONs...")
+sector_emission_factor = load_sector_reference_values(
+    path_files_technologies, REFERENCE_EMITTER_TECHNOLOGIES, ("Performance", "emission_factor")
+)
+
+#----- Flue-gas CO2 concentration per sector -----#
+# Used to size the generic MEA CCS size range (assign_mea_technology)
+print("Loading sector CO2 concentrations from emitter technology JSONs...")
+co2_concentration_by_type = load_sector_reference_values(
+    path_files_technologies, REFERENCE_EMITTER_TECHNOLOGIES, ("Performance", "ccs", "co2_concentration")
+)
 
 network_location = pd.read_excel(path_files_node_flux/node_metrics_file, index_col=0, sheet_name='nodes') # nodes
 network_emission_flux = pd.read_excel(path_files_node_flux/node_metrics_file, index_col=0, sheet_name='nodes') # annual emission fluxes
@@ -118,7 +139,7 @@ network_emission_flux = calculate_annual_emission_values(network_emission_flux, 
 # Calculate initial capacities for emitter technologies based on annual emissions and emission factors
 # Using tonnes/hour units (appropriate for emitters that produce physical products)
 print("Calculating emitter capacities based on annual emissions and emission factors...")
-network_emission_flux = calculate_emitter_capacities(network_emission_flux)
+network_emission_flux = calculate_emitter_capacities(network_emission_flux, sector_emission_factor)
 
 #----- Update topology json with carriers assignment -----#
 adopt.create_input_data_folder_template(input_data_path)
@@ -156,7 +177,7 @@ node_location.to_csv(input_data_path / "NodeLocations.csv", sep=';', index=False
 
 #----- Add technologies for nodes -----#
 # Assign MEA technology to network_emission_flux (now using calculated annual_emission values)
-network_emission_flux = assign_mea_technology(network_emission_flux, path_data_case_study)
+network_emission_flux = assign_mea_technology(network_emission_flux, path_data_case_study, co2_concentration_by_type)
 
 # Then assign CCS technologies, passing both DataFrames
 # Note: This now uses the calculated capacities from calculate_emitter_capacities()
@@ -196,11 +217,19 @@ for node in debug_nodes:
     else:
         print(f"  ❌ {node}: Technologies.json not found")
 
-# Copy over technology files using our custom function
+# Copy over technology files using our custom function -- each copied JSON already
+# carries its own real Performance.emission_factor / ccs.co2_concentration, since
+# those are read (not overwritten) from the source templates; see
+# sector_emission_factor / co2_concentration_by_type above.
 copy_technology_data_custom(input_data_path, path_files_technologies, network_emission_flux)
 
 # Update CCS references in emitter technologies to match determined MEA sizes
-update_emitter_ccs_references(input_data_path, network_emission_flux, technology_selection)
+update_emitter_ccs_references(input_data_path, network_emission_flux, technology_selection, co2_concentration_by_type)
+
+# Write each cement node's own fixed clinker capacity into its copied CementHybridCCS.json
+# (only has an effect at nodes where CementHybridCCS was actually selected, i.e. it's a
+# no-op unless "CementHybridCCS" is in tech_for_cement)
+update_cement_hybrid_ccs_capacities(input_data_path, network_emission_flux)
 
 #----- Add networks -----#
 new_network_types = ["CO2_Pipeline", "CO2Truck", "CO2Railway"]
@@ -338,7 +367,8 @@ update_carrier_data(
     levelized_capex_hp,
     path_files_node_flux,
     electricity_import_limit,
-    heat_import_limit
+    heat_import_limit,
+    sector_emission_factor=sector_emission_factor,
 )
 
 # ----- Apply Carbon Pricing -----#

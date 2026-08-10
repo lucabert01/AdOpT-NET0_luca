@@ -50,6 +50,29 @@ DEFAULT_TECHNOLOGY_SELECTION = {
     "Other": ["UnspecifiedEmitter"],
 }
 
+# Default reference emission factor per sector (t CO2 emitted / t product output),
+# used as the fallback for callers that don't pass their own sector_emission_factor.
+# 1.0 everywhere reproduces the original "emissions == output" shortcut (every
+# generic emitter's Performance.emission_factor set to 1) -- main_italy.py passes
+# real, sector-specific values instead.
+DEFAULT_SECTOR_EMISSION_FACTOR = {
+    "Waste": 1.0,
+    "Cement": 1.0,
+    "Refining": 1.0,
+    "Other": 1.0,
+}
+
+# Default flue-gas CO2 concentration per sector, used to size the generic bolt-on
+# MEA CCS retrofit (assign_mea_technology) and to fill Performance.ccs.co2_concentration
+# (update_emitter_ccs_references) when not already set. Fallback for callers that don't
+# pass their own co2_concentration_by_type.
+DEFAULT_CO2_CONCENTRATION_BY_TYPE = {
+    "Waste": 0.07,
+    "Cement": 0.20,
+    "Refining": 0.15,
+    "Other": 0.15,
+}
+
 
 def load_emission_profiles(path_files_node_flux):
     """
@@ -126,17 +149,33 @@ def calculate_annual_emission_values(network_emission_flux, path_files_node_flux
     return network_emission_flux
 
     return network_emission_flux
-def calculate_emitter_capacities(network_emission_flux):
+def calculate_emitter_capacities(network_emission_flux, sector_emission_factor=None):
     """
     Set 'emitter_capacity' from the 'capacity' column already computed from the
     hourly profile (max value, from calculate_annual_emission_values).
 
+    IMPORTANT -- units: emission_profile_emitters.xlsx (and therefore the 'capacity'
+    column) is always in t CO2/h, regardless of sector -- it's an emissions profile,
+    not a production profile. 'emitter_capacity' divides that by the sector's
+    reference emission factor (t CO2 / t product) to get an actual PRODUCT output
+    capacity (t clinker/h, t waste/h, ...), since that's what the generic Emitter
+    technologies' size represents (size_based_on="output", main_output_carrier =
+    the sector's product carrier). 'capacity' itself is left unscaled (still t CO2/h)
+    for anything that needs the raw CO2 rate instead -- e.g. assign_mea_technology,
+    which sizes CCS equipment against actual CO2 mass flow, not product output.
+
     Parameters:
         - network_emission_flux: DataFrame with 'annual_emission' and 'capacity' columns
+        - sector_emission_factor: dict mapping node_type -> t CO2 / t product. Defaults
+          to DEFAULT_SECTOR_EMISSION_FACTOR (all 1.0, i.e. no rescaling -- the original
+          "emissions == output" shortcut).
 
     Returns:
         - network_emission_flux: Updated DataFrame with 'emitter_capacity' column
     """
+    if sector_emission_factor is None:
+        sector_emission_factor = DEFAULT_SECTOR_EMISSION_FACTOR
+
     if 'annual_emission' not in network_emission_flux.columns:
         raise ValueError("'annual_emission' column not found. Please run calculate_annual_emission_values() first.")
     if 'capacity' not in network_emission_flux.columns:
@@ -146,7 +185,7 @@ def calculate_emitter_capacities(network_emission_flux):
     for _, row in network_emission_flux.iterrows():
         node_type = row['node_type']
         annual_emission = row['annual_emission']
-        profile_capacity = row['capacity']
+        profile_capacity = row['capacity']  # t CO2/h, always
 
         if node_type in ('Storage', 'Transport') or annual_emission == 0:
             capacities.append(0.0)
@@ -157,7 +196,8 @@ def calculate_emitter_capacities(network_emission_flux):
                 f"Missing or invalid capacity for node '{row['node_name']}' ({node_type}): {profile_capacity}"
             )
 
-        capacities.append(round(profile_capacity, 2))
+        factor = sector_emission_factor.get(node_type, 1.0)
+        capacities.append(round(profile_capacity / factor, 2))
 
     network_emission_flux['emitter_capacity'] = capacities
 
@@ -286,24 +326,34 @@ def assign_carriers_to_nodes(input_data_path, network_location, network_emission
     return True
 
 
-def assign_mea_technology(network_emission_flux, path_data_case_study):
+def assign_mea_technology(network_emission_flux, path_data_case_study, co2_concentration_by_type=None):
     """
     Determines appropriate MEA (Monoethanolamine) carbon capture technology scale
-    for emitter nodes based on their emitter capacity (t/h).
+    for emitter nodes based on their CO2 emission rate (t CO2/h).
 
     This function analyzes capacity data for each node and determines the appropriate
     MEA technology scale (small, medium, large), adding it to a new column 'mea_technology'.
 
+    IMPORTANT -- units: uses the 'capacity' column (raw t CO2/h from the emission
+    profile), NOT 'emitter_capacity'. MEA equipment is sized against actual CO2 mass
+    flow, so it must stay in CO2 units even after 'emitter_capacity' gets rescaled to
+    product units by calculate_emitter_capacities().
+
     Parameters:
-        - network_emission_flux: DataFrame containing node information and 'emitter_capacity' column (t/h)
+        - network_emission_flux: DataFrame containing node information and 'capacity' column (t CO2/h)
         - path_data_case_study: Path to the case study data directory
+        - co2_concentration_by_type: dict mapping node_type -> flue-gas CO2 concentration.
+          Defaults to DEFAULT_CO2_CONCENTRATION_BY_TYPE.
 
     Returns:
         - network_emission_flux: Updated DataFrame with mea_technology column added
     """
-    # Ensure emitter_capacity column exists
-    if 'emitter_capacity' not in network_emission_flux.columns:
-        raise ValueError("'emitter_capacity' column not found. Please run calculate_emitter_capacities() first.")
+    if co2_concentration_by_type is None:
+        co2_concentration_by_type = DEFAULT_CO2_CONCENTRATION_BY_TYPE
+
+    # Ensure capacity column exists
+    if 'capacity' not in network_emission_flux.columns:
+        raise ValueError("'capacity' column not found. Please run calculate_annual_emission_values() first.")
 
     # Define paths to different MEA technology scales
     mea_paths = {
@@ -329,18 +379,11 @@ def assign_mea_technology(network_emission_flux, path_data_case_study):
         if node_type in ["Storage", "Transport"]:
             continue
 
-        # Get the node's capacity (t/h)
-        capacity = row["emitter_capacity"]
+        # Get the node's CO2 emission rate (t CO2/h) -- NOT emitter_capacity, see docstring
+        capacity = row["capacity"]
 
         # Determine CO2 concentration based on emitter type
-        if node_type in ["Waste"]:
-            co2_concentration = 0.07
-        elif node_type in ["Cement"]:
-            co2_concentration = 0.20
-        elif node_type in ["Refining"]:
-            co2_concentration = 0.25
-        else:
-            co2_concentration = 0.15
+        co2_concentration = co2_concentration_by_type.get(node_type, 0.15)
 
         # Calculate CO2 capacity ranges (t/h) for each MEA scale based on technology specs
         mea_ranges = {}
@@ -458,7 +501,8 @@ def copy_technology_data_custom(input_data_path, path_files_technologies, networ
     print("Technology data copying completed.")
 
 
-def update_emitter_ccs_references(input_data_path, network_emission_flux, technology_selection=None):
+def update_emitter_ccs_references(input_data_path, network_emission_flux, technology_selection=None,
+                                   co2_concentration_by_type=None):
     """
     Updates the CCS references in emitter technology files to match the determined MEA technology size.
     This function ensures that each emitter's CCS section points to the correct MEA technology
@@ -474,22 +518,20 @@ def update_emitter_ccs_references(input_data_path, network_emission_flux, techno
         - network_emission_flux: DataFrame containing emission data and MEA technology assignments
         - technology_selection: dict mapping node_type ("Waste", "Cement", "Refining", "Other") to
           the list of technology names assigned to that sector (see assign_ccs_technologies_debug)
+        - co2_concentration_by_type: dict mapping node_type -> flue-gas CO2 concentration, used to
+          fill Performance.ccs.co2_concentration when not already set. Defaults to
+          DEFAULT_CO2_CONCENTRATION_BY_TYPE (should match what was passed to assign_mea_technology).
     """
     if technology_selection is None:
         technology_selection = DEFAULT_TECHNOLOGY_SELECTION
+    if co2_concentration_by_type is None:
+        co2_concentration_by_type = DEFAULT_CO2_CONCENTRATION_BY_TYPE
 
     # Read topology to get nodes and periods
     with open(input_data_path / "Topology.json", "r") as f:
         topology = json.load(f)
 
     print("Updating CCS references in emitter technologies...")
-
-    co2_concentration_by_type = {
-        "Waste": 0.07,
-        "Cement": 0.20,
-        "Refining": 0.25,
-        "Other": 0.15,
-    }
 
     for period in topology["investment_periods"]:
         for node in topology["nodes"]:
@@ -540,6 +582,179 @@ def update_emitter_ccs_references(input_data_path, network_emission_flux, techno
                     print(f"  ✅ Updated {emitter_tech_name} at {node} to use CCS: {mea_tech_name}")
 
     print("CCS reference updates completed.")
+
+
+def load_sector_reference_values(path_files_technologies, reference_technologies, json_path):
+    """
+    Reads a reference value per sector directly out of a fixed group of "reference"
+    technologies' SOURCE JSON files (e.g. italy_data/technologies/Emitter/CementEmitter.json)
+    -- these JSON files are the single source of truth; this just surfaces one field
+    from them into a plain per-sector dict for use elsewhere in the pipeline (e.g.
+    calculate_emitter_capacities(), update_carrier_data(), assign_mea_technology()),
+    instead of hand-duplicating the same number as a separate literal in main_italy.py.
+
+    IMPORTANT: reference_technologies is deliberately a FIXED group (see
+    REFERENCE_EMITTER_TECHNOLOGIES), independent of technology_selection (main_italy.py's
+    live choice of which technology to actually build/use per sector). The values read
+    here (emission_factor, co2_concentration) describe physical/sector properties --
+    t CO2 per t product, flue-gas concentration -- that don't change depending on which
+    technology is currently selected for the optimization, so they must always be read
+    from the same fixed set regardless of tech_for_cement/tech_for_waste/etc.
+
+    For each sector, uses the first technology in reference_technologies[sector] whose
+    JSON actually defines the requested field -- not every technology needs to (e.g.
+    CementHybridCCS has no "ccs" block at all, since its capture is built into the
+    technology model rather than the generic bolt-on MEA retrofit, so it's skipped
+    when looking up ("Performance", "ccs", "co2_concentration") but still checked for
+    ("Performance", "emission_factor")). If the technologies for a sector disagree on
+    the value, warns and uses the first one found. If NONE of a sector's reference
+    technologies define the field, warns and omits that sector from the returned dict
+    -- callers should already fall back sanely via dict.get(...) (as
+    calculate_emitter_capacities/update_carrier_data/assign_mea_technology all do).
+
+    Parameters:
+        - path_files_technologies: Path to the source technology files directory
+          (e.g. italy_data/technologies)
+        - reference_technologies: dict mapping node_type -> list of technology names
+          to read the value from (typically REFERENCE_EMITTER_TECHNOLOGIES, NOT the
+          live technology_selection)
+        - json_path: sequence of keys to walk into each technology's JSON, e.g.
+          ("Performance", "emission_factor") or ("Performance", "ccs", "co2_concentration")
+
+    Returns:
+        - dict mapping node_type -> value (only for sectors where a value was found)
+    """
+    field_label = ".".join(json_path)
+    values = {}
+
+    for node_type, tech_names in reference_technologies.items():
+        found = []
+        for tech_name in tech_names:
+            source_file = find_technology_file(tech_name, path_files_technologies)
+            if source_file is None:
+                continue
+            with open(source_file, "r") as f:
+                tech_data = json.load(f)
+
+            value = tech_data
+            for key in json_path:
+                if not isinstance(value, dict) or key not in value:
+                    value = None
+                    break
+                value = value[key]
+
+            if value is not None:
+                found.append((tech_name, value))
+
+        if not found:
+            print(f"  ⚠️  Sector '{node_type}': no selected technology ({tech_names}) defines "
+                  f"{field_label} -- omitted, caller's own default will apply")
+            continue
+
+        distinct_values = {v for _, v in found}
+        if len(distinct_values) > 1:
+            print(f"  ⚠️  Sector '{node_type}': selected technologies disagree on {field_label}: "
+                  f"{found} -- using {found[0][1]} (from {found[0][0]})")
+
+        values[node_type] = found[0][1]
+        print(f"  ✅ Sector '{node_type}': {field_label} = {found[0][1]} (from {found[0][0]})")
+
+    return values
+
+
+def update_cement_hybrid_ccs_capacities(input_data_path, network_emission_flux, tech_name="CementHybridCCS"):
+    """
+    Writes each Cement node's fixed clinker production capacity into its copied
+    CementHybridCCS.json (Performance.prod_capacity_clinker) -- used when
+    Performance.size_is_fixed == 1 to pin the technology's size to that node's own
+    real installed capacity, instead of leaving prod_capacity_clinker at whatever
+    single generic value the source template happened to have.
+
+    Units: network_emission_flux['emitter_capacity'] is already in product units
+    (t clinker/h) by this point -- calculate_emitter_capacities() converts it from the
+    raw CO2-emission-rate profile using the sector's reference emission factor (see
+    that function's docstring). So prod_capacity_clinker is simply set equal to
+    emitter_capacity here; no further conversion happens in this function. (Note:
+    this relies on sector_emission_factor["Cement"], passed to
+    calculate_emitter_capacities(), being kept consistent with this JSON's own
+    Performance.performance.tCO2_tclinker -- they represent the same physical
+    quantity but are two separate fields.)
+
+    Only touches nodes that actually have a copied {tech_name}.json under
+    technology_data/ (i.e. nodes where it was included in technology_selection for
+    "Cement" -- see assign_ccs_technologies_debug) -- other Cement nodes are skipped
+    with a note, not treated as an error.
+
+    Validates the computed capacity:
+      - against the node's own size_min/size_max: since size_is_fixed pins var_size
+        to prod_capacity_clinker via an equality constraint, a value outside those
+        bounds makes the model infeasible for that node -- raises ValueError rather
+        than writing a value that would silently break the solve.
+      - against the oxyfuel piecewise capex curve's highest breakpoint
+        (Economics.piecewise_capex.bp_x[-1]): capex is computed via linear
+        interpolation (np.interp), which silently flat-extrapolates beyond the
+        curve's defined domain instead of raising -- exceeding it means capex would
+        be UNDERESTIMATED for that node. Only warns for this, since it's a
+        data-completeness issue in cement_sheet.xlsx (extend the breakpoints), not
+        something to block the run on.
+
+    Parameters:
+        - input_data_path: Path to the case-study input data directory
+        - network_emission_flux: DataFrame with node_name, node_type, emitter_capacity
+        - tech_name: technology filename (without ".json") to patch; defaults to
+          "CementHybridCCS"
+    """
+    with open(input_data_path / "Topology.json", "r") as f:
+        topology = json.load(f)
+
+    print(f"Updating {tech_name} fixed clinker capacities per node...")
+
+    cement_rows = network_emission_flux[network_emission_flux["node_type"] == "Cement"]
+
+    for period in topology["investment_periods"]:
+        for _, row in cement_rows.iterrows():
+            node_name = row["node_name"]
+            emitter_capacity = float(row["emitter_capacity"])
+
+            tech_file_path = (
+                input_data_path / period / "node_data" / node_name / "technology_data" / f"{tech_name}.json"
+            )
+            if not tech_file_path.exists():
+                print(f"  ⏭️  Skipped {node_name} ({tech_name}.json not selected/copied at this node)")
+                continue
+
+            with open(tech_file_path, "r") as f:
+                tech_data = json.load(f)
+
+            prod_capacity_clinker = round(emitter_capacity, 3)
+
+            size_min = tech_data.get("size_min", 0)
+            size_max = tech_data.get("size_max")
+            if size_max is not None and not (size_min <= prod_capacity_clinker <= size_max):
+                raise ValueError(
+                    f"{node_name}: emitter_capacity={prod_capacity_clinker} t clinker/h "
+                    f"is outside {tech_name}.json's [size_min={size_min}, size_max={size_max}]. Since "
+                    f"Performance.size_is_fixed pins var_size == prod_capacity_clinker, this would make "
+                    f"the model infeasible for this node. Widen size_max (or check the capacity data)."
+                )
+
+            bp_x_oxy = tech_data["Economics"]["piecewise_capex"]["bp_x"]
+            if prod_capacity_clinker > max(bp_x_oxy):
+                print(
+                    f"  ⚠️  {node_name}: prod_capacity_clinker={prod_capacity_clinker} t/h exceeds the "
+                    f"oxyfuel piecewise capex curve's highest breakpoint ({max(bp_x_oxy)} t/h) -- capex "
+                    f"for this node will be flat-extrapolated (underestimated) via np.interp. Consider "
+                    f"extending cement_sheet.xlsx's capex_cpu_oxyfuel breakpoints."
+                )
+
+            tech_data["Performance"]["prod_capacity_clinker"] = prod_capacity_clinker
+
+            with open(tech_file_path, "w") as f:
+                json.dump(tech_data, f, indent=2)
+
+            print(f"  ✅ {node_name}: prod_capacity_clinker = {prod_capacity_clinker} t/h")
+
+    print(f"{tech_name} capacity updates completed.")
 
 
 def update_network_distance_matrix(input_data_path, network_data_dict, network_types, decimal_places=2):
@@ -1281,9 +1496,13 @@ def load_climate_data_from_api_robust(folder_path: str | Path, dataset: str = "J
 def update_carrier_data(input_data_path, electricity_price_data, network_emission_flux,
                         path_files_technologies, node_names, co2_intensity_electricity,
                         cop_hp, levelized_capex_hp, path_files_node_flux,
-                        electricity_import_limit=100, heat_import_limit=200):
+                        electricity_import_limit=100, heat_import_limit=200,
+                        sector_emission_factor=None):
 
     import adopt_net0 as adopt
+
+    if sector_emission_factor is None:
+        sector_emission_factor = DEFAULT_SECTOR_EMISSION_FACTOR
 
     co2_intensity_heat = round(co2_intensity_electricity / cop_hp, 4)
 
@@ -1308,24 +1527,13 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
     adopt.fill_carrier_data(input_data_path, value_or_data=heat_prices,
                             columns=['Import price'], carriers=['heat'], nodes=node_names)
 
-    # --- Load emission factors from technology JSON files ---
+    # --- Sector -> product carrier mapping ---
     node_type_mapping = {
         'Waste':    ('Emitter/WasteToEnergyEmitter.json', 'waste'),
         'Cement':   ('Emitter/CementEmitter.json',        'clinker'),
         'Refining': ('Emitter/RefineryEmitter.json',      'refined_product'),
         'Other':    ('Emitter/UnspecifiedEmitter.json',   'industrial_product'),
     }
-
-    emission_factors = {}
-    for node_type, (filename, _) in node_type_mapping.items():
-        tech_file_path = path_files_technologies / filename
-        try:
-            with open(tech_file_path, 'r') as f:
-                emission_factors[node_type] = json.load(f)['Performance']['emission_factor']
-            print(f"✅ Loaded emission factor for {node_type}: {emission_factors[node_type]}")
-        except (FileNotFoundError, KeyError) as e:
-            print(f"Warning: could not load emission factor for {node_type} ({e}), defaulting to 1.0")
-            emission_factors[node_type] = 1.0
 
     # --- Load hourly profiles (shared helper) ---
     profiles_real, profiles_synthetic = load_emission_profiles(path_files_node_flux)
@@ -1348,6 +1556,11 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
         _, carrier_name = node_type_mapping[node_type]
 
         hourly_demand_array, source = get_profile(node_type, node_name, profiles_real, profiles_synthetic)
+
+        # emission_profile_emitters.xlsx is always in t CO2/h; rescale to t product/h
+        # (matching the carrier's real units) using the sector's reference emission
+        # factor -- same conversion as calculate_emitter_capacities().
+        hourly_demand_array = hourly_demand_array / sector_emission_factor.get(node_type, 1.0)
 
         if source == "real_data":
             annual_demand_tonnes = round(hourly_demand_array.sum(), 2)

@@ -64,7 +64,7 @@
       "CO2captured",
       "clinker"
     ],
-    "emission_factor": 0,
+    "emission_factor": 0.94,
     "min_part_load": 1,
     "performance": {
       "tCO2_tclinker": 0.94,
