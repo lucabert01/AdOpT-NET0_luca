@@ -207,7 +207,7 @@ class CementHybridCCS(Technology):
 
 
 
-        if self.performance_data["clinker_capacity_is_fixed"]:
+        if self.performance_data["size_is_fixed"]:
 
             def init_size_clinker(const):
                 return b_tec.var_size == prod_capacity_clinker
@@ -383,8 +383,6 @@ class CementHybridCCS(Technology):
         :param b_tec: pyomo block with technology model
         :return: pyomo block with technology model
         """
-        c = self.processed_coeff.time_independent
-        technology_model = self.technology_model
         emissions_clinker = self.performance_data["performance"][
             "tCO2_tclinker"
         ]
@@ -440,50 +438,25 @@ class CementHybridCCS(Technology):
 
 
 
-        if self.performance_data["co2_out_is_compressed"]:
-            phase = self.performance_data["phase_of_co2_out"]
+        phase = self.performance_data["phase_of_co2_out"]
 
-            if economics["capex_model"] == 1:
-                unit_capex_compressor_cpu_data = pd.read_excel(
-                    capex_data_path, sheet_name="unit_capex_compressor_cpu", index_col=0
-                )
-                unit_capex_compressor = float(
-                    unit_capex_compressor_cpu_data.loc["unit_capex_compressor", phase]
-                )
-                unit_capex_cpu = float(
-                    unit_capex_compressor_cpu_data.loc["unit_capex_cpu", phase]
-                )
-                b_tec.para_unit_capex_annual = pyo.Param(
-                    domain=pyo.Reals,
-                    initialize=(economics["unit_capex"] + unit_capex_cpu) * annualization_factor,
-                    mutable=True,
-                )
-
-                b_tec.para_unit_capex_mea_annual = pyo.Param(
-                    domain=pyo.Reals,
-                    initialize=(economics["other_economics"]["unit_capex_MEA"] + unit_capex_compressor)
-                               * annualization_factor,
-                    mutable=True,
-                )
-
-            if economics["capex_model"] == 2:
-                capex_cpu_oxy_data = pd.read_excel(
-                    capex_data_path, sheet_name="capex_cpu_oxyfuel", index_col=0
-                )
-                capex_compressor_mea_data = pd.read_excel(
-                    capex_data_path, sheet_name="capex_compressor_mea", index_col=0
-                )
-                bp_y_capex_cpu_oxy = capex_cpu_oxy_data[phase].tolist()
-                bp_y_capex_compressor_mea = capex_compressor_mea_data[
-                    phase].tolist()
-                economics["piecewise_capex"]["bp_y"] = np.add(
-                    economics["piecewise_capex"]["bp_y"],
-                    bp_y_capex_cpu_oxy,
-                )
-                economics["other_economics"]["piecewise_capex_MEA"]["bp_y"] = np.add(
-                    economics["other_economics"]["piecewise_capex_MEA"]["bp_y"],
-                    bp_y_capex_compressor_mea,
-                )
+        capex_cpu_oxy_data = pd.read_excel(
+            capex_data_path, sheet_name="capex_cpu_oxyfuel", index_col=0
+        )
+        capex_compressor_mea_data = pd.read_excel(
+            capex_data_path, sheet_name="capex_compressor_mea", index_col=0
+        )
+        bp_y_capex_cpu_oxy = capex_cpu_oxy_data[phase].tolist()
+        bp_y_capex_compressor_mea = capex_compressor_mea_data[
+            phase].tolist()
+        economics["piecewise_capex"]["bp_y"] = np.add(
+            economics["piecewise_capex"]["bp_y"],
+            bp_y_capex_cpu_oxy,
+        )
+        economics["other_economics"]["piecewise_capex_MEA"]["bp_y"] = np.add(
+            economics["other_economics"]["piecewise_capex_MEA"]["bp_y"],
+            bp_y_capex_compressor_mea,
+        )
 
         if self.existing and not self.decommission == "impossible":
             b_tec.para_decommissioning_cost_annual = pyo.Param(
@@ -510,24 +483,14 @@ class CementHybridCCS(Technology):
             discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
 
-        annualized_unit_capex_oxy = pyo.value(b_tec.para_unit_capex_annual)
-        annualized_unit_capex_mea = pyo.value(b_tec.para_unit_capex_mea_annual)
-        size_max = self.processed_coeff.time_independent["size_max"]
-        size_max_mea = self.processed_coeff.time_independent["size_max_mea"]
 
         def calculate_max_capex_oxy():
-            if economics["capex_model"] == 1:
-                max_capex = size_max * annualized_unit_capex_oxy
-            elif economics["capex_model"] == 2:
-                max_capex = (
+            max_capex = (
                                     max(economics["piecewise_capex"]["bp_y"])) * annualization_factor
             return (0, max_capex)
 
         def calculate_max_capex_mea():
-            if economics["capex_model"] == 1:
-                max_capex = size_max_mea * annualized_unit_capex_mea
-            elif economics["capex_model"] == 2:
-                max_capex = (
+            max_capex = (
                                 max(economics["other_economics"]["piecewise_capex_MEA"]["bp_y"])) * annualization_factor
             return (0, max_capex)
 
@@ -557,53 +520,56 @@ class CementHybridCCS(Technology):
             discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
 
-        # Add capex of CPU and compressor if required
-        if economics["capex_model"] == 1:
+        # capex oxyfuel as a piecewise function
+        bp_x_oxy = economics["piecewise_capex"]["bp_x"]
+        bp_y_annual_oxy = [
+            y * annualization_factor
+            for y in economics["piecewise_capex"]["bp_y"]
+        ]
+        # capex mea as piecewise or linear
+        bp_x_mea = economics["other_economics"]["piecewise_capex_MEA"]["bp_x"]
+        bp_y_annual_mea = [
+            y * annualization_factor
+            for y in economics["other_economics"]["piecewise_capex_MEA"]["bp_y"]
+        ]
 
+        self.big_m_transformation_required = 1
+        if self.performance_data["size_is_fixed"]:
+            size = self.performance_data["prod_capacity_clinker"]
             b_tec.const_capex_oxy = pyo.Constraint(
-                expr=b_tec.var_size * b_tec.para_unit_capex_annual
-                     == b_tec.var_capex_oxy
+                expr=b_tec.var_capex_oxy == np.interp(size, bp_x_oxy, bp_y_annual_oxy)
             )
-            b_tec.const_capex_mea = pyo.Constraint(
-                expr=b_tec.var_size_mea*b_tec.para_unit_capex_mea_annual
-                     == b_tec.var_capex_mea
-            )
-
-            b_tec.const_capex_aux = pyo.Constraint(
-                expr=b_tec.var_capex_mea + b_tec.var_capex_oxy
-                     == b_tec.var_capex_aux
-            )
-        if economics["capex_model"] == 2:
-
-
-            # capex oxyfuel as a piecewise function
-            self.big_m_transformation_required = 1
-            bp_x = economics["piecewise_capex"]["bp_x"]
-            bp_y_annual = [
-                y * annualization_factor
-                for y in economics["piecewise_capex"]["bp_y"]
-            ]
-            b_tec.const_capex_oxy = pyo.Piecewise(
-                b_tec.var_capex_oxy,
-                b_tec.var_size,
-                pw_pts=bp_x,
-                pw_constr_type="EQ",
-                f_rule=bp_y_annual,
-                pw_repn="SOS2",
-            )
-
-            # capex mea as piecewise or linear
-            bp_x = economics["other_economics"]["piecewise_capex_MEA"]["bp_x"]
-            bp_y_annual = [
-                y * annualization_factor
-                for y in economics["other_economics"]["piecewise_capex_MEA"]["bp_y"]
-            ]
             b_tec.const_capex_mea = pyo.Piecewise(
                 b_tec.var_capex_mea,
                 b_tec.var_size_mea,
-                pw_pts=bp_x,
+                pw_pts=bp_x_mea,
                 pw_constr_type="EQ",
-                f_rule=bp_y_annual,
+                f_rule=bp_y_annual_mea,
+                pw_repn="SOS2",
+            )
+
+            # capex tot
+            b_tec.const_capex_aux = pyo.Constraint(
+                expr=b_tec.var_capex_mea + b_tec.var_capex_oxy == b_tec.var_capex_aux
+            )
+        else:
+
+            b_tec.const_capex_oxy = pyo.Piecewise(
+                b_tec.var_capex_oxy,
+                b_tec.var_size,
+                pw_pts=bp_x_oxy,
+                pw_constr_type="EQ",
+                f_rule=bp_y_annual_oxy,
+                pw_repn="SOS2",
+            )
+
+
+            b_tec.const_capex_mea = pyo.Piecewise(
+                b_tec.var_capex_mea,
+                b_tec.var_size_mea,
+                pw_pts=bp_x_mea,
+                pw_constr_type="EQ",
+                f_rule=bp_y_annual_mea,
                 pw_repn="SOS2",
             )
 
