@@ -519,6 +519,11 @@ class CementHybridCCS(Technology):
         annualization_factor = annualize(
             discount_rate, economics["lifetime"], fraction_of_year_modelled
         )
+        b_tec.para_unit_capex = pyo.Param(
+            domain=pyo.Reals,
+            initialize=economics["unit_capex"],
+            mutable=True,
+        )
 
         # capex oxyfuel as a piecewise function
         bp_x_oxy = economics["piecewise_capex"]["bp_x"]
