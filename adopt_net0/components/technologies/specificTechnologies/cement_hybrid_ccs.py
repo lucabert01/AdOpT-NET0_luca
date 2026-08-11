@@ -782,5 +782,5 @@ class CementHybridCCS(Technology):
 
         h5_group.create_dataset(
             "CO2_to_mea",
-            data=[model_block.var_co2_captured_mea[t].value for t in self.set_t_full],
+            data=[model_block.var_co2_captured_mea[t].value for t in self.set_t_performance],
         )
