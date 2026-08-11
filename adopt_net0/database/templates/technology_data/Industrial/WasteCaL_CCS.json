@@ -1,0 +1,48 @@
+{
+  "tec_type": "WasteToEnergyCaLCCS",
+  "size_min": 0,
+  "size_max": 94,
+  "size_is_int": 0,
+  "size_based_on": "input",
+  "decommission": 0,
+  "Economics": {
+    "comment": "CAPEX is a piecewise function of CaL design capacity (var_size_cal, t CO2/h captured), interpolated from wasteCaL_sheet.xlsx by design_co2_concentration. opex_variable_cal [EUR/t CO2 captured] is a single blended rate covering RDF cost, CaL electricity revenue (negative), and any other variable cost -- PLACEHOLDER, needs a real value.",
+    "capex_model": 1,
+    "unit_capex": 0,
+    "opex_variable_cal": 0,
+    "opex_fixed": 0.065,
+    "discount_rate": 0.1,
+    "lifetime": 25,
+    "decommission_cost": 0
+  },
+  "Performance": {
+    "comment": "Simplified: no electricity/heat output, no hourly LHV/CO2-concentration variation",
+    "performance_function_type": 1,
+    "input_carrier": [
+      "wasteIn"
+    ],
+    "main_input_carrier": "wasteIn",
+    "output_carrier": [
+      "waste",
+      "CO2captured"
+    ],
+    "main_output_carrier": "waste",
+    "emission_factor": 0.89,
+    "emission_factor_RDF": 1.649,
+    "rdf_per_tCO2": 0.335366,
+    "capture_rate": 0.925,
+    "design_co2_concentration": 0.08,
+    "fraction_emissions_wte": 0.49,
+    "min_part_load": 0
+  },
+  "Units": {
+    "size": "t/h",
+    "input_carrier": {
+      "wasteIn": "t/h"
+    },
+    "output_carrier": {
+      "waste": "t/h",
+      "CO2captured": "t/h"
+    }
+  }
+}

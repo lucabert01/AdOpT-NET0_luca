@@ -1050,7 +1050,7 @@ def compute_opex_var_arcs(
     (Table C.1). This replaced the previous flat-fit formula
     (5.58/d + 0.15)*d, which conflated capacity cost (capex) and usage cost
     (opex_var) into a single number; the two are now split, with the
-    capacity part going into gamma2/gamma4 (see
+    capacity part going into gamma2 (see
     update_capex_gammas_truck_railway()).
 
     Railway: written as all zeros. For container-based train, the
