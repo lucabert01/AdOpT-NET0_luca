@@ -1,7 +1,28 @@
 import json
+import time
 from pathlib import Path
 import numpy as np
 import pandas as pd
+
+
+def _mkdir_sync(path: Path, retries: int = 20, delay: float = 0.1) -> None:
+    """
+    Creates a directory and waits until it is actually visible.
+
+    On network drives, directory creation can be acknowledged by the client
+    before it is visible to subsequent file operations, causing spurious
+    FileNotFoundError right after mkdir(). This polls for existence before
+    returning.
+
+    :param Path path: directory to create
+    :param int retries: number of existence checks before giving up
+    :param float delay: seconds to wait between checks
+    """
+    path.mkdir(parents=True, exist_ok=True)
+    for _ in range(retries):
+        if path.exists():
+            return
+        time.sleep(delay)
 
 
 def create_empty_network_matrix(nodes: list) -> pd.DataFrame:
@@ -139,26 +160,16 @@ def create_input_data_folder_template(base_path: Path | str):
     # Make folder structure
     node_locations.to_csv(base_path / "NodeLocations.csv", sep=";")
     for investment_period in topology["investment_periods"]:
-        (base_path / investment_period).mkdir(parents=True, exist_ok=True)
+        _mkdir_sync(base_path / investment_period)
 
         # Networks
         with open(base_path / investment_period / "Networks.json", "w") as f:
             json.dump(networks, f, indent=4)
-        (base_path / investment_period / "network_data").mkdir(
-            parents=True, exist_ok=True
-        )
-        (base_path / investment_period / "compressor_data").mkdir(
-            parents=True, exist_ok=True
-        )
-        (base_path / investment_period / "network_topology").mkdir(
-            parents=True, exist_ok=True
-        )
-        (base_path / investment_period / "network_topology" / "new").mkdir(
-            parents=True, exist_ok=True
-        )
-        (base_path / investment_period / "network_topology" / "existing").mkdir(
-            parents=True, exist_ok=True
-        )
+        _mkdir_sync(base_path / investment_period / "network_data")
+        _mkdir_sync(base_path / investment_period / "compressor_data")
+        _mkdir_sync(base_path / investment_period / "network_topology")
+        _mkdir_sync(base_path / investment_period / "network_topology" / "new")
+        _mkdir_sync(base_path / investment_period / "network_topology" / "existing")
         empty_network_matrix = create_empty_network_matrix(topology["nodes"])
         empty_network_matrix.to_csv(
             base_path
@@ -206,10 +217,10 @@ def create_input_data_folder_template(base_path: Path | str):
         )
 
         # Node data
-        (base_path / investment_period / "node_data").mkdir(parents=True, exist_ok=True)
+        _mkdir_sync(base_path / investment_period / "node_data")
         for node in topology["nodes"]:
-            (base_path / investment_period / "node_data" / node / "carrier_data").mkdir(
-                parents=True, exist_ok=True
+            _mkdir_sync(
+                base_path / investment_period / "node_data" / node / "carrier_data"
             )
             with open(
                 base_path
@@ -261,9 +272,9 @@ def create_input_data_folder_template(base_path: Path | str):
                 base_path / investment_period / "node_data" / node / "CarbonCost.csv",
                 sep=";",
             )
-            (
+            _mkdir_sync(
                 base_path / investment_period / "node_data" / node / "technology_data"
-            ).mkdir(parents=True, exist_ok=True)
+            )
 
 
 def initialize_topology_templates() -> dict:
