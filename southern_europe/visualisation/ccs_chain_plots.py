@@ -70,6 +70,39 @@ STATUS_CRITICAL = BATLOW[5]
 TRANSPORT_COLOR = BATLOW[1]  # transport hub marker
 STORAGE_COLOR = BATLOW[6]    # storage marker
 
+# ------------------------------------------------------------------
+# Capture technology families
+# ------------------------------------------------------------------
+# The case study lets each sector pick between a generic bolt-on MEA
+# retrofit (CementEmitter/WasteToEnergyEmitter/RefineryEmitter/
+# UnspecifiedEmitter, tec_type CONV4 with a Performance.ccs block) and two
+# self-contained capture technologies with their own tec_type and their own
+# design/operation variable names (see main_italy.py SCENARIOS and
+# data_process/utilities/defined_functions.py:update_emitter_ccs_references,
+# which explicitly skips MEA-retrofit wiring for these):
+#   - CementHybridCCS   (oxyfuel + MEA polish, cement sector)
+#   - WasteCaL_CCS      (calcium looping, waste sector; tec_type WasteToEnergyCaLCCS)
+# Encoding capture technology as marker SHAPE (rather than a 4th hue) keeps
+# it legible under the same batlow-derived color language already used for
+# CCS status (green=captured, muted=not) and avoids adding low-contrast
+# batlow hues for identity (validated: adjacent-pair contrast among mid-tone
+# batlow stops falls below the CVD-safe floor for small filled markers).
+FAMILY_ORDER = ["mea_retrofit", "oxyfuel_hybrid", "calcium_looping"]
+FAMILY_LABELS = {
+    "mea_retrofit": "MEA retrofit",
+    "oxyfuel_hybrid": "Oxyfuel + MEA hybrid",
+    "calcium_looping": "Calcium looping",
+}
+FAMILY_MARKERS = {
+    "mea_retrofit": "o",
+    "oxyfuel_hybrid": "^",
+    "calcium_looping": "D",
+}
+# matplotlib scatter `s` is a bounding-box area, so a triangle/diamond of the
+# same `s` as a circle reads as visually smaller (lower fill ratio) -- scale
+# up so the three shapes read as equal-weight on the map.
+FAMILY_MARKER_SCALE = {"mea_retrofit": 1.0, "oxyfuel_hybrid": 1.35, "calcium_looping": 1.2}
+
 # CO2 captured vs. emitted -- used for the emitter zoom plot
 CAPTURED_COLOR = BATLOW[0]
 EMITTED_COLOR = BATLOW[4]
@@ -166,6 +199,96 @@ def compute_cost_factor_grid(italy: gpd.GeoDataFrame, category: float = COST_FAC
     return gpd.clip(fishnet, italy)
 
 
+def classify_capture_family(design_keys) -> str | None:
+    """
+    Identifies which capture technology a node's technology block belongs to,
+    from the dataset names present in its design/nodes/period1/<node>/<tech>
+    HDF5 group -- robust to technology naming/suffixes ("_existing" etc.),
+    since it keys off variables each technology CLASS writes unconditionally:
+
+      - "size_ccs"  -- generic bolt-on MEA retrofit (technology.py's shared
+                       CCS mixin, gated on Performance.ccs.possible)
+      - "size_mea"  -- CementHybridCCS (oxyfuel + MEA polish); written by
+                       cement_hybrid_ccs.py:write_results_tec_design
+      - "size_cal"  -- WasteCaL_CCS / WasteToEnergyCaLCCS (calcium looping);
+                       written by wasteToEnergy_CaL_ccs.py:write_results_tec_design
+
+    Returns None for technologies with none of these keys (transport/storage
+    technologies, or an emitter with no capture at all).
+    """
+    keys = set(design_keys)
+    if "size_ccs" in keys:
+        return "mea_retrofit"
+    if "size_mea" in keys:
+        return "oxyfuel_hybrid"
+    if "size_cal" in keys:
+        return "calcium_looping"
+    return None
+
+
+def captured_co2_operation_key(operation_keys) -> str | None:
+    """
+    The operation-group dataset name holding hourly captured CO2 (t/h),
+    which differs by capture family: the generic MEA-retrofit CCS component
+    writes to a "_var_output_ccs"-suffixed carrier dataset (technology.py
+    write_results_tec_operation), while the self-contained CementHybridCCS/
+    WasteCaL_CCS technologies emit CO2captured as a plain output carrier
+    (their own output_carrier lists include "CO2captured" directly) and so
+    write the unsuffixed "CO2captured_output" via the base class.
+    """
+    keys = set(operation_keys)
+    if "CO2captured_var_output_ccs" in keys:
+        return "CO2captured_var_output_ccs"
+    if "CO2captured_output" in keys:
+        return "CO2captured_output"
+    return None
+
+
+def _scatter_emitter(ax, x, y, family, installed, s, zorder,
+                      edgecolor=None, linewidth=None, alpha=None, area_scale=True):
+    """Draws one emitter marker: shape encodes capture technology (family),
+    fill encodes whether it actually captures anything -- see FAMILY_MARKERS
+    docstring above. edgecolor/linewidth let callers (e.g. the trunk-highlight
+    map) override the ring styling without touching fill/shape logic.
+    area_scale=False skips the shape fill-ratio correction, for maps where
+    `s` is itself a data-driven magnitude encoding (e.g. plot_map_sized_by_
+    capacity) and must stay strictly proportional across markers."""
+    marker = FAMILY_MARKERS.get(family, "o")
+    scale = FAMILY_MARKER_SCALE.get(family, 1.0) if area_scale else 1.0
+    kwargs = dict(
+        marker=marker,
+        s=s * scale,
+        edgecolor=edgecolor if edgecolor is not None else ("white" if installed else STATUS_MUTED),
+        linewidth=linewidth if linewidth is not None else (1.2 if installed else 1.8),
+        zorder=zorder,
+    )
+    if alpha is not None:
+        kwargs["alpha"] = alpha
+    if installed:
+        kwargs["color"] = STATUS_GOOD
+    else:
+        kwargs["facecolors"] = "none"
+    ax.scatter(x, y, **kwargs)
+
+
+def _capture_legend_handles(ccs_df: pd.DataFrame) -> list:
+    """Shape/status legend entries for whichever capture families actually
+    appear in this result file, in a fixed canonical order (FAMILY_ORDER) so
+    the same shape always means the same technology across different runs."""
+    present = set(ccs_df["family"].dropna()) if len(ccs_df) else set()
+    handles = [
+        Line2D([0], [0], marker=FAMILY_MARKERS[f], color="w", markerfacecolor=STATUS_GOOD,
+               markeredgecolor="white", markersize=11, linestyle="None", label=FAMILY_LABELS[f])
+        for f in FAMILY_ORDER if f in present
+    ]
+    if len(ccs_df) and (~ccs_df["ccs_installed"]).any():
+        handles.append(
+            Line2D([0], [0], marker="o", color="w", markerfacecolor="none", markeredgecolor=STATUS_MUTED,
+                   markersize=11, markeredgewidth=1.8, linestyle="None", label="No CCS installed")
+        )
+    return handles
+
+
 # ============================================================
 # Data loading
 # ============================================================
@@ -192,7 +315,18 @@ def load_built_arcs(h5_path: Path) -> pd.DataFrame:
 
 def load_ccs_status(h5_path: Path) -> pd.DataFrame:
     """
-    Per-emitter CCS status, plus total annual emissions (captured + vented).
+    Per-emitter capture technology (family), CCS status, and total annual
+    emissions (captured + vented).
+
+    Handles all three capture technology families the case study can select
+    per sector (see classify_capture_family docstring): the generic bolt-on
+    MEA retrofit, and the self-contained CementHybridCCS/WasteCaL_CCS
+    technologies, which use different design/operation variable names.
+    "Installed" is judged generically from annual captured CO2 > 0 rather
+    than a family-specific design variable, since e.g. CementHybridCCS's
+    oxyfuel front-end captures CO2 unconditionally whenever it's producing
+    clinker (size_mea, the optional MEA-polish add-on, can be 0 even though
+    the technology is actively capturing).
 
     Total emissions is the true measure of a plant's scale -- unlike the
     design "size" field (a free technology-capacity decision variable that,
@@ -213,33 +347,32 @@ def load_ccs_status(h5_path: Path) -> pd.DataFrame:
         nodes = f["design"]["nodes"]["period1"]
         op = f["operation"]["technology_operation"]["period1"]
         for node_name in nodes.keys():
-            size = 0.0
-            size_ccs = 0.0
-            capex_ccs = 0.0
-            total_emissions = 0.0
-            has_emitter_tech = False
             for tech in nodes[node_name].keys():
                 g = nodes[node_name][tech]
-                keys = list(g.keys())
-                if "size_ccs" in keys:
-                    has_emitter_tech = True
-                    size += float(g["size"][()][0])
-                    size_ccs += float(g["size_ccs"][()][0])
-                    capex_ccs += float(g["capex_ccs"][()][0])
-                    emitted_clustered = op[node_name][tech]["emissions_pos"][()]
-                    emitted_annual = float(emitted_clustered[seq - 1].sum())
-                    captured_clustered = op[node_name][tech]["CO2captured_var_output_ccs"][()]
-                    captured_annual = float(captured_clustered[seq - 1].sum())
-                    total_emissions += captured_annual + emitted_annual
-            if has_emitter_tech:
+                design_keys = list(g.keys())
+                family = classify_capture_family(design_keys)
+                if family is None:
+                    continue
+
+                captured_key = captured_co2_operation_key(op[node_name][tech].keys())
+                if captured_key is None:
+                    continue
+
+                size = float(g["size"][()][0])
+                emitted_clustered = op[node_name][tech]["emissions_pos"][()]
+                emitted_annual = float(emitted_clustered[seq - 1].sum())
+                captured_clustered = op[node_name][tech][captured_key][()]
+                captured_annual = float(captured_clustered[seq - 1].sum())
+
                 rows.append(
                     {
                         "node": node_name,
+                        "tech": tech,
+                        "family": family,
                         "size": size,
-                        "size_ccs": size_ccs,
-                        "capex_ccs": capex_ccs,
-                        "ccs_installed": size_ccs > 0,
-                        "total_emissions": total_emissions,
+                        "captured_annual": captured_annual,
+                        "ccs_installed": captured_annual > 1e-6,
+                        "total_emissions": captured_annual + emitted_annual,
                     }
                 )
     return pd.DataFrame(rows)
@@ -262,12 +395,23 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
     is deliberately excluded -- this is the cost of running the CCS chain, not
     the cost of not running it.
 
+    Capture cost accounting differs by technology family (see
+    classify_capture_family): for the generic bolt-on MEA retrofit, only the
+    CCS component's own capex_ccs/opex_*_ccs count -- the host emitter's own
+    production cost is out of scope for a "cost of the CCS chain" breakdown.
+    For the self-contained CementHybridCCS/WasteCaL_CCS technologies, capture
+    is inseparable from production (one technology block, no retrofit split
+    available), so their full capex_tot/opex_fixed/opex_variable is the
+    capture-chain cost -- the same convention already used below for the
+    storage technology.
+
     Electricity/heat import cost is not in technology opex (technology
     opex_variable is 0 for both the emitter and the MEA CCS component; energy
     is priced at the node's carrier balance instead -- see construct_balances.py
     :func:`construct_import_costs`). It is attributed to whichever node
     consumes it: the storage node's own electricity draw counts as "storage",
-    everything else counts as "capture".
+    everything else counts as "capture" (and, within that, its node's capture
+    family).
 
     Carrier-balance arrays (operation/energy_balance) are stored at the
     design-days (clustered) resolution; they are expanded back to the full
@@ -275,7 +419,9 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
     model's own full-resolution linking constraint does.
 
     :return: dict with 'capture', 'transport', 'storage' (each a dict of
-        component -> EUR/year) and 'total_stored_t' (t CO2 stored per year).
+        component -> EUR/year), 'capture_by_family' (dict of family label ->
+        same component dict, one entry per capture family actually present),
+        and 'total_stored_t' (t CO2 stored per year).
     """
     with h5py.File(h5_path, "r") as f:
         seq = f["k_means_specs"]["period1"]["sequence"][()]
@@ -290,16 +436,32 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
 
         nodes = f["design"]["nodes"]["period1"]
         capture = {k: 0.0 for k in COMPONENT_COLORS}
+        capture_by_family = {}
         storage = {k: 0.0 for k in COMPONENT_COLORS}
 
         for node_name in nodes.keys():
+            node_family = None
             for tech in nodes[node_name].keys():
                 g = nodes[node_name][tech]
                 keys = list(g.keys())
-                if "size_ccs" in keys:
-                    capture["Capex"] += float(g["capex_ccs"][()][0])
-                    capture["Opex (fixed)"] += float(g["opex_fixed_ccs"][()][0])
-                    capture["Opex (variable)"] += float(g["opex_variable_ccs"][()][0])
+                family = classify_capture_family(keys)
+                if family is not None:
+                    node_family = family
+                    if family == "mea_retrofit":
+                        comp_capex = float(g["capex_ccs"][()][0])
+                        comp_opex_fixed = float(g["opex_fixed_ccs"][()][0])
+                        comp_opex_variable = float(g["opex_variable_ccs"][()][0])
+                    else:
+                        comp_capex = float(g["capex_tot"][()][0])
+                        comp_opex_fixed = float(g["opex_fixed"][()][0])
+                        comp_opex_variable = float(g["opex_variable"][()][0])
+                    capture["Capex"] += comp_capex
+                    capture["Opex (fixed)"] += comp_opex_fixed
+                    capture["Opex (variable)"] += comp_opex_variable
+                    fam_costs = capture_by_family.setdefault(family, {k: 0.0 for k in COMPONENT_COLORS})
+                    fam_costs["Capex"] += comp_capex
+                    fam_costs["Opex (fixed)"] += comp_opex_fixed
+                    fam_costs["Opex (variable)"] += comp_opex_variable
                 elif tech == "PermanentStorage_CO2_simple":
                     storage["Capex"] += float(g["capex_tot"][()][0])
                     storage["Opex (fixed)"] += float(g["opex_fixed"][()][0])
@@ -313,6 +475,9 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
             else:
                 capture["Electricity"] += elec_cost
                 capture["Heat"] += heat_cost
+                if node_family is not None:
+                    capture_by_family[node_family]["Electricity"] += elec_cost
+                    capture_by_family[node_family]["Heat"] += heat_cost
 
         net = f["design"]["networks"]["period1"]
         transport = {k: 0.0 for k in COMPONENT_COLORS}
@@ -334,6 +499,12 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
 
     return {
         "capture": capture,
+        "capture_by_family": {
+            FAMILY_LABELS.get(fam, fam): costs
+            for fam, costs in sorted(
+                capture_by_family.items(), key=lambda kv: FAMILY_ORDER.index(kv[0])
+            )
+        },
         "transport": transport,
         "storage": storage,
         "total_stored_t": total_stored_t,
@@ -425,6 +596,7 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
     name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
     ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
+    family_map = dict(zip(ccs_df["node"], ccs_df["family"]))
 
     fig, ax = plt.subplots(figsize=(12.5, 12))
     fig.patch.set_facecolor(SURFACE)
@@ -473,21 +645,14 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
                        edgecolor="white", linewidth=1.2, zorder=20)
         else:
             installed = ccs_map.get(name, False)
-            if installed:
-                ax.scatter(point.x, point.y, marker="o", s=100, color=STATUS_GOOD,
-                           edgecolor="white", linewidth=1.2, zorder=22)
-            else:
-                ax.scatter(point.x, point.y, marker="o", s=90, facecolors="none",
-                           edgecolor=STATUS_MUTED, linewidth=1.8, zorder=21)
+            _scatter_emitter(ax, point.x, point.y, family_map.get(name), installed,
+                              s=100 if installed else 90, zorder=22 if installed else 21)
 
     legend_handles = [
         Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
         Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
         Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=STATUS_GOOD, markeredgecolor="white",
-               markersize=11, label="Emitter — CCS installed", linestyle="None"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="none", markeredgecolor=STATUS_MUTED,
-               markersize=11, markeredgewidth=1.8, label="Emitter — no CCS", linestyle="None"),
+        *_capture_legend_handles(ccs_df),
         Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
                markersize=10, label="Transport hub", linestyle="None"),
         Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
@@ -500,10 +665,10 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
 
     n_installed = int(ccs_df["ccs_installed"].sum())
     n_total = len(ccs_df)
-    total_capture = ccs_df["size_ccs"].sum()
+    total_capture = ccs_df["captured_annual"].sum()
     kpi_text = (
         f"{n_installed}/{n_total} emitters equipped with CCS\n"
-        f"{total_capture:,.0f} t/h captured CO$_2$ capacity\n"
+        f"{total_capture:,.0f} t/yr captured CO$_2$\n"
         f"Network capex: €{summary['cost_capex_netws'] / 1e6:,.0f}M"
     )
     ax.text(
@@ -533,6 +698,7 @@ def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
     name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
     ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
+    family_map = dict(zip(ccs_df["node"], ccs_df["family"]))
     size_map = dict(zip(ccs_df["node"], ccs_df["total_emissions"]))
 
     s_min, s_max = size_range
@@ -578,21 +744,15 @@ def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
         else:
             area = marker_area(size_map.get(name, 0))
             installed = ccs_map.get(name, False)
-            if installed:
-                ax.scatter(point.x, point.y, marker="o", s=area, color=STATUS_GOOD,
-                           edgecolor="white", linewidth=1.2, alpha=0.85, zorder=22)
-            else:
-                ax.scatter(point.x, point.y, marker="o", s=area, facecolors="none",
-                           edgecolor=STATUS_MUTED, linewidth=1.8, zorder=21)
+            _scatter_emitter(ax, point.x, point.y, family_map.get(name), installed, s=area,
+                              zorder=22 if installed else 21, alpha=0.85 if installed else None,
+                              area_scale=False)
 
     legend_handles = [
         Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
         Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
         Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=STATUS_GOOD, markeredgecolor="white",
-               markersize=11, label="Emitter — CCS installed", linestyle="None"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="none", markeredgecolor=STATUS_MUTED,
-               markersize=11, markeredgewidth=1.8, label="Emitter — no CCS", linestyle="None"),
+        *_capture_legend_handles(ccs_df),
         Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
                markersize=10, label="Transport hub", linestyle="None"),
         Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
@@ -651,6 +811,7 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
     name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
     ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
+    family_map = dict(zip(ccs_df["node"], ccs_df["family"]))
 
     fig, ax = plt.subplots(figsize=(12.5, 12))
     fig.patch.set_facecolor(SURFACE)
@@ -698,21 +859,14 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
                        edgecolor="white", linewidth=1.2, zorder=20)
         else:
             installed = ccs_map.get(name, False)
-            if installed:
-                ax.scatter(point.x, point.y, marker="o", s=100, color=STATUS_GOOD,
-                           edgecolor="white", linewidth=1.2, zorder=22)
-            else:
-                ax.scatter(point.x, point.y, marker="o", s=90, facecolors="none",
-                           edgecolor=STATUS_MUTED, linewidth=1.8, zorder=21)
+            _scatter_emitter(ax, point.x, point.y, family_map.get(name), installed,
+                              s=100 if installed else 90, zorder=22 if installed else 21)
 
     legend_handles = [
         Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
         Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
         Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=STATUS_GOOD, markeredgecolor="white",
-               markersize=11, label="Emitter — CCS installed", linestyle="None"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="none", markeredgecolor=STATUS_MUTED,
-               markersize=11, markeredgewidth=1.8, label="Emitter — no CCS", linestyle="None"),
+        *_capture_legend_handles(ccs_df),
         Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
                markersize=10, label="Transport hub", linestyle="None"),
         Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
@@ -732,10 +886,10 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
 
     n_installed = int(ccs_df["ccs_installed"].sum())
     n_total = len(ccs_df)
-    total_capture = ccs_df["size_ccs"].sum()
+    total_capture = ccs_df["captured_annual"].sum()
     kpi_text = (
         f"{n_installed}/{n_total} emitters equipped with CCS\n"
-        f"{total_capture:,.0f} t/h captured CO$_2$ capacity\n"
+        f"{total_capture:,.0f} t/yr captured CO$_2$\n"
         f"Network capex: €{summary['cost_capex_netws'] / 1e6:,.0f}M"
     )
     ax.text(
@@ -776,6 +930,7 @@ def plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary, trunk_path: lis
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
     name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
     ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
+    family_map = dict(zip(ccs_df["node"], ccs_df["family"]))
 
     fig, ax = plt.subplots(figsize=(12.5, 12))
     fig.patch.set_facecolor(SURFACE)
@@ -830,21 +985,18 @@ def plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary, trunk_path: lis
                        alpha=(1.0 if on_trunk else 0.5), zorder=20)
         else:
             installed = ccs_map.get(name, False)
-            color = STATUS_GOOD if installed else "none"
-            edge = STATUS_MUTED if not installed else "white"
-            ax.scatter(point.x, point.y, marker="o", s=130 if on_trunk else 80, color=color,
-                       edgecolor=(TRUNK_COLOR if on_trunk else edge), linewidth=(2.8 if on_trunk else 1.4),
-                       alpha=(1.0 if on_trunk else 0.55), zorder=(22 if on_trunk else 18))
+            edge = TRUNK_COLOR if on_trunk else None
+            _scatter_emitter(ax, point.x, point.y, family_map.get(name), installed,
+                              s=130 if on_trunk else 80, zorder=22 if on_trunk else 18,
+                              edgecolor=edge, linewidth=2.8 if on_trunk else None,
+                              alpha=1.0 if on_trunk else 0.55)
 
     legend_handles = [
         Line2D([0], [0], color=TRUNK_COLOR, lw=4.5, label="Trunk line"),
         Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=2, label="Pipeline"),
         Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=2, label="Truck"),
         Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=2, label="Railway"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=STATUS_GOOD, markeredgecolor="white",
-               markersize=11, label="Emitter — CCS installed", linestyle="None"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="none", markeredgecolor=STATUS_MUTED,
-               markersize=11, markeredgewidth=1.8, label="Emitter — no CCS", linestyle="None"),
+        *_capture_legend_handles(ccs_df),
         Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
                markersize=10, label="Transport hub", linestyle="None"),
         Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
@@ -879,12 +1031,35 @@ def plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary, trunk_path: lis
 # ============================================================
 # PLOT 2 - Emitter zoom-in: captured vs. emitted CO2
 # ============================================================
-def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str = "WasteToEnergyEmitter"):
+def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str | None = None):
+    """
+    Captured vs. emitted CO2 for one node's capture technology.
+
+    tech_name can be left unset -- the node's capture-capable technology
+    (and its family, for the title) is auto-detected the same way
+    load_ccs_status does, so this works for any of the three capture
+    families without hardcoding a variable name (see classify_capture_family
+    / captured_co2_operation_key docstrings for why the underlying HDF5
+    dataset names differ by technology).
+    """
     with h5py.File(h5_path, "r") as f:
-        op = f["operation"]["technology_operation"]["period1"][node_name][tech_name]
-        captured = op["CO2captured_var_output_ccs"][()]
-        emitted = op["emissions_pos"][()]
         seq = f["k_means_specs"]["period1"]["sequence"][()]
+        design_node = f["design"]["nodes"]["period1"][node_name]
+        op_node = f["operation"]["technology_operation"]["period1"][node_name]
+
+        if tech_name is None:
+            for candidate in design_node.keys():
+                if classify_capture_family(design_node[candidate].keys()) is not None:
+                    tech_name = candidate
+                    break
+            if tech_name is None:
+                raise ValueError(f"No capture-capable technology found at node '{node_name}'")
+
+        family = classify_capture_family(design_node[tech_name].keys())
+        op = op_node[tech_name]
+        captured_key = captured_co2_operation_key(op.keys())
+        captured = op[captured_key][()]
+        emitted = op["emissions_pos"][()]
 
     captured_full = captured[seq - 1]
     emitted_full = emitted[seq - 1]
@@ -903,7 +1078,9 @@ def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str 
     ax.set_ylim(0, (captured_full + emitted_full).max() * 1.1)
     ax.set_xlabel("Hours [h]", fontsize=11)
     ax.set_ylabel("CO$_2$ rate (t/h)", fontsize=11)
-    ax.set_title(f"{node_name} — captured vs. emitted CO$_2$", fontsize=14, weight="bold", color=INK_PRIMARY)
+    family_label = FAMILY_LABELS.get(family, "capture technology")
+    ax.set_title(f"{node_name} ({family_label}) — captured vs. emitted CO$_2$",
+                 fontsize=14, weight="bold", color=INK_PRIMARY)
     ax.grid(True, alpha=0.6, linestyle="--", linewidth=0.5, color=GRIDLINE)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -965,18 +1142,30 @@ def plot_node_inflow(h5_path: Path, node_name: str = "Eni S.p.A Casalborsetti"):
 # PLOT 3 - Levelized cost breakdown: capture / transport / storage
 # ============================================================
 def plot_cost_breakdown(cost_breakdown: dict, per_tonne: bool = True):
-    """Stacked bar of capture/transport/storage cost by component. Carbon tax
-    is excluded on purpose -- this is the cost of running the chain, not the
-    cost of not running it."""
-    stages = {
-        "Capture": cost_breakdown["capture"],
-        "Transport": cost_breakdown["transport"],
-        "Storage": cost_breakdown["storage"],
-    }
+    """Stacked bar of chain-stage cost by component. Carbon tax is excluded
+    on purpose -- this is the cost of running the chain, not the cost of not
+    running it.
+
+    When the scenario mixes more than one capture technology (see
+    compute_cost_breakdown's 'capture_by_family'), the single "Capture" bar
+    is split into one bar per family instead, so the cost impact of each
+    capture technology is directly comparable -- the whole point of the
+    scenario matrix in main_italy.py. A single-family run (e.g. the
+    MEA-retrofit-only baseline) keeps the original single "Capture" bar."""
+    by_family = cost_breakdown["capture_by_family"]
+    stages = {}
+    if len(by_family) > 1:
+        for fam_label, costs in by_family.items():
+            stages[f"Capture\n({fam_label})"] = costs
+    else:
+        stages["Capture"] = cost_breakdown["capture"]
+    stages["Transport"] = cost_breakdown["transport"]
+    stages["Storage"] = cost_breakdown["storage"]
+
     divisor = cost_breakdown["total_stored_t"] if per_tonne else 1e6
     unit = "€/t CO$_2$ stored" if per_tonne else "Million €/year"
 
-    fig, ax = plt.subplots(figsize=(9.5, 6.2))
+    fig, ax = plt.subplots(figsize=(max(9.5, 2.3 * len(stages) + 3.5), 6.2))
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
 
@@ -1034,19 +1223,28 @@ def plot_summary_dashboard(built_arcs: pd.DataFrame, ccs_df: pd.DataFrame, cost_
     fig, axes = plt.subplots(1, 3, figsize=(16.5, 4.8))
     fig.patch.set_facecolor(SURFACE)
 
-    # Panel A: CCS adoption
+    # Panel A: CCS adoption by capture technology
     ax = axes[0]
     ax.set_facecolor(SURFACE)
-    n_installed = int(ccs_df["ccs_installed"].sum())
-    n_not = len(ccs_df) - n_installed
-    bars = ax.bar(["CCS\ninstalled", "No\nCCS"], [n_installed, n_not],
-                   color=[STATUS_GOOD, STATUS_MUTED], width=0.55)
-    for rect, v in zip(bars, [n_installed, n_not]):
+    installed_df = ccs_df[ccs_df["ccs_installed"]]
+    family_counts = installed_df["family"].value_counts()
+    n_not = int((~ccs_df["ccs_installed"]).sum())
+    present_families = [f for f in FAMILY_ORDER if family_counts.get(f, 0) > 0]
+    labels = [FAMILY_LABELS[f].replace(" ", "\n", 1) for f in present_families]
+    counts = [int(family_counts[f]) for f in present_families]
+    colors = [STATUS_GOOD] * len(present_families)
+    if n_not > 0:
+        labels.append("No\nCCS")
+        counts.append(n_not)
+        colors.append(STATUS_MUTED)
+    bars = ax.bar(labels, counts, color=colors, width=0.55)
+    for rect, v in zip(bars, counts):
         ax.text(rect.get_x() + rect.get_width() / 2, v + 0.6, str(v),
                 ha="center", fontsize=12, color=INK_PRIMARY, weight="bold")
-    ax.set_title("CCS adoption across emitters", fontsize=12.5, weight="bold", color=INK_PRIMARY)
+    ax.set_title("CCS adoption by capture technology", fontsize=12.5, weight="bold", color=INK_PRIMARY)
     ax.set_ylabel("Number of emitters", fontsize=10.5)
-    ax.set_ylim(0, max(n_installed, n_not) * 1.25)
+    ax.set_ylim(0, max(counts) * 1.25)
+    ax.tick_params(axis="x", labelsize=9.5)
 
     # Panel B: cost breakdown by chain stage (carbon tax excluded -- see the
     # dedicated ccs_chain_cost_breakdown_* figures for the component-level split)
