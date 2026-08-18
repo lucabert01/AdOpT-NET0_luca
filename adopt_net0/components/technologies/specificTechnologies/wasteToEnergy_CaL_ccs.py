@@ -171,10 +171,16 @@ class WasteToEnergyCaLCCS(Technology):
         )
 
         def init_tec_emissions_pos(const, t):
+            # NOTE: uses the raw b_tec.var_input/var_output (always indexed over
+            # self.set_t_global), not the self.input/self.output alias -- under
+            # typicaldays method 2 with this technology not in
+            # technologies_with_full_res, self.input/self.output alias to
+            # var_input_aux/var_output_aux, which are only indexed over the smaller
+            # self.set_t_performance (clustered) set and would raise a KeyError here.
             return (
-                self.input[t, "wasteIn"] * emission_factor
-                + rdf_per_tCO2 * self.output[t, "CO2captured"] * emission_factor_RDF
-                - self.output[t, "CO2captured"]
+                b_tec.var_input[t, "wasteIn"] * emission_factor
+                + rdf_per_tCO2 * b_tec.var_output[t, "CO2captured"] * emission_factor_RDF
+                - b_tec.var_output[t, "CO2captured"]
                 == b_tec.var_tec_emissions_pos[t]
             )
 

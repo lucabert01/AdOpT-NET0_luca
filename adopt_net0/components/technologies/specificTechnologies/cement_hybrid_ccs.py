@@ -3,7 +3,7 @@ import pyomo.gdp as gdp
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from ...utilities import annualize, set_discount_rate
+from ...utilities import annualize, set_discount_rate, link_full_resolution_to_clustered
 from ..technology import Technology
 from warnings import warn
 import logging
@@ -374,6 +374,34 @@ class CementHybridCCS(Technology):
             bounds=[0, self.processed_coeff.time_independent["size_max_mea"]],
         )
 
+        # var_co2_captured_mea is only ever indexed over set_t_performance. That's
+        # fine for the physical constraints below (they only need to hold at the
+        # representative/clustered timesteps), but _define_opex needs to sum it over
+        # every real hour (self.set_t_global) to compute an annual cost. Under
+        # typicaldays method 2 with this technology not in technologies_with_full_res,
+        # set_t_performance (clustered) is strictly smaller than set_t_global (full
+        # resolution) -- so we need a full-resolution copy, linked back to the
+        # clustered variable the same way the base Technology class does for
+        # var_input_aux/var_output_aux (see Technology._define_auxiliary_vars).
+        config = data["config"]
+        self.mea_needs_full_res_aux = (
+            config["optimization"]["typicaldays"]["N"]["value"] != 0
+            and config["optimization"]["typicaldays"]["method"]["value"] == 2
+            and not self.modelled_with_full_res
+        )
+        if self.mea_needs_full_res_aux:
+            b_tec.var_co2_captured_mea_full = pyo.Var(
+                self.set_t_global,
+                within=pyo.NonNegativeReals,
+                bounds=(0, self.processed_coeff.time_independent["size_max_mea"]),
+            )
+            b_tec.const_link_co2_captured_mea = link_full_resolution_to_clustered(
+                b_tec.var_co2_captured_mea,
+                b_tec.var_co2_captured_mea_full,
+                self.set_t_full,
+                self.sequence,
+            )
+
         return b_tec
 
     def _define_emissions(self, b_tec):
@@ -396,9 +424,13 @@ class CementHybridCCS(Technology):
 
         def init_tec_emissions_pos(const, t):
             """emissions_pos = output * emissionfactor"""
+            # Uses the raw b_tec.var_output (always indexed over self.set_t_global),
+            # not the self.output alias -- see the comment in _define_output about
+            # mea_needs_full_res_aux for why self.output can be indexed over a
+            # smaller set under typicaldays method 2.
             return (
-                self.output[t, "clinker"] * emissions_clinker
-                - self.output[t, "CO2captured"]
+                b_tec.var_output[t, "clinker"] * emissions_clinker
+                - b_tec.var_output[t, "CO2captured"]
                 == b_tec.var_tec_emissions_pos[t]
             )
 
@@ -640,6 +672,16 @@ class CementHybridCCS(Technology):
         hour_factors = data["hour_factors"]
         nr_timesteps_averaged = data["nr_timesteps_averaged"]
 
+        # See _define_output: var_co2_captured_mea is indexed over set_t_performance,
+        # which is only guaranteed to match set_t_global (needed for this sum) when
+        # mea_needs_full_res_aux is False -- otherwise use the linked full-resolution
+        # copy.
+        var_co2_captured_mea_global = (
+            b_tec.var_co2_captured_mea_full
+            if self.mea_needs_full_res_aux
+            else b_tec.var_co2_captured_mea
+        )
+
         def init_opex_variable(const):
             return (
                     sum(
@@ -651,7 +693,7 @@ class CementHybridCCS(Technology):
                                 * b_tec.para_opex_var_oxy
                         )
                         + (
-                                b_tec.var_co2_captured_mea[t]
+                                var_co2_captured_mea_global[t]
                                 * nr_timesteps_averaged
                                 * hour_factors[t - 1]
                                 * b_tec.para_opex_var_mea
