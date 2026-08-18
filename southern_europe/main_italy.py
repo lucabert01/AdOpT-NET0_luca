@@ -35,6 +35,7 @@ cop_hp = 2.6 # default
 levelized_capex_hp = 12.7 #computed from DanishEnergyAgency large HP excess heat
 electricity_import_limit = 1000 # default
 heat_import_limit = 3000 # default
+wasteIn_import_limit = 1000 # default -- must exceed WasteCaL_CCS.json's size_max (140 t/h per node) with headroom, otherwise infeasible
 max_transport_capacity = 3000
 carbon_tax = 200  # euro per tonne CO2
 enable_carbon_pricing = True
@@ -74,10 +75,10 @@ REFERENCE_EMITTER_TECHNOLOGIES = {
 # string, but WasteCaL_CCS.json's tec_type is "WasteToEnergyCaLCCS" while its filename
 # (and therefore what must go here) is "WasteCaL_CCS".
 SCENARIOS = [
-    {"name": "01_baseline_mea",   "tech_for_cement": ["CementEmitter"],   "tech_for_waste": ["WasteToEnergyEmitter"]},
-    {"name": "02_oxyfuel_cement", "tech_for_cement": ["CementHybridCCS"], "tech_for_waste": ["WasteToEnergyEmitter"]},
-    {"name": "03_cal_waste",      "tech_for_cement": ["CementEmitter"],   "tech_for_waste": ["WasteCaL_CCS"]},
-    {"name": "04_oxyfuel_cal",    "tech_for_cement": ["CementHybridCCS"], "tech_for_waste": ["WasteCaL_CCS"]},
+    {"name": "mea",    "tech_for_cement": ["CementEmitter"],   "tech_for_waste": ["WasteToEnergyEmitter"]},
+    {"name": "oxy",    "tech_for_cement": ["CementHybridCCS"], "tech_for_waste": ["WasteToEnergyEmitter"]},
+    {"name": "cal",    "tech_for_cement": ["CementEmitter"],   "tech_for_waste": ["WasteCaL_CCS"]},
+    {"name": "oxyCal", "tech_for_cement": ["CementHybridCCS"], "tech_for_waste": ["WasteCaL_CCS"]},
 ]
 
 #----- Import data-----#
@@ -148,6 +149,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
 
     #----- Create folder for results -----#
     result_path = f"./Results_CCSchainOptimization/{scenario_name}"
+    Path(result_path).mkdir(parents=True, exist_ok=True)
     # Create input data path and optimisation templates
     input_data_path = Path("Italy_CaseStudy") / scenario_name
     input_data_path.mkdir(parents=True, exist_ok=True)
@@ -184,10 +186,11 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     network_emission_flux = calculate_emitter_capacities(network_emission_flux, sector_emission_factor)
 
     #----- Update topology json with carriers assignment -----#
-    adopt.create_input_data_folder_template(input_data_path)
-
     # Assign carriers to nodes based on their types
-    assign_carriers_to_nodes(input_data_path, network_location, network_emission_flux)
+    assign_carriers_to_nodes(input_data_path, network_location, network_emission_flux,
+                              technology_selection)
+
+    adopt.create_input_data_folder_template(input_data_path)
 
     # Update configmodel json
     with open(input_data_path / "ConfigModel.json", "r") as json_file:
@@ -406,6 +409,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         electricity_import_limit,
         heat_import_limit,
         sector_emission_factor=sector_emission_factor,
+        wasteIn_import_limit=wasteIn_import_limit,
     )
 
     # ----- Apply Carbon Pricing -----#

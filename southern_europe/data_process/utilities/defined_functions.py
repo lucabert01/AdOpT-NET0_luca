@@ -204,7 +204,8 @@ def calculate_emitter_capacities(network_emission_flux, sector_emission_factor=N
     return network_emission_flux
 
 
-def assign_carriers_to_nodes(input_data_path, network_location, network_emission_flux):
+def assign_carriers_to_nodes(input_data_path, network_location, network_emission_flux,
+                              technology_selection=None):
     """
     Assign appropriate carriers to each node based on their type(s).
 
@@ -216,15 +217,23 @@ def assign_carriers_to_nodes(input_data_path, network_location, network_emission
     - Refining nodes also get: refined_product
     - Other nodes also get: industrial_product
     - Nodes with multiple emitters get all relevant carriers from both emitter types
+    - If WasteCaL_CCS is the selected Waste technology (technology_selection["Waste"]),
+      also add "wasteIn" -- WasteCaL_CCS.json's own input_carrier, distinct from the
+      generic "waste" product carrier.
 
     Parameters:
         - input_data_path: Path to the input data directory
         - network_location: DataFrame containing node information with node_name and node_type
         - network_emission_flux: DataFrame containing emission data with node_name and node_type
+        - technology_selection: dict mapping node_type -> list of technology names
+          (see assign_ccs_technologies_debug); used only to detect whether
+          WasteCaL_CCS is in play. Defaults to DEFAULT_TECHNOLOGY_SELECTION.
 
     Returns:
         - None (updates Topology.json file)
     """
+    if technology_selection is None:
+        technology_selection = DEFAULT_TECHNOLOGY_SELECTION
 
     # Get all unique nodes
     all_nodes = network_location['node_name'].unique().tolist()
@@ -253,6 +262,9 @@ def assign_carriers_to_nodes(input_data_path, network_location, network_emission
             emitter_type = emission_row['node_type']
             if emitter_type in emitter_carriers:
                 all_carriers.add(emitter_carriers[emitter_type])
+
+    if "WasteCaL_CCS" in technology_selection.get("Waste", []):
+        all_carriers.add("wasteIn")
 
     # Convert to sorted list for consistent output
     all_carriers = sorted(list(all_carriers))
@@ -1497,7 +1509,7 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
                         path_files_technologies, node_names, co2_intensity_electricity,
                         cop_hp, levelized_capex_hp, path_files_node_flux,
                         electricity_import_limit=100, heat_import_limit=200,
-                        sector_emission_factor=None):
+                        sector_emission_factor=None, wasteIn_import_limit=1000):
 
     import adopt_net0 as adopt
 
@@ -1511,6 +1523,15 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
                             columns=['Import limit'], carriers=['electricity'], nodes=node_names)
     adopt.fill_carrier_data(input_data_path, value_or_data=heat_import_limit,
                             columns=['Import limit'], carriers=['heat'], nodes=node_names)
+
+    # WasteCaL_CCS's "wasteIn" input carrier (raw feedstock waste) is only present in
+    # Topology.json's carrier list -- and therefore only has a carrier_data/wasteIn.csv
+    # per node -- when WasteCaL_CCS was actually selected (see assign_carriers_to_nodes).
+    with open(input_data_path / "Topology.json", "r") as f:
+        _topology_carriers = json.load(f)["carriers"]
+    if "wasteIn" in _topology_carriers:
+        adopt.fill_carrier_data(input_data_path, value_or_data=wasteIn_import_limit,
+                                columns=['Import limit'], carriers=['wasteIn'], nodes=node_names)
 
     # --- Emission factors ---
     adopt.fill_carrier_data(input_data_path, value_or_data=co2_intensity_electricity,
