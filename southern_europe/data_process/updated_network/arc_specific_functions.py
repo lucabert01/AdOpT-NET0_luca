@@ -17,6 +17,14 @@ from pathlib import Path
 import contextlib
 import io
 
+# emission_profile_emitters.xlsx (loaded via calculate_annual_emission_values)
+# is always in t CO2/h (see defined_functions.py's own comment where it's
+# consumed for demand profiles), so the 'annual_emission' column - and
+# get_node_emission()'s return value - are in TONNES/year, not kg/year despite
+# the "_kg_year" naming used at several call sites below. Every kg/s
+# conversion must scale by this factor.
+TONNES_TO_KG = 1000
+
 # Import the calculate_annual_emission_values function from the main project
 import sys
 import os
@@ -95,7 +103,7 @@ def load_network_data(data_path):
 
     # Calculate annual emission values
     print("Processing emission data...")
-    network_emission_flux = calculate_annual_emission_values(network_emission_flux)
+    network_emission_flux = calculate_annual_emission_values(network_emission_flux, path_files_node_flux)
     print(f"✅ Processed emission data for {len(network_emission_flux)} nodes")
 
     return {
@@ -234,9 +242,12 @@ def get_node_emission(node_id, network_emission_flux):
         else:
             return 0.0
 
-        # Handle pandas Series or array-like objects
+        # Handle pandas Series or array-like objects (e.g. a node_id shared by
+        # multiple co-located facility rows, such as node 20 "Piacenza" which
+        # has both a Waste and a Cement row) - sum across all matching rows
+        # rather than silently dropping all but the first.
         if hasattr(emission_value, 'iloc'):
-            emission_value = emission_value.iloc[0] if len(emission_value) > 0 else 0.0
+            emission_value = emission_value.sum() if len(emission_value) > 0 else 0.0
 
         # Convert to float and handle NaN values
         return float(emission_value) if not pd.isna(emission_value) else 0.0
@@ -312,7 +323,7 @@ def calculate_global_max_massflow(network_emission_flux):
     """
     total_annual_emission = calculate_total_annual_emission(network_emission_flux)
     seconds_per_year = 365 * 24 * 3600
-    global_max_massflow_kg_s = total_annual_emission / seconds_per_year
+    global_max_massflow_kg_s = total_annual_emission * TONNES_TO_KG / seconds_per_year
 
     print(f"📊 Total annual emission: {total_annual_emission:,.0f} kg/year")
     print(f"📊 Global max mass flow: {global_max_massflow_kg_s:.2f} kg/s")
@@ -345,7 +356,7 @@ def calculate_global_min_massflow(network_emission_flux):
 
     # Find minimum annual emission from emitting nodes
     min_emission_kg_year = emitting_nodes['annual_emission'].min()
-    min_emission_kg_s = min_emission_kg_year / seconds_per_year
+    min_emission_kg_s = min_emission_kg_year * TONNES_TO_KG / seconds_per_year
 
     print(f"📊 Global min mass flow: {min_emission_kg_s:.3f} kg/s (from smallest emitting node: {min_emission_kg_year:,.0f} kg/year)")
 
@@ -495,8 +506,8 @@ def get_pipeline_directions_and_flows(pipeline_name, network_nodes, network_pipe
 
         # Convert to kg/s
         seconds_per_year = 365 * 24 * 3600
-        emission_node1_kg_s = float(emission_node1) / seconds_per_year
-        emission_node2_kg_s = float(emission_node2) / seconds_per_year
+        emission_node1_kg_s = float(emission_node1) * TONNES_TO_KG / seconds_per_year
+        emission_node2_kg_s = float(emission_node2) * TONNES_TO_KG / seconds_per_year
 
         # Create direction configurations
         directions = []
@@ -537,7 +548,8 @@ def get_pipeline_directions_and_flows(pipeline_name, network_nodes, network_pipe
 # GAMMA CALCULATIONS
 # ============================================================================
 
-def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore"):
+def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore",
+                          massflow_min_kg_s_override=None, massflow_max_kg_s_override=None):
     """Calculate gamma1 and gamma2 for a specific arc
 
     Args:
@@ -545,6 +557,13 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore"):
         to_node: Target node ID
         data_dict: Dictionary containing all network data
         terrain: Terrain type ("Onshore" or "Offshore")
+        massflow_min_kg_s_override: If given (together with the max), skips the
+            automatic min-flow derivation (own emission / global min) and uses
+            this value directly. Used for manually curated per-arc mass-flow
+            ranges (see massflow_overrides_per_arc.xlsx).
+        massflow_max_kg_s_override: If given (together with the min), skips the
+            automatic max-flow derivation (global max) and uses this value
+            directly.
 
     Returns:
         tuple: (gamma1, gamma2) values, returns (0, 0) if calculation fails
@@ -556,7 +575,10 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore"):
     # disjunctive big-M), and gamma2 is set to one tenth of the smallest gamma2 among
     # all other pipeline arcs (132,736.25 EUR/(t/h) -> 13,273.625 EUR/(t/h)) so sizing
     # this arc still carries a small cost rather than being unbounded.
+    # (node_id can be shared by co-located facility rows, e.g. node 20 "Piacenza" -
+    # dedupe before the scalar .get() lookup, see determine_arc_terrain.)
     node_names = data_dict['network_nodes']['node_name']
+    node_names = node_names[~node_names.index.duplicated(keep='first')]
     from_node_name = node_names.get(from_node)
     to_node_name = node_names.get(to_node)
     if from_node_name == "Eni S.p.A Casalborsetti" and to_node_name == "Porto Corsini":
@@ -572,34 +594,38 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore"):
         print(f"⚠️  No distance data for arc {from_node} → {to_node}, using gamma values 0")
         return 0, 0
 
-    # Get source emission and calculate mass flow using shared function
-    source_emission_kg_year = get_node_emission(from_node, data_dict['network_emission_flux'])
-
-    # Calculate global max mass flow using shared function
-    global_max_massflow_kg_s = calculate_global_max_massflow(data_dict['network_emission_flux'])
-
-    # Calculate global min mass flow based on minimum node-wise annual emission
-    global_min_massflow_kg_s = calculate_global_min_massflow(data_dict['network_emission_flux'])
-
-    # Set mass flow range with proper handling for transport-only nodes
-    seconds_per_year = 365.25 * 24 * 3600
-    source_emission_kg_s = source_emission_kg_year / seconds_per_year
-
-    # IMPROVED: Handle transport-only nodes using global minimum from emitting nodes
-    if source_emission_kg_s < 0.1:  # Transport-only node (no significant local emissions)
-        # For transport nodes, use global minimum mass flow based on smallest emitting node
-        massflow_min_kg_s = global_min_massflow_kg_s
-        print(f"      🚇 Transport-only node {from_node}: using global min flow of {massflow_min_kg_s:.3f} kg/s")
+    if massflow_min_kg_s_override is not None and massflow_max_kg_s_override is not None:
+        # Manually curated range for this arc - skip the automatic derivation
+        # entirely (own emission / global min / global max heuristics).
+        massflow_min_kg_s = massflow_min_kg_s_override
+        massflow_max_kg_s = massflow_max_kg_s_override
+        print(f"      🖊️  Manual override for arc {from_node} → {to_node}: "
+              f"flow={massflow_min_kg_s:.3f}-{massflow_max_kg_s:.3f}kg/s")
     else:
-        # For emission nodes, use emission-based minimum flow
-        massflow_min_kg_s = max(source_emission_kg_s, 0.100)
-        print(f"      📍 Emission node {from_node}: using emission-based minimum flow of {massflow_min_kg_s:.3f} kg/s")
+        # Get source emission and calculate mass flow using shared function
+        source_emission_kg_year = get_node_emission(from_node, data_dict['network_emission_flux'])
 
-    massflow_max_kg_s = global_max_massflow_kg_s
+        # Calculate global max mass flow using shared function
+        global_max_massflow_kg_s = calculate_global_max_massflow(data_dict['network_emission_flux'])
 
-    kg_s_to_t_h = 3600 / 1000  # 3 600 s h-¹  ÷ 1 000 kg t-¹
-    massflow_min_t_h = massflow_min_kg_s * kg_s_to_t_h
-    massflow_max_t_h = massflow_max_kg_s * kg_s_to_t_h
+        # Calculate global min mass flow based on minimum node-wise annual emission
+        global_min_massflow_kg_s = calculate_global_min_massflow(data_dict['network_emission_flux'])
+
+        # Set mass flow range with proper handling for transport-only nodes
+        seconds_per_year = 365.25 * 24 * 3600
+        source_emission_kg_s = source_emission_kg_year * TONNES_TO_KG / seconds_per_year
+
+        # IMPROVED: Handle transport-only nodes using global minimum from emitting nodes
+        if source_emission_kg_s < 0.1:  # Transport-only node (no significant local emissions)
+            # For transport nodes, use global minimum mass flow based on smallest emitting node
+            massflow_min_kg_s = global_min_massflow_kg_s
+            print(f"      🚇 Transport-only node {from_node}: using global min flow of {massflow_min_kg_s:.3f} kg/s")
+        else:
+            # For emission nodes, use emission-based minimum flow
+            massflow_min_kg_s = max(source_emission_kg_s, 0.100)
+            print(f"      📍 Emission node {from_node}: using emission-based minimum flow of {massflow_min_kg_s:.3f} kg/s")
+
+        massflow_max_kg_s = global_max_massflow_kg_s
 
     # Visual terrain indicator
     terrain_info = "🌊 OFFSHORE" if terrain == "Offshore" else "🏞️ ONSHORE"
@@ -609,8 +635,8 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore"):
     # Create base options using shared function with specified terrain
     base_options = create_base_options(
         length_km,
-        massflow_min_t_h,
-        massflow_max_t_h,
+        massflow_min_kg_s,
+        massflow_max_kg_s,
         data_dict['avg_electricity_price_eur_mwh'],
         terrain=terrain,
         evaluation_points=10
@@ -664,15 +690,14 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore"):
         # IMPROVED: Additional debugging for specific error types
         if "'capex_pipe'" in str(e):
             print(f"      🔍 CAPEX calculation failed - likely due to:")
-            print(f"         • Mass flow range: {massflow_min_t_h:.3f} - {massflow_max_t_h:.3f} kg/s")
+            print(f"         • Mass flow range: {massflow_min_kg_s:.3f} - {massflow_max_kg_s:.3f} kg/s")
             print(f"         • Terrain type: {terrain}")
             print(f"         • Pipeline length: {length_km:.3f} km")
-            print(f"         • Source emission: {source_emission_kg_year:,.0f} kg/year")
 
         return 0, 0
 
 
-def create_gamma_matrices(data_dict, terrain_function=None):
+def create_gamma_matrices(data_dict, terrain_function=None, massflow_overrides=None):
     """Create gamma1 and gamma2 matrices for all arcs
 
     Args:
@@ -680,12 +705,19 @@ def create_gamma_matrices(data_dict, terrain_function=None):
         terrain_function: Optional function to determine terrain for each arc.
                          Should accept (from_node, to_node) and return terrain string.
                          If None, defaults to "Onshore" for all arcs.
+        massflow_overrides: Optional dict {(from_node, to_node): (min_kg_s, max_kg_s)}
+                         of manually curated mass-flow ranges (see
+                         massflow_overrides_per_arc.xlsx / load_massflow_overrides).
+                         Arcs not present in the dict keep the automatic
+                         min/max derivation.
 
     Returns:
         tuple: (gamma1_matrix, gamma2_matrix)
     """
 
     print_section_header("CALCULATING GAMMA VALUES FOR ALL ARCS")
+
+    massflow_overrides = massflow_overrides or {}
 
     # Get all unique nodes
     all_nodes = sorted(set(data_dict['network_pipeline'].index) | set(data_dict['network_pipeline'].columns))
@@ -712,7 +744,14 @@ def create_gamma_matrices(data_dict, terrain_function=None):
         else:
             terrain = "Onshore"  # Default terrain
 
-        gamma1, gamma2 = calculate_arc_gammas(from_node, to_node, data_dict, terrain=terrain)
+        override = massflow_overrides.get((from_node, to_node))
+        min_override, max_override = override if override is not None else (None, None)
+
+        gamma1, gamma2 = calculate_arc_gammas(
+            from_node, to_node, data_dict, terrain=terrain,
+            massflow_min_kg_s_override=min_override,
+            massflow_max_kg_s_override=max_override,
+        )
 
         # Always set the values (now they're either calculated values or 0)
         gamma1_matrix.loc[from_node, to_node] = gamma1
@@ -824,15 +863,15 @@ def calculate_average_electricity_price(electricity_price_df):
     return round(avg_price, 2)
 
 
-def create_base_options(length_km, massflow_min_t_h, massflow_max_t_h,
+def create_base_options(length_km, massflow_min_kg_s, massflow_max_kg_s,
                         avg_electricity_price_eur_mwh, terrain="Onshore", evaluation_points=10):
     """
     Create base options dictionary for cost model calculations
 
     Args:
         length_km: Pipeline length in km
-        massflow_min_t_h: Minimum mass flow in t/h
-        massflow_max_t_h: Maximum mass flow in t/h
+        massflow_min_kg_s: Minimum mass flow in kg/s
+        massflow_max_kg_s: Maximum mass flow in kg/s
         avg_electricity_price_eur_mwh: Average electricity price
         terrain: Terrain type ("Onshore" or "Offshore")
         evaluation_points: Number of evaluation points
@@ -840,13 +879,19 @@ def create_base_options(length_km, massflow_min_t_h, massflow_max_t_h,
     Returns:
         dict: Base options for cost model
     """
+    # NOTE: CO2_Pipeline_CostModel._set_options / default_options only look for
+    # "massflow_min_kg_per_s" / "massflow_max_kg_per_s" (see
+    # enhanced_co2_pipelines_cost_model.py). Passing any other key name here
+    # is silently ignored and the model falls back to its class default
+    # (5-10 kg/s) regardless of the arc - this previously made every arc's
+    # gamma1/gamma2 insensitive to its actual mass-flow range.
     return {
         "length_km": length_km,
         "currency_out": "EUR",
         "financial_year_out": 2024,
         "discount_rate": 0.1,
-        "massflow_min_t_h": massflow_min_t_h,
-        "massflow_max_t_h": massflow_max_t_h,
+        "massflow_min_kg_per_s": massflow_min_kg_s,
+        "massflow_max_kg_per_s": massflow_max_kg_s,
         "massflow_evaluation_points": evaluation_points,
         "terrain": terrain,
         "timeframe": "mid-term",
@@ -879,6 +924,192 @@ def add_geographical_options(base_options, morpho_data, soil_data, anthro_data,
         "intersected_proportions": intersected_proportions
     })
     return enhanced_options
+
+
+# ============================================================================
+# MANUAL MASS-FLOW OVERRIDES (per-arc min/max, curated via the dashboard)
+# ============================================================================
+
+MASSFLOW_OVERRIDE_COLUMNS = [
+    "from_node", "to_node", "from_name", "to_name",
+    "massflow_min_kg_s", "massflow_max_kg_s",
+    "contributing_emitters", "contributing_emitters_names",
+    "note", "last_updated",
+    # Filled in once the arc has actually been re-run through the Oeuvray
+    # model with this range (left blank by a plain range save, so the
+    # dashboard can tell "saved" apart from "saved and recomputed").
+    "computed_gamma1", "computed_gamma2", "computed_at",
+]
+
+
+def load_massflow_overrides_df(path):
+    """
+    Load the manual per-arc mass-flow override table.
+
+    Args:
+        path: Path to massflow_overrides_per_arc.xlsx (may not exist yet)
+
+    Returns:
+        pd.DataFrame: one row per overridden arc, columns per
+            MASSFLOW_OVERRIDE_COLUMNS. Empty (but correctly shaped) if the
+            file does not exist yet.
+    """
+    path = Path(path)
+    if not path.exists():
+        return pd.DataFrame(columns=MASSFLOW_OVERRIDE_COLUMNS)
+
+    df = pd.read_excel(path, sheet_name="overrides")
+    for col in MASSFLOW_OVERRIDE_COLUMNS:
+        if col not in df.columns:
+            df[col] = None
+    return df[MASSFLOW_OVERRIDE_COLUMNS]
+
+
+def load_massflow_overrides(path):
+    """
+    Load the manual per-arc mass-flow overrides as a lookup dict, ready to
+    pass into create_gamma_matrices(..., massflow_overrides=...).
+
+    Args:
+        path: Path to massflow_overrides_per_arc.xlsx (may not exist yet)
+
+    Returns:
+        dict: {(from_node, to_node): (massflow_min_kg_s, massflow_max_kg_s)}
+    """
+    df = load_massflow_overrides_df(path)
+    overrides = {}
+    for _, row in df.iterrows():
+        if pd.isna(row["massflow_min_kg_s"]) or pd.isna(row["massflow_max_kg_s"]):
+            continue
+        key = (int(row["from_node"]), int(row["to_node"]))
+        overrides[key] = (float(row["massflow_min_kg_s"]), float(row["massflow_max_kg_s"]))
+    return overrides
+
+
+def save_massflow_override(path, from_node, to_node, from_name, to_name,
+                            massflow_min_kg_s, massflow_max_kg_s,
+                            contributing_emitters=None, contributing_emitters_names=None,
+                            note="", computed_gamma1=None, computed_gamma2=None):
+    """
+    Upsert one arc's manual mass-flow range into massflow_overrides_per_arc.xlsx,
+    keyed by (from_node, to_node). Creates the file if it does not exist yet.
+
+    Args:
+        path: Path to massflow_overrides_per_arc.xlsx
+        from_node, to_node: Arc node IDs
+        from_name, to_name: Node names (for human-readable review)
+        massflow_min_kg_s, massflow_max_kg_s: The curated range
+        contributing_emitters: List of node IDs considered "behind" this arc
+        contributing_emitters_names: List of matching node names
+        note: Optional free-text note
+        computed_gamma1, computed_gamma2: Pass the freshly computed gamma
+            values when this save follows a recompute, to mark the row as
+            up to date. Leave as None (default) for a plain range/metadata
+            save - this intentionally clears any previous computed_gamma*
+            values, since they no longer reflect the edited range.
+
+    Returns:
+        pd.DataFrame: the updated override table
+    """
+    import datetime
+
+    path = Path(path)
+    df = load_massflow_overrides_df(path)
+
+    contributing_emitters = contributing_emitters or []
+    contributing_emitters_names = contributing_emitters_names or []
+
+    new_row = {
+        "from_node": int(from_node),
+        "to_node": int(to_node),
+        "from_name": from_name,
+        "to_name": to_name,
+        "massflow_min_kg_s": float(massflow_min_kg_s),
+        "massflow_max_kg_s": float(massflow_max_kg_s),
+        "contributing_emitters": ",".join(str(n) for n in contributing_emitters),
+        "contributing_emitters_names": "; ".join(str(n) for n in contributing_emitters_names),
+        "note": note or "",
+        "last_updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "computed_gamma1": computed_gamma1,
+        "computed_gamma2": computed_gamma2,
+        "computed_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") if computed_gamma1 is not None else None,
+    }
+
+    # Drop any existing row for this arc, then append the new one - avoids
+    # pandas dtype-coercion warnings from in-place assignment into a mixed
+    # dtype column (e.g. an all-NaN computed_gamma1 float column receiving
+    # its first real value).
+    mask = (df["from_node"] == int(from_node)) & (df["to_node"] == int(to_node))
+    df = df[~mask]
+    new_row_df = pd.DataFrame([new_row])
+    df = new_row_df.copy() if df.empty else pd.concat([df, new_row_df], ignore_index=True)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="overrides", index=False)
+
+    return df
+
+
+def delete_massflow_override(path, from_node, to_node):
+    """Remove one arc's manual override (arc reverts to automatic min/max)."""
+    path = Path(path)
+    df = load_massflow_overrides_df(path)
+    mask = (df["from_node"] == int(from_node)) & (df["to_node"] == int(to_node))
+    df = df[~mask]
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="overrides", index=False)
+
+    return df
+
+
+def patch_gamma_matrix_file(path, from_node, to_node, gamma1, gamma2, all_nodes=None):
+    """
+    Patch a single arc's gamma1/gamma2 values directly into an existing
+    gamma matrix workbook (capex_defined_per_arc.xlsx or
+    gamma_defined_per_arc_pipeline.xlsx), leaving every other cell untouched.
+    Creates the file (sized to all_nodes, filled with zeros) if it doesn't
+    exist yet.
+
+    Args:
+        path: Path to the gamma matrix workbook (sheets gamma1..gamma4)
+        from_node, to_node: Arc node IDs
+        gamma1, gamma2: New values for that arc
+        all_nodes: Node ID list to size a freshly created workbook to
+            (ignored if the file already exists)
+
+    Returns:
+        bool: True if the file was patched/created successfully
+    """
+    path = Path(path)
+
+    if path.exists():
+        sheets = pd.read_excel(path, sheet_name=None, index_col=0)
+        for name in ["gamma1", "gamma2", "gamma3", "gamma4"]:
+            if name not in sheets:
+                raise ValueError(f"{path} is missing expected sheet '{name}'")
+        sheets["gamma1"].columns = sheets["gamma1"].columns.astype(int)
+        sheets["gamma2"].columns = sheets["gamma2"].columns.astype(int)
+    else:
+        if all_nodes is None:
+            raise ValueError(f"{path} does not exist yet - pass all_nodes to create it")
+        zeros = pd.DataFrame(0.0, index=all_nodes, columns=all_nodes)
+        sheets = {"gamma1": zeros.copy(), "gamma2": zeros.copy(),
+                  "gamma3": zeros.copy(), "gamma4": zeros.copy()}
+
+    if from_node not in sheets["gamma1"].index or to_node not in sheets["gamma1"].columns:
+        raise ValueError(f"Arc {from_node} -> {to_node} is out of range for {path}")
+
+    sheets["gamma1"].loc[from_node, to_node] = gamma1
+    sheets["gamma2"].loc[from_node, to_node] = gamma2
+
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        for name in ["gamma1", "gamma2", "gamma3", "gamma4"]:
+            sheets[name].to_excel(writer, sheet_name=name, index=True)
+
+    return True
 
 
 def save_to_excel(gamma1_matrix, gamma2_matrix, gamma3_matrix=None, gamma4_matrix=None,
@@ -963,7 +1194,12 @@ def determine_arc_terrain(from_node, to_node, data_dict):
     Returns:
         str: "Offshore" for the Casalborsetti -> Porto Corsini arc, "Onshore" for all others
     """
+    # A node_id can be shared by multiple co-located facility rows (e.g. node 20
+    # "Piacenza" has both a Waste and a Cement row), which makes a plain
+    # Series.get() return a Series instead of a scalar. The name is identical
+    # across those duplicate rows, so keeping the first is safe here.
     node_names = data_dict['network_nodes']['node_name']
+    node_names = node_names[~node_names.index.duplicated(keep='first')]
     from_node_name = node_names.get(from_node)
     to_node_name = node_names.get(to_node)
 

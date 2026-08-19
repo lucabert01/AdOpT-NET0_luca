@@ -33,7 +33,8 @@ from arc_specific_functions import (
     add_geographical_options,
     print_section_header,
     save_to_excel,
-    determine_arc_terrain
+    determine_arc_terrain,
+    load_massflow_overrides,
 )
 
 
@@ -117,8 +118,20 @@ def main():
         print("   Note: Verbose output from cost model is suppressed - only key progress will be shown")
         print("   Note: Failed calculations will be set to 0 instead of NaN")
 
-        # Pass the terrain determination function to create_gamma_matrices
-        gamma1_matrix, gamma2_matrix = create_gamma_matrices(data_dict, terrain_function=determine_arc_terrain)
+        # Load any manually curated per-arc mass-flow ranges (set via the
+        # massflow editor dashboard). Arcs without a saved override keep the
+        # automatic min/max derivation.
+        overrides_path = Path("../../italy_data/network_capex_metrics/massflow_overrides_per_arc.xlsx")
+        massflow_overrides = load_massflow_overrides(overrides_path)
+        if massflow_overrides:
+            print(f"\n🖊️  Loaded {len(massflow_overrides)} manual mass-flow override(s) from {overrides_path}")
+        else:
+            print(f"\nℹ️  No manual mass-flow overrides found at {overrides_path} - using automatic min/max for all arcs")
+
+        # Pass the terrain determination function and any overrides to create_gamma_matrices
+        gamma1_matrix, gamma2_matrix = create_gamma_matrices(
+            data_dict, terrain_function=determine_arc_terrain, massflow_overrides=massflow_overrides
+        )
 
         # Verify gamma calculations
         gamma1_nonzero = (gamma1_matrix != 0).sum().sum()
