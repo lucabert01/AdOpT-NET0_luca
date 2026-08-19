@@ -889,16 +889,22 @@ def update_network_connection_matrix(input_data_path, network_data_dict):
 
     print(f"🔍 DEBUG: Template connection matrix shape: {template_connection.shape}")
 
-    # Mapping from network data keys to network type folders
-    network_type_mapping = {
-        'pipeline': 'CO2_Pipeline',
-        'truck': 'CO2Truck',
-        'railway': 'CO2Railway',
-        'ship': 'CO2Ship'
-    }
+    # Mapping from network data keys to network type folders. Several network
+    # types can share the same underlying data key (e.g. the three pipeline
+    # size classes all reuse the 'pipeline' connectivity matrix - only their
+    # gammas differ), hence a list of pairs rather than a 1:1 dict.
+    network_type_mapping = [
+        ('pipeline', 'CO2_Pipeline'),
+        ('pipeline', 'CO2_Pipeline_small'),
+        ('pipeline', 'CO2_Pipeline_medium'),
+        ('pipeline', 'CO2_Pipeline_large'),
+        ('truck', 'CO2Truck'),
+        ('railway', 'CO2Railway'),
+        ('ship', 'CO2Ship'),
+    ]
 
     # Process each network data type
-    for data_key, network_type in network_type_mapping.items():
+    for data_key, network_type in network_type_mapping:
         if data_key not in network_data_dict:
             print(f"Warning: {data_key} data not found in network_data_dict")
             continue
@@ -939,6 +945,7 @@ def update_network_connection_matrix(input_data_path, network_data_dict):
 
         # Save the updated connection matrix to the specific network type folder
         output_path = input_data_path / "period1" / "network_topology" / "new" / network_type / "connection.csv"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # FIXED: Ensure proper CSV formatting
         try:
@@ -951,7 +958,8 @@ def update_network_connection_matrix(input_data_path, network_data_dict):
     return True
 
 
-def update_network_size_max_arcs(input_data_path, network_data_dict, max_transport_capacity):
+def update_network_size_max_arcs(input_data_path, network_data_dict, max_transport_capacity,
+                                  per_network_type_capacity=None):
     """
     Update size_max_arcs matrices using a predefined transport capacity value.
     Uses the max_transport_capacity parameter from scenario parameterization.
@@ -959,33 +967,53 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
     Parameters:
     - input_data_path: Path object pointing to the input data directory
     - network_data_dict: Dictionary with keys 'pipeline', 'truck', 'railway', 'ship' containing network data
-    - max_transport_capacity: Predefined maximum transport capacity in tonnes/hour
+    - max_transport_capacity: Default maximum transport capacity in tonnes/hour, used for
+      any network type not present in per_network_type_capacity
+    - per_network_type_capacity: Optional dict {network_type: max_capacity_t_h} overriding
+      max_transport_capacity for specific network types. Needed for the pipeline size
+      classes: since size_max_defined_per_arc=1 in their JSONs, the JSON's own scalar
+      size_max is never read by the model (see network.py::fit_network_performance) -
+      size_max_arcs.csv (written here) is the ONLY thing that actually bounds a built
+      arc's capacity. Leaving all three classes at the same flat max_transport_capacity
+      would let e.g. a 'small' pipe (calibrated for ~11-104 t/h) get built at, say,
+      2000 t/h using its extrapolated - and wrong outside that range - gamma1/gamma2,
+      which defeats the purpose of having distinct calibrated size classes.
     """
+    per_network_type_capacity = per_network_type_capacity or {}
+
     # Load the template size_max_arcs CSV
     template_size_max = pd.read_csv(input_data_path / "period1" / "network_topology" / "new" / "size_max_arcs.csv",
                                     sep=";", index_col=0)
 
     print(f"🔍 PREDEFINED Network sizing:")
-    print(f"  Using predefined transport capacity: {max_transport_capacity:.2f} tonnes/hour")
-    print(f"  Applied to all connected arcs in all network types")
+    print(f"  Default transport capacity: {max_transport_capacity:.2f} tonnes/hour")
+    if per_network_type_capacity:
+        print(f"  Per-network-type overrides: {per_network_type_capacity}")
 
-    # Mapping from network data keys to network type folders
-    network_type_mapping = {
-        'pipeline': 'CO2_Pipeline',
-        'truck': 'CO2Truck',
-        'railway': 'CO2Railway',
-        'ship': 'CO2Ship'
-    }
+    # Mapping from network data keys to network type folders. Several network
+    # types can share the same underlying data key (e.g. the three pipeline
+    # size classes all reuse the 'pipeline' connectivity matrix), hence a
+    # list of pairs rather than a 1:1 dict.
+    network_type_mapping = [
+        ('pipeline', 'CO2_Pipeline'),
+        ('pipeline', 'CO2_Pipeline_small'),
+        ('pipeline', 'CO2_Pipeline_medium'),
+        ('pipeline', 'CO2_Pipeline_large'),
+        ('truck', 'CO2Truck'),
+        ('railway', 'CO2Railway'),
+        ('ship', 'CO2Ship'),
+    ]
 
-    # Process each network data type with the same predefined capacity
-    for data_key, network_type in network_type_mapping.items():
+    # Process each network data type with its own (or the default) predefined capacity
+    for data_key, network_type in network_type_mapping:
         if data_key not in network_data_dict:
             print(f"Warning: {data_key} data not found in network_data_dict")
             continue
 
+        network_capacity = per_network_type_capacity.get(network_type, max_transport_capacity)
         network_data = network_data_dict[data_key]
 
-        print(f"🔍 Processing {network_type} with capacity {max_transport_capacity:.2f} tonnes/hour")
+        print(f"🔍 Processing {network_type} with capacity {network_capacity:.2f} tonnes/hour")
 
         # Create updated size_max_arcs matrix for this network type
         updated_size_max = template_size_max.copy()
@@ -1006,7 +1034,7 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
             connection_matrix = (network_data_numeric.values > 0).astype(int)
 
             # Create size_max_arcs matrix: connection_matrix * predefined capacity
-            size_max_values = connection_matrix * max_transport_capacity
+            size_max_values = connection_matrix * network_capacity
 
             # Update the template matrix
             updated_size_max = updated_size_max.astype(float)
@@ -1014,7 +1042,7 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
 
             # Count connections for this network type
             num_connections = np.count_nonzero(connection_matrix)
-            print(f"   {num_connections} connections found with capacity {max_transport_capacity:.2f} tonnes/hour each")
+            print(f"   {num_connections} connections found with capacity {network_capacity:.2f} tonnes/hour each")
 
             # Ensure matrix has proper minimum dimensions
             if updated_size_max.empty or updated_size_max.shape[0] == 0 or updated_size_max.shape[1] == 0:
@@ -1029,6 +1057,7 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
 
         # Save the updated size_max_arcs matrix to the specific network type folder
         output_path = input_data_path / "period1" / "network_topology" / "new" / network_type / "size_max_arcs.csv"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
             updated_size_max.to_csv(output_path, sep=";", float_format='%.2f',
@@ -1038,10 +1067,8 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
             print(f"❌ Error saving size_max matrix for {network_type}: {e}")
             continue
 
-    print(f"\n✅ PREDEFINED: All networks use {max_transport_capacity:.2f} tonnes/hour capacity")
-    print(f"   - Pipeline arcs: {max_transport_capacity:.2f} t/h")
-    print(f"   - Truck arcs: {max_transport_capacity:.2f} t/h")
-    print(f"   - Railway arcs: {max_transport_capacity:.2f} t/h")
+    print(f"\n✅ Network sizing complete (default {max_transport_capacity:.2f} t/h"
+          f"{', per-type overrides: ' + str(per_network_type_capacity) if per_network_type_capacity else ''})")
 
     return True
 
@@ -1225,7 +1252,7 @@ def process_gamma_sheets_to_csv(path_files_network_capex, input_data_path, netwo
     """
 
     # Validate transport mode
-    valid_modes = ["pipeline"]
+    valid_modes = ["pipeline", "pipeline_small", "pipeline_medium", "pipeline_large"]
     if transport_mode.lower() not in valid_modes:
         raise ValueError(f"transport_mode must be one of {valid_modes}, got: {transport_mode}")
 
@@ -1259,6 +1286,9 @@ def process_gamma_sheets_to_csv(path_files_network_capex, input_data_path, netwo
     # Define the output directory based on transport mode
     transport_mode_mapping = {
         "pipeline": "CO2_Pipeline",
+        "pipeline_small": "CO2_Pipeline_small",
+        "pipeline_medium": "CO2_Pipeline_medium",
+        "pipeline_large": "CO2_Pipeline_large",
         "truck": "CO2Truck",
         "railway": "CO2Railway"
     }
@@ -1798,6 +1828,9 @@ def update_network_distance_matrix_debug(input_data_path, network_data_dict, net
         # Get network data
         data_mapping = {
             'CO2_Pipeline': 'pipeline',
+            'CO2_Pipeline_small': 'pipeline',
+            'CO2_Pipeline_medium': 'pipeline',
+            'CO2_Pipeline_large': 'pipeline',
             'CO2Truck': 'truck',
             'CO2Railway': 'railway',
             'CO2Ship': 'ship'

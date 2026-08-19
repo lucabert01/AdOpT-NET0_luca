@@ -37,202 +37,155 @@ from arc_specific_functions import (
     load_massflow_overrides,
 )
 
+# ============================================================================
+# PIPELINE SIZE CLASSES
+# ============================================================================
+# Three separate CO2_Pipeline_{small,medium,large} network technologies (see
+# italy_data/networks/CO2_Pipeline_{small,medium,large}.json) each get their
+# own gamma1/gamma2 matrix, computed from a FIXED mass-flow range (kg/s)
+# applied to every arc for that class - unlike the old single-CO2_Pipeline
+# approach, which derived a different min/max per arc from that arc's own
+# emissions.
+#
+# Derived from the arcs actually built in
+# Results_CCSchainOptimization/20260711184007_emissions_minC-1 (41 arcs, used
+# as a realistic sample of pipeline sizes since geography drives topology far
+# more than the exact cost coefficients). For each, the TRUE capex at that
+# arc's real flow was recomputed with the bug-fixed Oeuvray model and
+# normalized by length (capex_per_km vs flow_kg_s), giving
+# capex_per_km ~= 199,080 * flow_kg_s^0.433 (log-log R2=0.73) - strong
+# economies of scale, steep at small flow and flattening at large flow. The
+# two breakpoints below minimize the piecewise-linear approximation error of
+# that curve (i.e. chosen so each class's straight-line gamma1+gamma2*size
+# fit is a good local approximation), then padded to the network's true
+# floor (~3.1 kg/s, smallest single emitter) and ceiling (~466 kg/s, total
+# network emissions) so nothing falls outside all three ranges.
+SIZE_CLASS_MASSFLOW_RANGES_KG_S = {
+    "small": (3.1, 29.0),
+    "medium": (29.0, 133.0),
+    "large": (133.0, 470.0),
+}
+
+
+def compute_gammas_for_size_class(size_class, fixed_range_kg_s, data_dict, possible_arcs,
+                                   output_dir, dashboard_overrides_path):
+    """
+    Compute gamma1/gamma2 for every arc for one pipeline size class and save
+    to capex_defined_per_arc_{size_class}.xlsx.
+
+    Args:
+        size_class: "small" | "medium" | "large" (used for the output filename)
+        fixed_range_kg_s: (min_kg_s, max_kg_s) applied to every arc for this
+            class, or None to fall back to the automatic per-arc derivation
+            (plus any dashboard overrides).
+        data_dict: Network data dict from load_network_data (with
+            intersection_data already attached)
+        possible_arcs: List of (from_node, to_node) tuples
+        output_dir: network_capex_metrics directory
+        dashboard_overrides_path: Path to massflow_overrides_per_arc.xlsx,
+            only consulted when fixed_range_kg_s is None
+
+    Returns:
+        Path to the saved capex_defined_per_arc_{size_class}.xlsx file
+    """
+    print_section_header(f"PIPELINE SIZE CLASS: {size_class.upper()}")
+
+    if fixed_range_kg_s is not None:
+        min_kg_s, max_kg_s = fixed_range_kg_s
+        print(f"🖊️  Fixed mass-flow range for '{size_class}': {min_kg_s:.3f} - {max_kg_s:.3f} kg/s "
+              f"(applied to all {len(possible_arcs)} arcs)")
+        massflow_overrides = {arc: (min_kg_s, max_kg_s) for arc in possible_arcs}
+    else:
+        print(f"⚠️  No fixed range set for '{size_class}' yet (SIZE_CLASS_MASSFLOW_RANGES_KG_S) - "
+              f"falling back to automatic per-arc min/max derivation")
+        massflow_overrides = load_massflow_overrides(dashboard_overrides_path)
+        if massflow_overrides:
+            print(f"🖊️  Loaded {len(massflow_overrides)} manual mass-flow override(s) from {dashboard_overrides_path}")
+
+    gamma1_matrix, gamma2_matrix = create_gamma_matrices(
+        data_dict, terrain_function=determine_arc_terrain, massflow_overrides=massflow_overrides
+    )
+    gamma3_matrix, gamma4_matrix = create_zero_gamma_matrices(gamma1_matrix)
+
+    gamma1_nonzero = (gamma1_matrix != 0).sum().sum()
+    gamma2_nonzero = (gamma2_matrix != 0).sum().sum()
+    print(f"\n📊 '{size_class}' gamma calculation results:")
+    print(f"   Gamma1 non-zero values: {gamma1_nonzero} / {len(possible_arcs)} arcs")
+    print(f"   Gamma2 non-zero values: {gamma2_nonzero} / {len(possible_arcs)} arcs")
+
+    if gamma1_nonzero > 0:
+        v1 = gamma1_matrix.values.flatten(); v1 = v1[v1 != 0]
+        v2 = gamma2_matrix.values.flatten(); v2 = v2[v2 != 0]
+        print(f"   Gamma1: min={v1.min():,.0f}, max={v1.max():,.0f}, mean={v1.mean():,.0f} EUR")
+        print(f"   Gamma2: min={v2.min():.3f}, max={v2.max():.3f}, mean={v2.mean():.3f} EUR/(t/h)")
+
+    output_file = output_dir / f"capex_defined_per_arc_{size_class}.xlsx"
+    save_to_excel(gamma1_matrix, gamma2_matrix, gamma3_matrix, gamma4_matrix, filename=str(output_file))
+    print(f"📁 Saved: {output_file.absolute()}")
+
+    return output_file
+
 
 def main():
     """Main execution function"""
 
-    print_section_header("FULL NETWORK ARC GAMMA CALCULATOR")
-    print("This script calculates gamma1 and gamma2 values for every possible arc")
-    print("in the network and saves them as matrices in an Excel file.")
-    print("Gamma3 and gamma4 matrices will be created with zeros.")
+    print_section_header("FULL NETWORK ARC GAMMA CALCULATOR (3 PIPELINE SIZE CLASSES)")
+    print("This script calculates gamma1/gamma2 for every possible arc, once per")
+    print("pipeline size class (small/medium/large), and saves each as its own")
+    print("capex_defined_per_arc_{size_class}.xlsx. Gamma3/gamma4 are zeros.")
     print("\n🌊 SPECIAL CONFIGURATION: Arc Eni S.p.A Casalborsetti -> Porto Corsini will be processed as OFFSHORE terrain")
     print("🏞️  All other arcs will be processed as ONSHORE terrain")
     print("\n🔇 VERBOSE OUTPUT: Cost model calculations are suppressed for cleaner output")
     print("📊 UPDATED BEHAVIOR: Failed calculations will be set to 0 instead of NaN")
 
     try:
-        # Load all data using shared function
+        # Load all data ONCE (geo data / electricity prices / emissions are
+        # shared across all three size classes)
         print("\n🔄 Loading network data...")
         data_dict = load_network_data("../../italy_data")
 
-        # Verify data loaded correctly
         print(f"\n📊 Data verification:")
         print(f"   Nodes: {len(data_dict['network_nodes'])}")
         print(f"   Distance matrix: {data_dict['network_distance'].shape}")
         print(f"   Pipeline matrix: {data_dict['network_pipeline'].shape}")
-        print(f"   Emission data: {len(data_dict['network_emission_flux'])}")
 
-        # Check if annual_emission column exists
-        if 'annual_emission' in data_dict['network_emission_flux'].columns:
-            total_emission = data_dict['network_emission_flux']['annual_emission'].sum()
-            print(f"   Total annual emissions: {total_emission:,.0f} kg/year")
-        else:
-            print(f"   ⚠️  Warning: 'annual_emission' column not found in emission data")
-            print(f"   Available columns: {list(data_dict['network_emission_flux'].columns)}")
-
-        # Load intersection data using shared function
-        print("\n🔄 Loading intersection data...")
-        intersection_file_path = Path("../../italy_data/geographical_feature/route_grid_intersections.xlsx")
-
-        # Get all possible arcs to determine which intersection data to load
-        possible_arcs = get_all_possible_arcs(data_dict['network_pipeline'])
-        pipeline_names = [f"{from_node}_{to_node}" for from_node, to_node in possible_arcs]
-
-        print(f"   Found {len(possible_arcs)} possible arcs")
-        if len(possible_arcs) > 0:
-            print(f"   Sample arcs: {possible_arcs[:5]}")  # Show first 5 arcs
-
-        # Check for offshore arc
-        offshore_arcs = [(f, t) for f, t in possible_arcs if determine_arc_terrain(f, t, data_dict) == "Offshore"]
-        if offshore_arcs:
-            print(f"   🌊 Offshore arcs detected: {offshore_arcs}")
-        else:
-            print(f"   ℹ️  No offshore arcs found in this network")
-
-        print(f"   Looking for intersection data for {len(pipeline_names)} pipeline combinations")
-
-        intersection_data = load_intersection_data(intersection_file_path, pipeline_names)
-        data_dict['intersection_data'] = intersection_data
-
-        # Verify we have all required data
-        if 'network_emission_flux' not in data_dict or 'annual_emission' not in data_dict[
-            'network_emission_flux'].columns:
+        if 'annual_emission' not in data_dict['network_emission_flux'].columns:
             print("⚠️  Warning: Annual emission data not found. Please check data loading.")
             print(f"   Available columns in emission data: {list(data_dict['network_emission_flux'].columns)}")
             return
 
-        # Calculate and display global flow parameters
-        print("\n🔄 Calculating global flow parameters...")
+        print("\n🔄 Loading intersection data...")
+        intersection_file_path = Path("../../italy_data/geographical_feature/route_grid_intersections.xlsx")
+        possible_arcs = get_all_possible_arcs(data_dict['network_pipeline'])
+        pipeline_names = [f"{from_node}_{to_node}" for from_node, to_node in possible_arcs]
+        print(f"   Found {len(possible_arcs)} possible arcs")
 
-        # Calculate global max mass flow
-        global_max_massflow_kg_s = calculate_global_max_massflow(data_dict['network_emission_flux'])
+        data_dict['intersection_data'] = load_intersection_data(intersection_file_path, pipeline_names)
 
-        # Calculate global min mass flow based on smallest emitting node
-        global_min_massflow_kg_s = calculate_global_min_massflow(data_dict['network_emission_flux'])
-
-        print(f"📊 Global flow parameters:")
-        print(f"   Global max mass flow: {global_max_massflow_kg_s:.2f} kg/s")
-        print(f"   Global min mass flow: {global_min_massflow_kg_s:.3f} kg/s (based on smallest emitting node)")
-
-        print("\n🔄 Starting gamma calculations...")
-        print("   Note: Verbose output from cost model is suppressed - only key progress will be shown")
-        print("   Note: Failed calculations will be set to 0 instead of NaN")
-
-        # Load any manually curated per-arc mass-flow ranges (set via the
-        # massflow editor dashboard). Arcs without a saved override keep the
-        # automatic min/max derivation.
-        overrides_path = Path("../../italy_data/network_capex_metrics/massflow_overrides_per_arc.xlsx")
-        massflow_overrides = load_massflow_overrides(overrides_path)
-        if massflow_overrides:
-            print(f"\n🖊️  Loaded {len(massflow_overrides)} manual mass-flow override(s) from {overrides_path}")
-        else:
-            print(f"\nℹ️  No manual mass-flow overrides found at {overrides_path} - using automatic min/max for all arcs")
-
-        # Pass the terrain determination function and any overrides to create_gamma_matrices
-        gamma1_matrix, gamma2_matrix = create_gamma_matrices(
-            data_dict, terrain_function=determine_arc_terrain, massflow_overrides=massflow_overrides
-        )
-
-        # Verify gamma calculations
-        gamma1_nonzero = (gamma1_matrix != 0).sum().sum()
-        gamma2_nonzero = (gamma2_matrix != 0).sum().sum()
-        gamma1_total = gamma1_matrix.size
-        gamma2_total = gamma2_matrix.size
-
-        print(f"\n📊 Gamma calculation results:")
-        print(f"   Gamma1 non-zero values: {gamma1_nonzero} out of {gamma1_total} total cells")
-        print(f"   Gamma2 non-zero values: {gamma2_nonzero} out of {gamma2_total} total cells")
-        print(f"   Success rate: {(gamma1_nonzero / len(possible_arcs) * 100):.1f}%" if len(
-            possible_arcs) > 0 else "   Success rate: N/A")
-
-        if gamma1_nonzero == 0 or gamma2_nonzero == 0:
-            print("⚠️  Warning: No valid gamma values calculated. Please check:")
-            print("   - Network distance data")
-            print("   - Pipeline transport matrix")
-            print("   - Emission data")
-            print("   - Enhanced cost model import")
-        else:
-            print("✅ Gamma calculations completed successfully")
-
-        # Create gamma3 and gamma4 matrices filled with zeros
-        print("\n🔄 Creating gamma3 and gamma4 matrices...")
-        gamma3_matrix, gamma4_matrix = create_zero_gamma_matrices(gamma1_matrix)
-
-        # Set output path to network_capex_metrics folder
-        output_dir = Path("../../italy_data/network_capex_metrics")
-        output_dir.mkdir(parents=True, exist_ok=True)  # Create directory if it doesn't exist
-
-        output_file = "capex_defined_per_arc.xlsx"
-        full_output_path = output_dir / output_file
-
-        print(f"\n📁 Excel file will be saved at: {full_output_path.absolute()}")
-
-        # Save to Excel with all four matrices
-        save_to_excel(gamma1_matrix, gamma2_matrix, gamma3_matrix, gamma4_matrix, filename=str(full_output_path))
-
-        # Final summary
-        print_section_header("ANALYSIS COMPLETE")
-        print("✅ All gamma values have been calculated and saved to 'capex_defined_per_arc.xlsx'")
-        print("📊 The Excel file contains four sheets: 'gamma1', 'gamma2', 'gamma3', and 'gamma4'")
-        print("🗺️  Matrix format: rows = 'from' nodes, columns = 'to' nodes")
-        print("🔢 Missing/failed calculations are set to 0 instead of NaN")
-        print(f"📍 File location: {full_output_path.absolute()}")
-        print(f"📁 Saved in: italy_data/network_capex_metrics/")
-
-        # Display terrain-specific statistics
-        print(f"\n📈 Final statistics:")
-        print(f"   Matrix dimensions: {gamma1_matrix.shape[0]} × {gamma1_matrix.shape[1]}")
-        print(f"   Total possible connections: {gamma1_matrix.size}")
-        print(f"   Total possible arcs: {len(possible_arcs)}")
-        print(f"   Gamma1 calculated values: {gamma1_nonzero}")
-        print(f"   Gamma2 calculated values: {gamma2_nonzero}")
-        print(f"   Zero values: {len(possible_arcs) - gamma1_nonzero} arcs")
-
-        # Show terrain breakdown
-        onshore_arcs = [(f, t) for f, t in possible_arcs if determine_arc_terrain(f, t, data_dict) == "Onshore"]
         offshore_arcs = [(f, t) for f, t in possible_arcs if determine_arc_terrain(f, t, data_dict) == "Offshore"]
+        print(f"   🌊 Offshore arcs: {offshore_arcs}" if offshore_arcs else "   ℹ️  No offshore arcs found")
 
-        print(f"\n🌍 Terrain breakdown:")
-        print(f"   🏞️  Onshore arcs: {len(onshore_arcs)}")
-        print(f"   🌊 Offshore arcs: {len(offshore_arcs)}")
+        output_dir = Path("../../italy_data/network_capex_metrics")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        dashboard_overrides_path = output_dir / "massflow_overrides_per_arc.xlsx"
 
-        if offshore_arcs:
-            print(f"   🌊 Offshore arc details: {offshore_arcs}")
+        output_files = {}
+        for size_class, fixed_range_kg_s in SIZE_CLASS_MASSFLOW_RANGES_KG_S.items():
+            output_files[size_class] = compute_gammas_for_size_class(
+                size_class, fixed_range_kg_s, data_dict, possible_arcs,
+                output_dir, dashboard_overrides_path,
+            )
 
-        # Display flow parameter usage summary
-        print(f"\n🔧 Flow parameter usage:")
-        print(f"   Transport-only nodes (like node 10) used global min flow: {global_min_massflow_kg_s:.3f} kg/s")
-        print(f"   Emission nodes used their own emission-based minimum flows")
-        print(f"   All arcs used global max flow as upper bound: {global_max_massflow_kg_s:.2f} kg/s")
-
-        # Show gamma value ranges for successful calculations
-        if gamma1_nonzero > 0:
-            # Flatten the matrices and get non-zero values
-            gamma1_values = gamma1_matrix.values.flatten()
-            gamma2_values = gamma2_matrix.values.flatten()
-
-            gamma1_nonzero_values = gamma1_values[gamma1_values != 0]
-            gamma2_nonzero_values = gamma2_values[gamma2_values != 0]
-
-            # Calculate statistics
-            gamma1_min = float(gamma1_nonzero_values.min())
-            gamma1_max = float(gamma1_nonzero_values.max())
-            gamma1_mean = float(gamma1_nonzero_values.mean())
-
-            gamma2_min = float(gamma2_nonzero_values.min())
-            gamma2_max = float(gamma2_nonzero_values.max())
-            gamma2_mean = float(gamma2_nonzero_values.mean())
-
-            print(f"\n📊 Gamma value ranges (non-zero values only):")
-            print(f"   Gamma1: min={gamma1_min:,.0f}, max={gamma1_max:,.0f}, mean={gamma1_mean:,.0f} EUR")
-            print(f"   Gamma2: min={gamma2_min:.3f}, max={gamma2_max:.3f}, mean={gamma2_mean:.3f} EUR/t")
+        print_section_header("ANALYSIS COMPLETE")
+        for size_class, path in output_files.items():
+            print(f"   {size_class:8s} -> {path}")
+        print("\n🔢 Missing/failed calculations are set to 0 instead of NaN")
 
     except Exception as e:
         print(f"\n❌ FATAL ERROR: {e}")
         import traceback
         traceback.print_exc()
 
-        # Additional debugging information
         print(f"\n🔍 Debugging information:")
         print(f"   Current working directory: {os.getcwd()}")
         print(f"   Data path exists: {Path('../../italy_data').exists()}")
@@ -240,7 +193,6 @@ def main():
             f"   Excel file exists: {Path('../../italy_data/geographical_feature/node_metrics.xlsx').exists()}")
         print(f"   Output directory: {Path('../../italy_data/network_capex_metrics').exists()}")
 
-        # Check if required modules are available
         try:
             from adopt_net0.database.components.networks.enhanced_co2_pipelines_cost_model import CO2_Pipeline_CostModel
             print(f"   Enhanced cost model: Available")

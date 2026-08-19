@@ -36,7 +36,21 @@ levelized_capex_hp = 12.7 #computed from DanishEnergyAgency large HP excess heat
 electricity_import_limit = 1000 # default
 heat_import_limit = 3000 # default
 wasteIn_import_limit = 1000 # default -- must exceed WasteCaL_CCS.json's size_max (140 t/h per node) with headroom, otherwise infeasible
-max_transport_capacity = 3000
+max_transport_capacity = 3000  # default ceiling for truck/railway/generic networks (t/h)
+# Per-arc capacity ceiling for the pipeline size classes - MUST match each
+# class's calibrated kg/s range (converted to t/h, x3.6) in
+# data_process/updated_network/pipeline_capex_per_arc_calculator.py::
+# SIZE_CLASS_MASSFLOW_RANGES_KG_S, and the size_max in italy_data/networks/
+# CO2_Pipeline_{small,medium,large}.json. Since size_max_defined_per_arc=1 in
+# those JSONs, this is the ONLY thing that actually bounds a built arc's size
+# - leaving it at the flat max_transport_capacity would let e.g. a 'small'
+# pipe get built far outside its calibrated range, using extrapolated (wrong)
+# economics.
+pipeline_size_class_max_capacity_t_h = {
+    "CO2_Pipeline_small": 104.4,
+    "CO2_Pipeline_medium": 478.8,
+    "CO2_Pipeline_large": 1692.0,
+}
 carbon_tax = 200  # euro per tonne CO2
 enable_carbon_pricing = True
 nr_DD_days = 15
@@ -198,6 +212,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     configuration["optimization"]["objective"]["value"] = objective # set optimization objective
     configuration["solveroptions"]["mipgap"]["value"] = 0.01 # set MILP gap
     configuration['optimization']['typicaldays']['N']['value'] = nr_DD_days
+    configuration['optimization']['typicaldays']['method']['value'] = 1  # cluster demand/balances too (see IIS diagnosis: method 2 forced identical clinker output across hours mapped to the same typical day despite differing demand)
     configuration['reporting']['save_summary_path']['value'] = result_path
     configuration['reporting']['save_path']['value'] = result_path
     configuration['reporting']['case_name']['value'] = f"{objective}_{scenario_name}"
@@ -275,7 +290,13 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     update_cement_hybrid_ccs_capacities(input_data_path, network_emission_flux)
 
     #----- Add networks -----#
-    new_network_types = ["CO2_Pipeline", "CO2Truck", "CO2Railway"]
+    # Three pipeline "size class" network technologies instead of one
+    # CO2_Pipeline - each has its own JSON (italy_data/networks/
+    # CO2_Pipeline_{small,medium,large}.json) and its own gamma1/gamma2 CSVs
+    # (from gamma_defined_per_arc_pipeline_{small,medium,large}.xlsx below),
+    # but they all reuse the same physical pipeline connectivity/distance
+    # matrix (see the 'pipeline' data key mappings in defined_functions.py).
+    new_network_types = ["CO2_Pipeline_small", "CO2_Pipeline_medium", "CO2_Pipeline_large", "CO2Truck", "CO2Railway"]
 
     with open(input_data_path / "period1" / "Networks.json", "r") as json_file:
         networks = json.load(json_file)
@@ -311,9 +332,12 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     # Connection matrices (convert >0 to 1, keep 0 as 0)
     update_network_connection_matrix(input_data_path, network_data_dict)
 
-    # Max size arc (all networks) - using predefined size_max value
-    print(f"🔍 Network sizing: Using predefined transport capacity = {max_transport_capacity} tonnes/hour")
-    update_network_size_max_arcs(input_data_path, network_data_dict, max_transport_capacity)
+    # Max size arc (all networks) - using predefined size_max value, with the
+    # three pipeline size classes capped at their own calibrated ceiling
+    print(f"🔍 Network sizing: default = {max_transport_capacity} t/h, "
+          f"pipeline size classes = {pipeline_size_class_max_capacity_t_h}")
+    update_network_size_max_arcs(input_data_path, network_data_dict, max_transport_capacity,
+                                  per_network_type_capacity=pipeline_size_class_max_capacity_t_h)
 
     # ===== DEBUG 2: After network matrix generation =====
     print("\n🔍 DEBUG: Checking network matrices after generation...")
@@ -370,13 +394,25 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     # Copy network data and change costs
     adopt.copy_network_data(input_data_path, path_files_networks)
 
-    #----- Process gamma sheets from capex_defined_per_arc.xlsx -----#
-    # Process gamma sheets and save as CSV files in network folder
-    gamma_pipeline_per_arc = process_gamma_sheets_to_csv(
+    #----- Process gamma sheets from gamma_defined_per_arc_pipeline_{size}.xlsx -----#
+    # Process gamma sheets and save as CSV files in each pipeline size class's network folder
+    gamma_pipeline_small_per_arc = process_gamma_sheets_to_csv(
         path_files_network_capex,
         input_data_path,
         network_location,
-        transport_mode="pipeline"
+        transport_mode="pipeline_small"
+    )
+    gamma_pipeline_medium_per_arc = process_gamma_sheets_to_csv(
+        path_files_network_capex,
+        input_data_path,
+        network_location,
+        transport_mode="pipeline_medium"
+    )
+    gamma_pipeline_large_per_arc = process_gamma_sheets_to_csv(
+        path_files_network_capex,
+        input_data_path,
+        network_location,
+        transport_mode="pipeline_large"
     )
 
     compute_opex_var_arcs(
