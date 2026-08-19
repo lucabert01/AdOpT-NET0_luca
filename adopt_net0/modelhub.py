@@ -929,6 +929,19 @@ class ModelHub:
                 keepfiles=True,
             )
 
+        # If the model is infeasible, compute and write the Irreducible
+        # Inconsistent Subsystem (IIS) to help identify the offending
+        # constraint(s)/bound(s) (Gurobi only).
+        if self.solution.solver.termination_condition in [
+            pyo.TerminationCondition.infeasibleOrUnbounded,
+            pyo.TerminationCondition.infeasible,
+        ]:
+            if config["solveroptions"]["solver"]["value"] in [
+                "gurobi",
+                "gurobi_persistent",
+            ]:
+                self._compute_and_write_iis(result_folder_path)
+
         # Determine if results should be written
         if "write_results" in config["reporting"].keys():
             if config["reporting"]["write_results"]["value"] == 1:
@@ -1012,6 +1025,75 @@ class ModelHub:
             with open(f"{save_path}/diag_variable_map.txt", "w") as file:
                 for key, value in variable_map._dict.items():
                     file.write(f"{value[0].name}: {value[1]}\n")
+
+    def _compute_and_write_iis(self, save_path):
+        """
+        Computes the Irreducible Inconsistent Subsystem (IIS) of an infeasible
+        model via Gurobi and writes it to file, both as Gurobi's native .ilp
+        file and as a human-readable report that translates the Gurobi
+        constraint/variable names back to their Pyomo (i.e. AdOpT-NET0) names.
+
+        Only works with the Gurobi solver (gurobi or gurobi_persistent), since
+        it relies on gurobipy's computeIIS().
+
+        :param save_path: folder to write the IIS files to
+        """
+        log_msg = (
+            "Model is infeasible -- computing IIS to identify the conflicting "
+            "constraint(s)/bound(s)..."
+        )
+        print(log_msg)
+        log.info(log_msg)
+
+        gurobi_model = self.solver._solver_model
+        constraint_map = self.solver._pyomo_con_to_solver_con_map
+        variable_map = self.solver._pyomo_var_to_solver_var_map
+
+        try:
+            import gurobipy as gp
+
+            # computeIIS() requires a definitive INFEASIBLE status; if Gurobi
+            # reported INF_OR_UNBD, force it to disambiguate by re-solving
+            # with DualReductions off.
+            if gurobi_model.Status == gp.GRB.INF_OR_UNBD:
+                gurobi_model.setParam("DualReductions", 0)
+                gurobi_model.optimize()
+
+            gurobi_model.computeIIS()
+        except Exception as e:
+            log_msg = f"Could not compute IIS: {e}"
+            print(log_msg)
+            log.warning(log_msg)
+            return
+
+        ilp_path = Path(save_path) / "infeasible_model.ilp"
+        gurobi_model.write(str(ilp_path))
+
+        report_path = Path(save_path) / "iis_report.txt"
+        with open(report_path, "w") as file:
+            file.write("=== Constraints in IIS ===\n")
+            for pyomo_con, gurobi_con in constraint_map.items():
+                try:
+                    in_iis = gurobi_con.IISConstr
+                except AttributeError:
+                    continue
+                if in_iis:
+                    file.write(f"{pyomo_con.name}  (gurobi: {gurobi_con.ConstrName})\n")
+
+            file.write("\n=== Variable bounds in IIS ===\n")
+            for pyomo_var, gurobi_var in variable_map.items():
+                lb_in_iis = getattr(gurobi_var, "IISLB", False)
+                ub_in_iis = getattr(gurobi_var, "IISUB", False)
+                if lb_in_iis or ub_in_iis:
+                    file.write(
+                        f"{pyomo_var.name}  (gurobi: {gurobi_var.VarName})  "
+                        f"LB={gurobi_var.LB} (in IIS: {lb_in_iis})  "
+                        f"UB={gurobi_var.UB} (in IIS: {ub_in_iis})\n"
+                    )
+
+        log_msg = f"IIS written to {ilp_path} and {report_path}"
+        print(log_msg)
+        log.info(log_msg)
 
     def _solve_pareto(self):
         """
