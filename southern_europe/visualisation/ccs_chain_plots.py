@@ -63,6 +63,23 @@ MODE_COLORS = {
 }
 MODE_LABELS = {"CO2_Pipeline": "Pipeline", "CO2Truck": "Truck", "CO2Railway": "Railway"}
 
+# main_italy.py builds three separate pipeline network technologies -
+# CO2_Pipeline_{small,medium,large} - instead of one CO2_Pipeline (see
+# pipeline_capex_per_arc_calculator.py::SIZE_CLASS_MASSFLOW_RANGES_KG_S).
+# They share the same physical corridors/route shapefile and should read as
+# one visual "Pipeline" mode here (one legend entry, one color, one linewidth
+# scale across all three) rather than three separate untracked network names
+# that would otherwise silently vanish from every map (built_arcs["network"]
+# would never match the bare "CO2_Pipeline" key used throughout this file).
+NETWORK_TYPE_TO_MODE = {
+    "CO2_Pipeline": "CO2_Pipeline",
+    "CO2_Pipeline_small": "CO2_Pipeline",
+    "CO2_Pipeline_medium": "CO2_Pipeline",
+    "CO2_Pipeline_large": "CO2_Pipeline",
+    "CO2Truck": "CO2Truck",
+    "CO2Railway": "CO2Railway",
+}
+
 STATUS_GOOD = BATLOW[2]    # CCS installed
 STATUS_MUTED = "#9a988f"   # no CCS (kept neutral -- absence, not a category)
 STATUS_CRITICAL = BATLOW[5]
@@ -302,6 +319,7 @@ def load_built_arcs(h5_path: Path) -> pd.DataFrame:
                 rows.append(
                     {
                         "network": ntype,
+                        "mode": NETWORK_TYPE_TO_MODE.get(ntype, ntype),
                         "from": g["fromNode"][()].decode(),
                         "to": g["toNode"][()].decode(),
                         "size": float(g["size"][()]),
@@ -576,7 +594,7 @@ def attach_route_geometries(built_arcs: pd.DataFrame, nodes_gdf: gpd.GeoDataFram
         from_id, to_id = name_to_id.get(r["from"]), name_to_id.get(r["to"])
         geom = None
         if from_id is not None and to_id is not None:
-            geom = route_lookup.get(r["network"], {}).get(frozenset((int(from_id), int(to_id))))
+            geom = route_lookup.get(r["mode"], {}).get(frozenset((int(from_id), int(to_id))))
         if geom is None:
             p1, p2 = name_to_point.get(r["from"]), name_to_point.get(r["to"])
             if p1 is not None and p2 is not None:
@@ -606,10 +624,10 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
 
     # --- routes, drawn truck/rail first so pipeline (usually dominant) sits on top ---
     draw_order = ["CO2Truck", "CO2Railway", "CO2_Pipeline"]
-    max_size_by_net = built_arcs.groupby("network")["size"].max().to_dict()
+    max_size_by_net = built_arcs.groupby("mode")["size"].max().to_dict()
 
     for ntype in draw_order:
-        sub = built_arcs[built_arcs["network"] == ntype]
+        sub = built_arcs[built_arcs["mode"] == ntype]
         color = MODE_COLORS[ntype]
         max_size = max_size_by_net.get(ntype, 1) or 1
         for _, r in sub.iterrows():
@@ -721,9 +739,9 @@ def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
     setup_base_map(ax, italy, "CO$_2$ Network — Emitter Bubble Size ~ Total Annual Emissions")
 
     # routes, linewidth scaled by built size (e.g. pipeline capacity) within each mode
-    max_size_by_net = built_arcs.groupby("network")["size"].max().to_dict()
+    max_size_by_net = built_arcs.groupby("mode")["size"].max().to_dict()
     for ntype in ["CO2Truck", "CO2Railway", "CO2_Pipeline"]:
-        sub = built_arcs[built_arcs["network"] == ntype]
+        sub = built_arcs[built_arcs["mode"] == ntype]
         color = MODE_COLORS[ntype]
         max_size = max_size_by_net.get(ntype, 1) or 1
         for _, r in sub.iterrows():
@@ -822,9 +840,9 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
     setup_base_map(ax, italy, f"CO$_2$ Network on Integrated Cost Factor (pipeline category {COST_FACTOR_PIPELINE_CATEGORY})")
 
     draw_order = ["CO2Truck", "CO2Railway", "CO2_Pipeline"]
-    max_size_by_net = built_arcs.groupby("network")["size"].max().to_dict()
+    max_size_by_net = built_arcs.groupby("mode")["size"].max().to_dict()
     for ntype in draw_order:
-        sub = built_arcs[built_arcs["network"] == ntype]
+        sub = built_arcs[built_arcs["mode"] == ntype]
         color = MODE_COLORS[ntype]
         max_size = max_size_by_net.get(ntype, 1) or 1
         for _, r in sub.iterrows():
@@ -943,7 +961,7 @@ def plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary, trunk_path: lis
         geom = r["geometry"]
         if geom is None or (r["from"], r["to"]) in trunk_pairs:
             continue
-        gpd.GeoSeries([geom]).plot(ax=ax, color=MODE_COLORS[r["network"]], linewidth=1.2, alpha=0.9, zorder=3)
+        gpd.GeoSeries([geom]).plot(ax=ax, color=MODE_COLORS[r["mode"]], linewidth=1.2, alpha=0.9, zorder=3)
 
     # --- trunk: bold, on top, with arrows ---
     for a, b in zip(trunk_path[:-1], trunk_path[1:]):
@@ -1157,6 +1175,22 @@ def plot_cost_breakdown(cost_breakdown: dict, per_tonne: bool = True):
     if len(by_family) > 1:
         for fam_label, costs in by_family.items():
             stages[f"Capture\n({fam_label})"] = costs
+        # capture_by_family only accumulates electricity/heat for nodes with a
+        # classified capture technology (see compute_cost_breakdown), while
+        # cost_breakdown["capture"] includes every non-storage node
+        # unconditionally - a non-storage node with no capture tech at all
+        # would otherwise silently vanish from the stacked total instead of
+        # being visible as its own bar. max(0, ...) guards only against
+        # floating-point noise; capture_by_family is a strict subset sum of
+        # capture by construction, so a large negative residual here would
+        # itself indicate a different bug upstream.
+        other = {
+            component: max(0.0, cost_breakdown["capture"][component]
+                            - sum(costs[component] for costs in by_family.values()))
+            for component in COMPONENT_COLORS
+        }
+        if sum(other.values()) > 1e-6:
+            stages["Capture\n(Other)"] = other
     else:
         stages["Capture"] = cost_breakdown["capture"]
     stages["Transport"] = cost_breakdown["transport"]
@@ -1268,7 +1302,7 @@ def plot_summary_dashboard(built_arcs: pd.DataFrame, ccs_df: pd.DataFrame, cost_
     # Panel C: transport mode split
     ax = axes[2]
     ax.set_facecolor(SURFACE)
-    mode_counts = built_arcs.groupby("network").size()
+    mode_counts = built_arcs.groupby("mode").size()
     modes = ["CO2_Pipeline", "CO2Truck", "CO2Railway"]
     counts = [int(mode_counts.get(m, 0)) for m in modes]
     colors = [MODE_COLORS[m] for m in modes]
