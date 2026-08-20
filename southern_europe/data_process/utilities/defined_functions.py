@@ -50,6 +50,20 @@ DEFAULT_TECHNOLOGY_SELECTION = {
     "Other": ["UnspecifiedEmitter"],
 }
 
+# WasteCaL_CCS and CementHybridCCS bundle the host plant AND its CO2 capture
+# unit into one self-contained technology block (unlike the generic bolt-on
+# MEA retrofit, which is a separate technology from its host emitter). If
+# assigned "existing" like a plain baseline emitter, their capture retrofit
+# never gets charged real capex - existing + decommission="impossible" forces
+# var_capex == 0 (see wasteToEnergy_CaL_ccs.py/cement_hybrid_ccs.py
+# _define_capex_constraints), which is correct for a genuinely sunk host
+# plant but wrong for a capture unit that should be a real new investment.
+# So these two are always assigned "new" here, regardless of tech_as_existing
+# - the host plant's size is still bounded by the technology's own
+# size_min/size_max (matching or exceeding the node's real capacity), it's
+# only the capex *accounting* that changes.
+ALWAYS_NEW_TECHNOLOGIES = {"WasteCaL_CCS", "CementHybridCCS"}
+
 # Default reference emission factor per sector (t CO2 emitted / t product output),
 # used as the fallback for callers that don't pass their own sector_emission_factor.
 # 1.0 everywhere reproduces the original "emissions == output" shortcut (every
@@ -765,6 +779,91 @@ def update_cement_hybrid_ccs_capacities(input_data_path, network_emission_flux, 
                 json.dump(tech_data, f, indent=2)
 
             print(f"  ✅ {node_name}: prod_capacity_clinker = {prod_capacity_clinker} t/h")
+
+    print(f"{tech_name} capacity updates completed.")
+
+
+def update_wastecal_ccs_capacities(input_data_path, network_emission_flux, tech_name="WasteCaL_CCS"):
+    """
+    Writes each Waste node's fixed waste-processing capacity into its copied
+    WasteCaL_CCS.json (Performance.prod_capacity_wte) -- used when
+    Performance.size_is_fixed == 1 to pin var_size (max wasteIn throughput) to
+    that node's own real capacity. Mirrors update_cement_hybrid_ccs_capacities's
+    prod_capacity_clinker mechanism for CementHybridCCS; see
+    wasteToEnergy_CaL_ccs.py's construct_tech_model (const_size_wte) for the
+    corresponding Pyomo constraint.
+
+    Needed because WasteCaL_CCS is always assigned "new" regardless of
+    tech_as_existing (see ALWAYS_NEW_TECHNOLOGIES in assign_ccs_technologies_debug)
+    so its capex reflects a real capture-unit investment instead of being zeroed
+    out by the existing-technology capex constraint -- but "new" alone leaves
+    var_size as a free variable bounded only by the technology's generic
+    size_min/size_max, unrelated to any specific node's real throughput.
+
+    Units: network_emission_flux['emitter_capacity'] is already in product units
+    (t waste/h) by this point (see calculate_emitter_capacities).
+
+    Only touches nodes that actually have a copied {tech_name}.json under
+    technology_data/ (i.e. nodes where it was included in technology_selection
+    for "Waste" -- see assign_ccs_technologies_debug) -- other Waste nodes are
+    skipped with a note, not treated as an error.
+
+    Validates the computed capacity against the node's own size_min/size_max:
+    since size_is_fixed pins var_size to prod_capacity_wte via an equality
+    constraint, a value outside those bounds makes the model infeasible for
+    that node -- raises ValueError rather than writing a value that would
+    silently break the solve. (Unlike update_cement_hybrid_ccs_capacities,
+    this does NOT also check against the CaL capex curve's breakpoints -- those
+    are computed at runtime from wasteCaL_sheet.xlsx by
+    _define_capex_parameters, not stored statically in this JSON, so aren't
+    available to check here.)
+
+    Parameters:
+        - input_data_path: Path to the case-study input data directory
+        - network_emission_flux: DataFrame with node_name, node_type, emitter_capacity
+        - tech_name: technology filename (without ".json") to patch; defaults to
+          "WasteCaL_CCS"
+    """
+    with open(input_data_path / "Topology.json", "r") as f:
+        topology = json.load(f)
+
+    print(f"Updating {tech_name} fixed waste-processing capacities per node...")
+
+    waste_rows = network_emission_flux[network_emission_flux["node_type"] == "Waste"]
+
+    for period in topology["investment_periods"]:
+        for _, row in waste_rows.iterrows():
+            node_name = row["node_name"]
+            emitter_capacity = float(row["emitter_capacity"])
+
+            tech_file_path = (
+                input_data_path / period / "node_data" / node_name / "technology_data" / f"{tech_name}.json"
+            )
+            if not tech_file_path.exists():
+                print(f"  ⏭️  Skipped {node_name} ({tech_name}.json not selected/copied at this node)")
+                continue
+
+            with open(tech_file_path, "r") as f:
+                tech_data = json.load(f)
+
+            prod_capacity_wte = round(emitter_capacity, 3)
+
+            size_min = tech_data.get("size_min", 0)
+            size_max = tech_data.get("size_max")
+            if size_max is not None and not (size_min <= prod_capacity_wte <= size_max):
+                raise ValueError(
+                    f"{node_name}: emitter_capacity={prod_capacity_wte} t waste/h "
+                    f"is outside {tech_name}.json's [size_min={size_min}, size_max={size_max}]. Since "
+                    f"Performance.size_is_fixed pins var_size == prod_capacity_wte, this would make "
+                    f"the model infeasible for this node. Widen size_max (or check the capacity data)."
+                )
+
+            tech_data["Performance"]["prod_capacity_wte"] = prod_capacity_wte
+
+            with open(tech_file_path, "w") as f:
+                json.dump(tech_data, f, indent=2)
+
+            print(f"  ✅ {node_name}: prod_capacity_wte = {prod_capacity_wte} t/h")
 
     print(f"{tech_name} capacity updates completed.")
 
@@ -1679,6 +1778,8 @@ def assign_ccs_technologies_debug(network_location, network_emission_flux, path_
         capacity (the original/sunk-asset behavior). If False, all selected
         technologies are assigned as "new" (buildable, freely sized between their own
         JSON size_min/size_max) and compete to meet the sector's carrier demand.
+        Technologies in ALWAYS_NEW_TECHNOLOGIES (WasteCaL_CCS, CementHybridCCS) are
+        always assigned "new" regardless of this flag - see that constant's comment.
     """
     if technology_selection is None:
         technology_selection = DEFAULT_TECHNOLOGY_SELECTION
@@ -1736,12 +1837,13 @@ def assign_ccs_technologies_debug(network_location, network_emission_flux, path_
 
                 selected_techs = technology_selection.get(node_type, [])
                 print(f"      Selected technologies for {node_type}: {selected_techs} "
-                      f"(as {'existing' if tech_as_existing else 'new'})")
-                if tech_as_existing:
-                    for tech_name in selected_techs:
+                      f"(as {'existing' if tech_as_existing else 'new'}, "
+                      f"forced new regardless: {[t for t in selected_techs if t in ALWAYS_NEW_TECHNOLOGIES]})")
+                for tech_name in selected_techs:
+                    if tech_as_existing and tech_name not in ALWAYS_NEW_TECHNOLOGIES:
                         existing_techs_dict[tech_name] = capacity
-                else:
-                    new_techs_list.extend(selected_techs)
+                    else:
+                        new_techs_list.append(tech_name)
 
         # Data type validation and conversion
         print(f"  Before cleaning - existing: {existing_techs_dict}")

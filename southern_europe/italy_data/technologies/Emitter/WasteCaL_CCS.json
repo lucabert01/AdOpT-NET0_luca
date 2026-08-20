@@ -4,7 +4,7 @@
   "size_max": 140,
   "size_is_int": 0,
   "size_based_on": "input",
-  "decommission": 0,
+  "decommission": "impossible",
   "Economics": {
     "comment": "CAPEX is a piecewise function of CaL design capacity (var_size_cal, t CO2/h captured), interpolated from wasteCaL_sheet.xlsx by design_co2_concentration. opex_variable_cal [EUR/t CO2 captured] is a single blended rate covering RDF cost, CaL electricity revenue (negative), and any other variable cost",
     "capex_model": 1,
@@ -18,6 +18,8 @@
   "Performance": {
     "comment": "Simplified: no electricity/heat output",
     "performance_function_type": 1,
+    "size_is_fixed": 1,
+    "prod_capacity_wte": 20,
     "input_carrier": [
       "wasteIn"
     ],

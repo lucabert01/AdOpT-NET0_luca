@@ -117,6 +117,24 @@ class WasteToEnergyCaLCCS(Technology):
         rdf_per_tCO2 = self.performance_data["rdf_per_tCO2"]
         ccr = self.performance_data["capture_rate"]
 
+        # Pins var_size (max wasteIn throughput) to the node's real waste
+        # capacity, mirroring cement_hybrid_ccs.py's size_is_fixed/
+        # prod_capacity_clinker mechanism -- needed because this technology is
+        # assigned "new" (see ALWAYS_NEW_TECHNOLOGIES in defined_functions.py,
+        # so its capex reflects a real investment rather than being zeroed out
+        # by the existing-technology capex constraint), which would otherwise
+        # leave var_size as a free variable bounded only by the technology's
+        # generic size_min/size_max, unrelated to this specific node's real
+        # throughput. See update_wastecal_ccs_capacities() for how
+        # prod_capacity_wte gets set per node.
+        if self.performance_data.get("size_is_fixed"):
+            prod_capacity_wte = self.performance_data["prod_capacity_wte"]
+
+            def init_size_wte(const):
+                return b_tec.var_size == prod_capacity_wte
+
+            b_tec.const_size_wte = pyo.Constraint(rule=init_size_wte)
+
         def init_size_cal(const, t):
             return self.output[t, "CO2captured"] <= b_tec.var_size_cal
 
@@ -378,7 +396,7 @@ class WasteToEnergyCaLCCS(Technology):
 
         b_tec.var_opex_fixed = pyo.Var()
         b_tec.const_opex_fixed = pyo.Constraint(
-            expr=(b_tec.var_capex / annualization_factor)
+            expr=(b_tec.var_capex_aux / annualization_factor)
             * b_tec.para_opex_fixed
             == b_tec.var_opex_fixed
         )

@@ -20,6 +20,7 @@ from data_process.utilities.defined_functions import (
     update_emitter_ccs_references,
     load_sector_reference_values,
     update_cement_hybrid_ccs_capacities,
+    update_wastecal_ccs_capacities,
     convert_network_data_indices_to_names,
     apply_carbon_pricing_to_all_nodes,
     compute_opex_var_arcs,
@@ -288,6 +289,10 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     # (only has an effect at nodes where CementHybridCCS was actually selected, i.e. it's a
     # no-op unless "CementHybridCCS" is in tech_for_cement)
     update_cement_hybrid_ccs_capacities(input_data_path, network_emission_flux)
+
+    # Same, for WasteCaL_CCS's fixed waste-processing capacity (no-op unless
+    # "WasteCaL_CCS" is in tech_for_waste)
+    update_wastecal_ccs_capacities(input_data_path, network_emission_flux)
 
     #----- Add networks -----#
     # Three pipeline "size class" network technologies instead of one

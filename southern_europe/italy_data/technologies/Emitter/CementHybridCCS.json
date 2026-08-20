@@ -3,7 +3,7 @@
   "size_min": 0,
   "size_max": 220,
   "size_is_int": 0,
-  "decommission": 0,
+  "decommission": "impossible",
   "Economics": {
     "comment": "CAPEX in EUR/(t clinker/h)/year or as a piecewise function, CAPEX_MEA in EUR/(tCO2/h)/year, OPEX_variable in EUR/tonne total output, OPEX_fixed in % of CAPEX_annual. NOTE: this technology's _define_capex_parameters/_define_opex fully override the base Technology class, so top-level fix_capex/opex_variable/opex_fixed below are NOT actually read -- only capex_model, unit_capex, piecewise_capex, discount_rate, lifetime, decommission_cost, and everything under other_economics are used. They are kept here only for schema consistency with other technology files.",
     "capex_model": 1,
