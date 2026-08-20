@@ -714,7 +714,7 @@ class Network(ModelComponent):
             b_arc.const_capex_aux = pyo.Constraint(rule=init_capex)
         elif (b_arc.para_capex_gamma1.value == 0) and (
             b_arc.para_capex_gamma3.value == 0
-        ) and (b_arc.para_size_min.value == 0):
+        ) and (b_netw.para_size_min.value == 0):
             b_arc.const_capex_aux = pyo.Constraint(rule=init_capex)
         else:
             b_arc.big_m_transformation_required = 1
@@ -726,7 +726,7 @@ class Network(ModelComponent):
                     dis.const_not_installed = pyo.Constraint(expr=b_arc.var_size == 0)
                 else:  # network installed
                     dis.const_capex_aux = pyo.Constraint(rule=init_capex)
-                    dis.const_size_min = pyo.Constraint(expr=b_arc.var_size >= b_arc.para_size_min)
+                    dis.const_size_min = pyo.Constraint(expr=b_arc.var_size >= b_netw.para_size_min)
 
             b_arc.dis_installation = gdp.Disjunct(s_indicators, rule=init_installation)
 
