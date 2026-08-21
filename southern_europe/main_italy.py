@@ -96,6 +96,15 @@ SCENARIOS = [
     {"name": "oxy",    "tech_for_cement": ["CementHybridCCS"], "tech_for_waste": ["WasteToEnergyEmitter"]},
     {"name": "cal",    "tech_for_cement": ["CementEmitter"],   "tech_for_waste": ["WasteCaL_CCS"]},
     {"name": "oxyCal", "tech_for_cement": ["CementHybridCCS"], "tech_for_waste": ["WasteCaL_CCS"]},
+    # "Timeless" variant of "mea": every hourly demand/electricity/heat profile is
+    # replaced by its own annual average (still 8760 values, so annual totals -- and
+    # therefore annual emissions -- are unchanged), and only 1 typical/design day is
+    # used instead of nr_DD_days. Since the flattened profiles have zero variance, 1
+    # day reproduces the full year exactly, isolating the effect of removing hourly
+    # variance with minimal change from the "mea" base case. Emitter/CCS capacity
+    # sizing is untouched -- it's computed from the raw (non-flattened) profile.
+    {"name": "mea_timeless", "tech_for_cement": ["CementEmitter"], "tech_for_waste": ["WasteToEnergyEmitter"],
+     "flatten_profiles": True, "nr_dd_days": 1},
 ]
 
 #----- Import data-----#
@@ -125,7 +134,8 @@ co2_concentration_by_type = load_sector_reference_values(
 )
 
 
-def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list):
+def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list,
+                  flatten_profiles: bool = False, nr_dd_days: int = None):
     """
     Runs the full CCS-chain data-preparation + optimization pipeline for one
     emitter-technology scenario (a choice of cement and waste technology).
@@ -142,6 +152,12 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         own "tec_type" (e.g. ["WasteToEnergyEmitter"] or ["WasteCaL_CCS"] -- the
         latter's tec_type is "WasteToEnergyCaLCCS", a different string from its
         filename)
+    :param bool flatten_profiles: if True, replace every hourly demand and
+        electricity/heat price profile with its own annual average (see
+        update_carrier_data's docstring) to remove hourly variance while preserving
+        annual totals.
+    :param int nr_dd_days: overrides the module-level nr_DD_days for this scenario's
+        number of typical/design days, if given.
     """
     print("\n" + "=" * 80)
     print(f"SCENARIO: {scenario_name}  (cement={tech_for_cement}, waste={tech_for_waste})")
@@ -214,7 +230,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         configuration = json.load(json_file)
     configuration["optimization"]["objective"]["value"] = objective # set optimization objective
     configuration["solveroptions"]["mipgap"]["value"] = 0.01 # set MILP gap
-    configuration['optimization']['typicaldays']['N']['value'] = nr_DD_days
+    configuration['optimization']['typicaldays']['N']['value'] = nr_dd_days if nr_dd_days is not None else nr_DD_days
     configuration['optimization']['typicaldays']['method']['value'] = 1  # cluster demand/balances too (see IIS diagnosis: method 2 forced identical clinker output across hours mapped to the same typical day despite differing demand)
     configuration['reporting']['save_summary_path']['value'] = result_path
     configuration['reporting']['save_path']['value'] = result_path
@@ -466,6 +482,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         heat_import_limit,
         sector_emission_factor=sector_emission_factor,
         wasteIn_import_limit=wasteIn_import_limit,
+        flatten_profiles=flatten_profiles,
     )
 
     # ----- Apply Carbon Pricing -----#
@@ -541,5 +558,25 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
 
 
 if __name__ == "__main__":
-    for scenario in SCENARIOS:
-        run_scenario(scenario["name"], scenario["tech_for_cement"], scenario["tech_for_waste"])
+    import sys
+
+    # Optional CLI filter: `python main_italy.py mea_timeless [other_name ...]` runs
+    # only the named scenario(s) instead of the full SCENARIOS list.
+    requested_names = sys.argv[1:]
+    scenarios_to_run = (
+        [s for s in SCENARIOS if s["name"] in requested_names] if requested_names else SCENARIOS
+    )
+    if requested_names:
+        missing = set(requested_names) - {s["name"] for s in scenarios_to_run}
+        if missing:
+            raise ValueError(f"Unknown scenario name(s): {sorted(missing)}. "
+                              f"Available: {[s['name'] for s in SCENARIOS]}")
+
+    for scenario in scenarios_to_run:
+        run_scenario(
+            scenario["name"],
+            scenario["tech_for_cement"],
+            scenario["tech_for_waste"],
+            flatten_profiles=scenario.get("flatten_profiles", False),
+            nr_dd_days=scenario.get("nr_dd_days"),
+        )

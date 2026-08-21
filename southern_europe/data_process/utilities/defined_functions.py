@@ -1698,7 +1698,16 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
                         path_files_technologies, node_names, co2_intensity_electricity,
                         cop_hp, levelized_capex_hp, path_files_node_flux,
                         electricity_import_limit=100, heat_import_limit=200,
-                        sector_emission_factor=None, wasteIn_import_limit=1000):
+                        sector_emission_factor=None, wasteIn_import_limit=1000,
+                        flatten_profiles=False):
+    """
+    :param bool flatten_profiles: if True, every hourly demand and electricity/heat
+        price profile is replaced by its own annual average repeated across all 8760
+        hours (so annual totals are unchanged, but hour-to-hour variance is removed).
+        Emitter capacities (sized from the raw, un-flattened profile in
+        calculate_emitter_capacities) are unaffected. Used for the "timeless"
+        scenario variant that isolates the effect of hourly variability.
+    """
 
     import adopt_net0 as adopt
 
@@ -1730,6 +1739,8 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
 
     # --- Electricity & heat prices ---
     electricity_prices = electricity_price_data['Day-ahead Price (EUR/MWh)'].values
+    if flatten_profiles:
+        electricity_prices = np.full_like(electricity_prices, electricity_prices.mean(), dtype=float)
     heat_prices = np.round(levelized_capex_hp + electricity_prices / cop_hp, 2)
 
     adopt.fill_carrier_data(input_data_path, value_or_data=electricity_prices,
@@ -1771,6 +1782,12 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
         # (matching the carrier's real units) using the sector's reference emission
         # factor -- same conversion as calculate_emitter_capacities().
         hourly_demand_array = hourly_demand_array / sector_emission_factor.get(node_type, 1.0)
+
+        if flatten_profiles:
+            # Same length (8760) in and out, so the annual sum (and therefore
+            # annual emissions) is exactly preserved -- only the hour-to-hour
+            # shape is removed.
+            hourly_demand_array = np.full_like(hourly_demand_array, hourly_demand_array.mean())
 
         if source == "real_data":
             annual_demand_tonnes = round(hourly_demand_array.sum(), 2)
