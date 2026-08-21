@@ -971,6 +971,64 @@ def update_network_distance_matrix(input_data_path, network_data_dict, network_t
     return True
 
 
+# Pipeline size classes curated via
+# visualisation/pipeline_class_connections_dashboard.py (see
+# load_pipeline_class_connection_matrix below).
+PIPELINE_SIZE_CLASSES = ["small", "medium", "large"]
+
+
+def load_pipeline_class_connection_matrix(overrides_path, size_class, base_pipeline_df):
+    """
+    Apply a per-arc on/off mask for one pipeline size class to
+    base_pipeline_df, zeroing out any arc the user disabled for that class -
+    e.g. so a 'large' pipeline is never built on an arc that only ever
+    carries a small emitter's flow, even though the arc physically exists.
+
+    The mask is curated via visualisation/pipeline_class_connections_dashboard.py
+    and saved to pipeline_size_class_connections.xlsx (one sheet per size
+    class, a node_id x node_id matrix of 1=enabled/0=disabled). An arc
+    missing from the mask, or the override file/sheet not existing at all,
+    defaults to enabled - i.e. identical to every size class sharing the
+    same flat pipeline connectivity, which was the behaviour before
+    per-class connection curation existed.
+
+    Parameters:
+    - overrides_path: Path to pipeline_size_class_connections.xlsx (may not exist)
+    - size_class: one of PIPELINE_SIZE_CLASSES ("small" | "medium" | "large")
+    - base_pipeline_df: node_id-indexed pipeline matrix (0 = no connection,
+      >0 = connected, value = distance)
+
+    Returns:
+    - pd.DataFrame: copy of base_pipeline_df with disabled arcs zeroed out
+    """
+    result = base_pipeline_df.copy()
+    overrides_path = Path(overrides_path)
+    if not overrides_path.exists():
+        return result
+
+    try:
+        xl = pd.ExcelFile(overrides_path)
+        if size_class not in xl.sheet_names:
+            return result
+        mask_df = pd.read_excel(overrides_path, sheet_name=size_class, index_col=0)
+        mask_df.index = mask_df.index.astype(int)
+        mask_df.columns = mask_df.columns.astype(int)
+    except Exception as e:
+        print(f"⚠️  Could not read pipeline class connection overrides for '{size_class}': {e}")
+        return result
+
+    mask_aligned = mask_df.reindex(index=result.index, columns=result.columns, fill_value=1).fillna(1)
+    disabled = mask_aligned.values == 0
+    n_disabled = int(disabled.sum())
+    if n_disabled:
+        values = result.values.astype(float)
+        values[disabled] = 0.0
+        result.iloc[:, :] = values
+        print(f"🖊️  Pipeline class '{size_class}': {n_disabled} arc(s) disabled via connection overrides")
+
+    return result
+
+
 def update_network_connection_matrix(input_data_path, network_data_dict):
     """
     Update connection matrices for multiple network types.
@@ -988,15 +1046,17 @@ def update_network_connection_matrix(input_data_path, network_data_dict):
 
     print(f"🔍 DEBUG: Template connection matrix shape: {template_connection.shape}")
 
-    # Mapping from network data keys to network type folders. Several network
-    # types can share the same underlying data key (e.g. the three pipeline
-    # size classes all reuse the 'pipeline' connectivity matrix - only their
-    # gammas differ), hence a list of pairs rather than a 1:1 dict.
+    # Mapping from network data keys to network type folders. The three
+    # pipeline size classes each get their own data key ('pipeline_small' /
+    # '_medium' / '_large') so a connection can be disabled for one class
+    # without affecting the others (see
+    # load_pipeline_class_connection_matrix) - they default to the same
+    # connectivity as flat 'pipeline' unless a per-class override exists.
     network_type_mapping = [
         ('pipeline', 'CO2_Pipeline'),
-        ('pipeline', 'CO2_Pipeline_small'),
-        ('pipeline', 'CO2_Pipeline_medium'),
-        ('pipeline', 'CO2_Pipeline_large'),
+        ('pipeline_small', 'CO2_Pipeline_small'),
+        ('pipeline_medium', 'CO2_Pipeline_medium'),
+        ('pipeline_large', 'CO2_Pipeline_large'),
         ('truck', 'CO2Truck'),
         ('railway', 'CO2Railway'),
         ('ship', 'CO2Ship'),
@@ -1089,15 +1149,15 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
     if per_network_type_capacity:
         print(f"  Per-network-type overrides: {per_network_type_capacity}")
 
-    # Mapping from network data keys to network type folders. Several network
-    # types can share the same underlying data key (e.g. the three pipeline
-    # size classes all reuse the 'pipeline' connectivity matrix), hence a
-    # list of pairs rather than a 1:1 dict.
+    # Mapping from network data keys to network type folders. The three
+    # pipeline size classes each get their own data key so a connection can
+    # be disabled for one class without affecting the others - see
+    # update_network_connection_matrix's mapping above for details.
     network_type_mapping = [
         ('pipeline', 'CO2_Pipeline'),
-        ('pipeline', 'CO2_Pipeline_small'),
-        ('pipeline', 'CO2_Pipeline_medium'),
-        ('pipeline', 'CO2_Pipeline_large'),
+        ('pipeline_small', 'CO2_Pipeline_small'),
+        ('pipeline_medium', 'CO2_Pipeline_medium'),
+        ('pipeline_large', 'CO2_Pipeline_large'),
         ('truck', 'CO2Truck'),
         ('railway', 'CO2Railway'),
         ('ship', 'CO2Ship'),
@@ -1927,12 +1987,18 @@ def update_network_distance_matrix_debug(input_data_path, network_data_dict, net
     for network_type in network_types:
         print(f"\n🔍 Processing network type: {network_type}")
 
-        # Get network data
+        # Get network data. The three pipeline size classes each get their
+        # own data key so a connection can be disabled for one class without
+        # affecting the others - see update_network_connection_matrix's
+        # mapping for details. Distance itself isn't class-specific (it's a
+        # physical fact), but reusing the same masked matrix here keeps a
+        # disabled arc's distance at 0 too, which is harmless since
+        # connection.csv already gates whether the arc can be built.
         data_mapping = {
             'CO2_Pipeline': 'pipeline',
-            'CO2_Pipeline_small': 'pipeline',
-            'CO2_Pipeline_medium': 'pipeline',
-            'CO2_Pipeline_large': 'pipeline',
+            'CO2_Pipeline_small': 'pipeline_small',
+            'CO2_Pipeline_medium': 'pipeline_medium',
+            'CO2_Pipeline_large': 'pipeline_large',
             'CO2Truck': 'truck',
             'CO2Railway': 'railway',
             'CO2Ship': 'ship'

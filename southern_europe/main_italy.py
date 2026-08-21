@@ -24,7 +24,9 @@ from data_process.utilities.defined_functions import (
     convert_network_data_indices_to_names,
     apply_carbon_pricing_to_all_nodes,
     compute_opex_var_arcs,
-    update_capex_gamma2_per_arc
+    update_capex_gamma2_per_arc,
+    load_pipeline_class_connection_matrix,
+    PIPELINE_SIZE_CLASSES
 )
 
 
@@ -326,6 +328,19 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         'truck': network_truck,
         'railway': network_railway
     }
+
+    #----- Apply per-pipeline-size-class connection overrides -----#
+    # Curated via visualisation/pipeline_class_connections_dashboard.py - lets
+    # you remove specific arcs from an individual pipeline size class (e.g.
+    # never build 'large' on an arc that only ever carries a small emitter's
+    # flow), instead of every class sharing the exact same flat connectivity.
+    # A no-op per class until an override is actually saved for it (falls
+    # back to the shared 'pipeline' connectivity).
+    pipeline_class_connections_path = path_files_network_capex / "pipeline_size_class_connections.xlsx"
+    for size_class in PIPELINE_SIZE_CLASSES:
+        network_data_dict[f"pipeline_{size_class}"] = load_pipeline_class_connection_matrix(
+            pipeline_class_connections_path, size_class, network_pipeline
+        )
 
     print("\n🔍 Converting network data indices to match topology...")
     network_data_dict = convert_network_data_indices_to_names(network_data_dict, network_location)
