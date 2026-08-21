@@ -41,7 +41,10 @@ import h5py
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 from pathlib import Path
+
+import cmcrameri.cm as cmc
 
 from ccs_chain_plots import (
     classify_capture_family,
@@ -70,6 +73,21 @@ STAGE_COLORS = {
     "Transport": MODE_COLORS["CO2_Pipeline"],
     "Storage": STORAGE_COLOR,
 }
+
+SECTOR_ORDER = ["Cement", "Waste", "Refining", "Other"]
+_BATLOW = [cmc.batlow(x) for x in np.linspace(0, 1, 7)]
+SECTOR_COLORS = {
+    "Cement": _BATLOW[0],
+    "Waste": _BATLOW[2],
+    "Refining": _BATLOW[4],
+    "Other": _BATLOW[6],
+}
+
+# Below this annual-tonnes / (peak-rate x 8760h) ratio, an emitter is flagged
+# on the MACC plot as running at a low load factor - it reserves pipeline
+# capacity sized for its peak rate but rarely uses all of it, so it pays a
+# capacity-share transport cost spread over comparatively few actual tonnes.
+LOW_CAPACITY_FACTOR_THRESHOLD = 0.75
 
 # Each capture technology family reports its own electricity/heat draw under
 # a different dataset name (see classify_capture_family in ccs_chain_plots.py
@@ -309,6 +327,7 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
                     "family": FAMILY_LABELS.get(cap["family"], cap["family"]),
                     "captured_annual_t": cap["captured_annual_t"],
                     "max_captured_t_h": cap["max_captured_t_h"],
+                    "capacity_factor": cap["captured_annual_t"] / (cap["max_captured_t_h"] * 8760),
                     "capture_eur_per_t": cap["capture_eur_per_t"],
                     "transport_eur_per_t": transport_eur_per_t,
                     "storage_eur_per_t": storage_eur_per_t,
@@ -407,6 +426,88 @@ def plot_emitter_cost_ranking(df: pd.DataFrame, storage_node: str):
     print(f"Saved: {out_file}")
 
 
+def plot_macc(df: pd.DataFrame, storage_node: str):
+    """
+    A MACC-style (marginal abatement cost curve) view of the same per-emitter
+    costs: bars sorted left-to-right by ascending total €/t, bar WIDTH is that
+    emitter's own annual captured tonnes (so cheap, high-volume tonnes read as
+    wide-and-low, expensive/small ones as narrow-and-tall), bar HEIGHT is
+    total €/t, and color is sector rather than cost stage - individual
+    emitter names are dropped, this is about the shape of the system-wide
+    cost curve, not any one plant.
+
+    Emitters running at a low load factor (annual tonnes far below what
+    their own peak captured rate x 8760h would allow) are flagged - see
+    module docstring: they still pay their full nameplate share of every
+    downstream arc's cost, so a low load factor inflates their €/t just like
+    an oversized capture unit would.
+    """
+    plot_df = df.sort_values("total_eur_per_t").reset_index(drop=True)
+    captured_mt = (plot_df["captured_annual_t"] / 1e6).to_numpy()
+    left = np.concatenate([[0.0], np.cumsum(captured_mt)[:-1]])
+    heights = plot_df["total_eur_per_t"].to_numpy()
+
+    fig, ax = plt.subplots(figsize=(13, 7.5))
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+
+    for i, row in plot_df.iterrows():
+        ax.bar(
+            left[i], heights[i], width=captured_mt[i], align="edge",
+            color=SECTOR_COLORS[row["sector"]], edgecolor="white", linewidth=0.5, zorder=3,
+        )
+
+    sectors_present = [s for s in SECTOR_ORDER if s in set(plot_df["sector"])]
+    legend_handles = [Patch(facecolor=SECTOR_COLORS[s], edgecolor="white", label=s) for s in sectors_present]
+    ax.legend(
+        handles=legend_handles, loc="upper left", frameon=True, fontsize=10.5,
+        framealpha=0.95, edgecolor=GRIDLINE, title="Sector", title_fontsize=10.5,
+    )
+
+    # --- flag low-load-factor emitters with an arrow, ordered left-to-right
+    # and stacked upward so nearby bars' callouts don't collide ---
+    low_cf_idx = [i for i in plot_df.index if plot_df.loc[i, "capacity_factor"] < LOW_CAPACITY_FACTOR_THRESHOLD]
+    low_cf_idx.sort(key=lambda i: left[i])
+
+    y_top = heights.max()
+    for rank, i in enumerate(low_cf_idx):
+        cx = left[i] + captured_mt[i] / 2
+        cy = heights[i]
+        cf_pct = plot_df.loc[i, "capacity_factor"] * 100
+        ax.annotate(
+            f"Low capacity factor ({cf_pct:.0f}%)",
+            xy=(cx, cy), xycoords="data",
+            xytext=(cx, y_top * 1.10 + rank * y_top * 0.09), textcoords="data",
+            ha="center", va="bottom", fontsize=9.5, color=INK_PRIMARY,
+            arrowprops=dict(arrowstyle="-|>", color=INK_SECONDARY, lw=1.3, connectionstyle="arc3,rad=0.15"),
+            zorder=6,
+        )
+
+    ax.set_ylim(0, y_top * (1.16 + max(0, len(low_cf_idx) - 1) * 0.09))
+    ax.set_xlim(0, left[-1] + captured_mt[-1])
+
+    ax.set_xlabel("Cumulative CO$_2$ captured (Mt/yr)", fontsize=11)
+    ax.set_ylabel("€/t CO$_2$ (storage + transport + capture)", fontsize=11)
+    ax.set_title(
+        f"CO$_2$ Capture Cost Curve — {storage_node}",
+        fontsize=14, weight="bold", color=INK_PRIMARY,
+    )
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color(GRIDLINE)
+    ax.spines["bottom"].set_color(GRIDLINE)
+    ax.tick_params(colors=INK_SECONDARY)
+    ax.grid(axis="y", alpha=0.6, linestyle="--", linewidth=0.5, color=GRIDLINE, zorder=0)
+    ax.set_axisbelow(True)
+
+    fig.tight_layout()
+    out_file = OUT_DIR / "ccs_chain_emitter_macc.png"
+    fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
+    plt.close(fig)
+    print(f"Saved: {out_file}")
+
+
 def main():
     df, storage_node = build_emitter_cost_table(RESULTS_H5)
 
@@ -415,6 +516,7 @@ def main():
     print(f"Saved: {out_csv} ({len(df)} emitters)")
 
     plot_emitter_cost_ranking(df, storage_node)
+    plot_macc(df, storage_node)
 
 
 if __name__ == "__main__":
