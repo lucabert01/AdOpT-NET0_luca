@@ -8,13 +8,13 @@
   "size_min": 104.4,
   "size_max": 478.8,
   "Economics": {
-    "comment": "CAPEX coefficients are in EUR, EUR/t/h or EUR/t/h/km, opex_variable in EUR/t total output, opex_fixed in % of up-front CAPEX. size_min/size_max = 104.4-478.8 t/h = 29.0-133.0 kg/s, the 'medium' evaluation range (see southern_europe/analysis/pipeline_size_class_ranges.py, and pipeline_capex_per_arc_calculator.py::SIZE_CLASS_MASSFLOW_RANGES_KG_S['medium'] = (29.0, 133.0) kg/s). gamma1-4 here are a placeholder fallback only - capex_defined_per_arc=1 means the real per-arc values come from gamma_defined_per_arc_pipeline_medium.xlsx -> CO2_Pipeline_medium/gamma{1..4}.csv.",
+    "comment": "CAPEX coefficients are in EUR, EUR/t/h or EUR/t/h/km, opex_variable in EUR/t total output, opex_fixed in % of up-front CAPEX. size_min/size_max = 104.4-478.8 t/h = 29.0-133.0 kg/s, the 'medium' evaluation range (see southern_europe/analysis/pipeline_size_class_ranges.py, and pipeline_capex_per_arc_calculator.py::SIZE_CLASS_MASSFLOW_RANGES_KG_S['medium'] = (29.0, 133.0) kg/s). gamma1-4 here are a placeholder fallback only - capex_defined_per_arc=1 means the real per-arc values come from gamma_defined_per_arc_pipeline_medium.xlsx -> CO2_Pipeline_medium/gamma{1..4}.csv. opex_fixed and Performance.energyconsumption.electricity.k_flow, unlike CAPEX, have no per-arc option in AdOpT-NET0 (network.py::para_opex_fixed / _define_energyconsumption_parameters are single scalars per technology) - both are the capex-/flow-weighted mean across this class's built arcs in the reference run, computed by pipeline_size_class_ranges.py (which also writes them here).",
     "gamma1": 25147852,
     "gamma2": 97011.3,
     "gamma3": 0,
     "gamma4": 0,
     "opex_variable": 0,
-    "opex_fixed": 0,
+    "opex_fixed": 0.03,
     "discount_rate": 0.1,
     "lifetime": 50,
     "decommission_cost": 0
@@ -22,7 +22,7 @@
   "Performance": {
     "carrier": "CO2captured",
     "bidirectional_network": 0,
-    "loss": 1.25E-7,
+    "loss": 1.25e-07,
     "min_transport": 0,
     "loss2emissions": 1,
     "emissionfactor": 0,
@@ -34,7 +34,7 @@
       },
       "electricity": {
         "cons_model": 1,
-        "k_flow": 0,
+        "k_flow": 0.0479,
         "k_flowDistance": 0
       }
     }

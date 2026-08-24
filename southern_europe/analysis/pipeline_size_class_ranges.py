@@ -64,14 +64,52 @@ Method
    physically possible arc flow - not just the ones built in the reference
    run - falls inside one of the three classes.
 
+Fixed OPEX and electricity consumption per size class
+------------------------------------------------------
+main_italy.py only ever assigns gamma1-4 (CAPEX) per arc -
+capex_defined_per_arc=1 lets each arc within a class have its own CAPEX
+curve (via gamma_defined_per_arc_pipeline_{size}.xlsx), driven by that arc's
+own length/terrain/geography. AdOpT-NET0's network component has no
+equivalent per-arc option for fixed OPEX or energy consumption
+(opex_var_defined_per_arc only covers *variable* OPEX; see
+network.py::_define_energyconsumption_parameters and ::para_opex_fixed) -
+both are single scalars per network technology, i.e. per size class here.
+
+So, along the same lines as the CAPEX derivation above, this script also
+extracts - from that same per-built-arc Oeuvray model evaluation - each
+arc's:
+  - financial_indicators["opex_fixed"]: annual fixed OPEX as a fraction of
+    that arc's own (updated, geo-adjusted) CAPEX
+  - technical_indicators["energyconsumption"]["electricity"]["k_flow"]:
+    specific compression electricity consumption (MWh electricity / t CO2
+    transported)
+both already computed internally by CO2_Pipeline_CostModel alongside CAPEX,
+but previously discarded (arc_specific_functions.calculate_arc_gammas only
+returns gamma1/gamma2). Each built arc is assigned to a size class using the
+same [floor, bp1, bp2, ceiling] breakpoints derived above, then aggregated
+to one representative value per class via a WEIGHTED mean, not a plain
+mean, so the class value reproduces the class's aggregate total if applied
+uniformly to every arc in it:
+  - opex_fixed is a ratio of capex, so it's weighted by each arc's own
+    true_capex (a plain mean would let a handful of small, cheap arcs
+    outweigh the few big trunk lines that hold most of the class's capex).
+  - electricity k_flow is a rate per unit mass flow, so it's weighted by
+    each arc's own flow_kg_s for the analogous reason.
+
 Outputs
 -------
 Run as a script (`python pipeline_size_class_ranges.py`) to reproduce:
   - analysis/output/pipeline_size_class_ranges.png   (figure for supplementary info)
-  - analysis/output/built_arcs_true_capex.csv         (per-arc raw data table)
-  - printed summary of the final (small, medium, large) kg/s and t/h ranges
+  - analysis/output/built_arcs_true_capex.csv         (per-arc raw data table,
+    now including opex_fixed/elec_k_flow_mwh_per_t/size_class columns)
+  - printed summary of the final (small, medium, large) kg/s/t/h ranges,
+    opex_fixed (fraction of CAPEX) and electricity consumption (MWh/t)
+  - italy_data/networks/CO2_Pipeline_{small,medium,large}.json updated
+    in-place: Economics.opex_fixed and Performance.energyconsumption.
+    electricity.k_flow
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -108,6 +146,7 @@ from adopt_net0.database.components.networks.enhanced_co2_pipelines_cost_model i
 DATA_PATH = SOUTHERN_EUROPE_DIR / "italy_data"
 REFERENCE_RUN = SOUTHERN_EUROPE_DIR / "Results_CCSchainOptimization" / "20260711184007_emissions_minC-1" / "optimization_results.h5"
 OUTPUT_DIR = SCRIPT_DIR / "output"
+NETWORKS_DIR = DATA_PATH / "networks"
 
 KG_S_TO_T_H = 3600 / 1000
 
@@ -148,8 +187,11 @@ def compute_true_capex_per_built_arc(built_arcs, data_dict):
     actual flow), using that arc's real length/terrain/geographic factors.
 
     Returns a DataFrame with one row per arc: flow_kg_s, length_km, terrain,
-    true_capex (EUR), and capex_per_km (EUR/km, the size-driven component
-    with the pure length scaling divided out).
+    true_capex (EUR), capex_per_km (EUR/km, the size-driven component with
+    the pure length scaling divided out), opex_fixed (fraction of that
+    arc's true_capex, annual), and elec_k_flow_mwh_per_t (specific
+    compression electricity consumption, MWh/t CO2) - the latter two come
+    from the same model evaluation as true_capex, just not discarded here.
     """
     node_names = data_dict["network_nodes"]["node_name"]
     name_to_id = {}
@@ -184,12 +226,18 @@ def compute_true_capex_per_built_arc(built_arcs, data_dict):
         with suppress_stdout():
             result = model.calculate_indicators(options)
         true_capex = float(result["costs_detailed"]["updated_capex_total"].iloc[0])
+        opex_fixed = float(result["financial_indicators"]["opex_fixed"])
+        elec_k_flow = float(
+            result["technical_indicators"]["energyconsumption"]["electricity"]["k_flow"]
+        )
 
         rows.append({
             "from": from_name, "to": to_name, "from_id": from_id, "to_id": to_id,
             "size_t_h": size_t_h, "flow_kg_s": flow_kg_s, "length_km": length_km,
             "terrain": terrain, "true_capex": true_capex,
             "capex_per_km": true_capex / length_km,
+            "opex_fixed": opex_fixed,
+            "elec_k_flow_mwh_per_t": elec_k_flow,
         })
 
     return pd.DataFrame(rows).sort_values("flow_kg_s").reset_index(drop=True)
@@ -256,6 +304,71 @@ def find_breakpoints(a, b, flow_min, flow_max, n_grid=400):
 
 
 # ============================================================================
+# 4b. Fixed OPEX / electricity consumption per size class
+# ============================================================================
+def assign_size_classes(df, final_ranges):
+    """
+    Labels each built arc's row with the size class ("small"/"medium"/
+    "large") whose [lo, hi) flow_kg_s range it falls into, per
+    final_ranges. The top edge of "large" is inclusive since it's the
+    network's true ceiling.
+    """
+    small, medium, large = final_ranges["small"], final_ranges["medium"], final_ranges["large"]
+    bins = [small[0], small[1], medium[1], large[1]]
+    labels = ["small", "medium", "large"]
+    df = df.copy()
+    df["size_class"] = pd.cut(df["flow_kg_s"], bins=bins, labels=labels, include_lowest=True)
+    return df
+
+
+def compute_opex_electricity_per_class(df):
+    """
+    Aggregates opex_fixed and elec_k_flow_mwh_per_t to one representative
+    value per size class using a WEIGHTED mean (see module docstring for
+    why plain means are not used): opex_fixed weighted by true_capex,
+    elec_k_flow_mwh_per_t weighted by flow_kg_s.
+
+    Returns a DataFrame indexed by size_class with columns opex_fixed,
+    elec_k_flow_mwh_per_t, n_arcs.
+    """
+    def _weighted_mean(g, value_col, weight_col):
+        return np.average(g[value_col], weights=g[weight_col])
+
+    rows = {}
+    for size_class, g in df.groupby("size_class", observed=True):
+        if len(g) == 0:
+            continue
+        rows[size_class] = {
+            "opex_fixed": _weighted_mean(g, "opex_fixed", "true_capex"),
+            "elec_k_flow_mwh_per_t": _weighted_mean(g, "elec_k_flow_mwh_per_t", "flow_kg_s"),
+            "n_arcs": len(g),
+        }
+    return pd.DataFrame(rows).T
+
+
+def write_opex_electricity_to_json(class_summary, networks_dir):
+    """
+    Writes each class's opex_fixed and electricity k_flow into
+    Economics.opex_fixed / Performance.energyconsumption.electricity.k_flow
+    of CO2_Pipeline_{size_class}.json, in place. gamma1-4 and everything
+    else in these files is left untouched.
+    """
+    for size_class, row in class_summary.iterrows():
+        json_path = networks_dir / f"CO2_Pipeline_{size_class}.json"
+        with open(json_path, "r") as f:
+            data = json.load(f)
+
+        data["Economics"]["opex_fixed"] = round(float(row["opex_fixed"]), 4)
+        data["Performance"]["energyconsumption"]["electricity"]["k_flow"] = round(
+            float(row["elec_k_flow_mwh_per_t"]), 4
+        )
+
+        with open(json_path, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"  Updated {json_path}")
+
+
+# ============================================================================
 # 5. Figure for supplementary info
 # ============================================================================
 def make_figure(df, a, b, r2, breakpoints, final_ranges, output_path, log_scale=True):
@@ -270,7 +383,7 @@ def make_figure(df, a, b, r2, breakpoints, final_ranges, output_path, log_scale=
     fig, ax = plt.subplots(figsize=(8, 5.5))
 
     ax.scatter(df["flow_kg_s"], df["capex_per_km"], s=28, alpha=0.75, color="#2c3e50",
-               label="Arcs built in reference run\n(true capex, bug-fixed model)")
+               label="Arcs built in reference run\n(true capex)")
 
     if log_scale:
         grid = np.geomspace(df["flow_kg_s"].min(), df["flow_kg_s"].max(), 200)
@@ -298,7 +411,7 @@ def make_figure(df, a, b, r2, breakpoints, final_ranges, output_path, log_scale=
     ax.set_ylim(ymin, ymax)
     ax.set_xlabel("Pipeline mass flow (kg CO$_2$/s)")
     ax.set_ylabel("CAPEX per unit length (EUR/km)")
-    ax.set_title("Deriving the three CO2 pipeline size-class ranges" + ("" if log_scale else " (linear scale)"))
+    ax.set_title("Three CO2 pipeline size-class ranges" + ("" if log_scale else " (linear scale)"))
     ax.legend(loc="upper left", fontsize=8, framealpha=0.9)
     ax.grid(True, which="both", alpha=0.25)
 
@@ -364,6 +477,23 @@ def main():
     for name, (lo, hi) in final_ranges.items():
         print(f"  {name:8s}  {lo:7.1f} - {hi:7.1f} kg/s   |   {lo*KG_S_TO_T_H:8.1f} - {hi*KG_S_TO_T_H:8.1f} t/h")
 
+    df = assign_size_classes(df, final_ranges)
+    class_summary = compute_opex_electricity_per_class(df)
+    df.to_csv(OUTPUT_DIR / "built_arcs_true_capex.csv", index=False)  # re-save with opex/elec/size_class columns
+
+    print("\n" + "=" * 80)
+    print("FIXED OPEX AND ELECTRICITY CONSUMPTION PER SIZE CLASS")
+    print("(capex-weighted mean opex_fixed, flow-weighted mean electricity k_flow -- see module docstring)")
+    print("=" * 80)
+    for size_class, row in class_summary.iterrows():
+        print(
+            f"  {size_class:8s}  opex_fixed={row['opex_fixed']:.4f} (frac. of CAPEX/yr)   "
+            f"elec_k_flow={row['elec_k_flow_mwh_per_t']:.4f} MWh/t   (n={int(row['n_arcs'])} arcs)"
+        )
+
+    print(f"\nUpdating italy_data/networks/CO2_Pipeline_{{small,medium,large}}.json in place:")
+    write_opex_electricity_to_json(class_summary, NETWORKS_DIR)
+
     make_figure(df, a, b, r2, [bp1, bp2], final_ranges, OUTPUT_DIR / "pipeline_size_class_ranges.png", log_scale=True)
     make_figure(df, a, b, r2, [bp1, bp2], final_ranges, OUTPUT_DIR / "pipeline_size_class_ranges_linear.png", log_scale=False)
 
@@ -371,6 +501,7 @@ def main():
     print("  - data_process/updated_network/pipeline_capex_per_arc_calculator.py :: SIZE_CLASS_MASSFLOW_RANGES_KG_S")
     print("  - italy_data/networks/CO2_Pipeline_{small,medium,large}.json :: size_min / size_max (t/h)")
     print("  - main_italy.py :: pipeline_size_class_max_capacity_t_h (t/h)")
+    print("opex_fixed / electricity k_flow above are written directly into those same JSON files by this script.")
 
 
 if __name__ == "__main__":
