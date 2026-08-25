@@ -455,15 +455,18 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         path_node_metrics=path_files_node_flux / node_metrics_file,
         path_output_root=input_data_path / "period1" / "network_topology" / "new",
         discount_rate=discount_rate,
+        target_year=ref_year,
     )
 
     #----- Update truck/railway gamma2 (capex, per arc) with the capacity-based
-    #      cost model from CostsFun_Share (Oeuvray et al. 2024) -----#
+    #      cost model from CostsFun_Share (Oeuvray et al. 2024), escalated from
+    #      their EUR_2021 basis to EUR_{ref_year} -----#
     update_capex_gamma2_per_arc(
         path_node_metrics=path_files_node_flux / node_metrics_file,
         path_output_root=input_data_path / "period1" / "network_topology" / "new",
         path_network_data=input_data_path / "period1" / "network_data",
         discount_rate=discount_rate,
+        target_year=ref_year,
     )
 
     #----- Update carrier data with pricing, emission factors, and demands -----#

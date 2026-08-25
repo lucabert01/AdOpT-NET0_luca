@@ -1235,7 +1235,8 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
 
 
 def compute_opex_var_arcs(
-    path_node_metrics: Path, path_output_root: Path, discount_rate: float = 0.08
+    path_node_metrics: Path, path_output_root: Path, discount_rate: float = 0.08,
+    target_year: int = None,
 ) -> None:
     """
     Reads truck and railway distance matrices from node_metrics.xlsx and writes
@@ -1269,12 +1270,16 @@ def compute_opex_var_arcs(
     discount_rate : float
         Discount rate passed to truck_costs_per_capacity() (does not affect
         variable opex, kept for consistency with update_capex_gammas_truck_railway()).
+    target_year : int, optional
+        If given, escalates the underlying EUR_2021 (Oeuvray et al. 2024)
+        costs to EUR_{target_year} via truck_costs_per_capacity()'s
+        target_year argument (Eurostat producer-price-index based).
     """
 
     def _opex_truck(d: float) -> float:
         if d <= 0:
             return 0.0
-        return truck_costs_per_capacity(d, discount_rate)["variable_opex_eur_per_t"]
+        return truck_costs_per_capacity(d, discount_rate, target_year=target_year)["variable_opex_eur_per_t"]
 
     def _opex_railway(d: float) -> float:
         return 0.0
@@ -1311,6 +1316,7 @@ def update_capex_gamma2_per_arc(
     path_output_root: Path,
     path_network_data: Path,
     discount_rate: float = 0.08,
+    target_year: int = None,
 ) -> None:
     """
     Writes per-arc gamma1.csv/gamma2.csv/gamma3.csv/gamma4.csv for CO2Truck
@@ -1352,12 +1358,17 @@ def update_capex_gamma2_per_arc(
         input_data_path / "period1" / "network_data".
     discount_rate : float
         Discount rate passed to truck_costs_per_capacity()/train_costs_per_capacity().
+    target_year : int, optional
+        If given, escalates the underlying EUR_2021 (Oeuvray et al. 2024)
+        costs to EUR_{target_year} via truck_costs_per_capacity()/
+        train_costs_per_capacity()'s target_year argument (Eurostat
+        producer-price-index based).
     """
 
     def _capex_plus_fixed_opex(d: float, cost_fn) -> float:
         if d <= 0:
             return 0.0
-        r = cost_fn(d, discount_rate)
+        r = cost_fn(d, discount_rate, target_year=target_year)
         return r["capex_eur_per_tph_y"] + r["fixed_opex_eur_per_tph_y"]
 
     # Build a mapping from node_id -> node_name (same as compute_opex_var_arcs)

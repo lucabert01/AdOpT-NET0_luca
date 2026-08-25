@@ -49,27 +49,67 @@ Two ways to get a cost:
 import math
 
 # ---------------------------------------------------------------------------
+# 0. Reference year and inflation escalation
+# ---------------------------------------------------------------------------
+
+# All EUR-denominated values in this file (PUBLISHED_FIT_PARAMS coefficients,
+# and the monetary entries in TRUCK_PARAMS / TRAIN_PARAMS) are expressed in
+# EUR_2021, matching the reference year of Oeuvray et al. (2024)'s underlying
+# cost data (SI, Tables A.1-A.4, B.2, C.1). Pass target_year=<year> to
+# published_fit()/truck_costs_per_capacity()/train_costs_per_capacity() to
+# escalate the returned costs to another year's EUR.
+REFERENCE_YEAR = 2021
+
+
+def _inflation_factor(target_year, reference_year=REFERENCE_YEAR):
+    """Multiplicative factor to escalate a EUR_{reference_year} value to EUR_{target_year}.
+
+    Uses adopt_net0's correct_inflation() (Eurostat euro-area producer price
+    index), imported lazily so this module stays importable without the
+    adopt_net0 package when target_year is not requested.
+    """
+    if target_year is None or target_year == reference_year:
+        return 1.0
+    try:
+        from adopt_net0.database.utilities import correct_inflation
+    except ImportError as exc:
+        raise ImportError(
+            "target_year escalation requires the 'adopt_net0' package (for its "
+            "Eurostat producer-price-index-based correct_inflation()); install "
+            f"it or omit target_year to keep costs in EUR_{reference_year}."
+        ) from exc
+    return correct_inflation(1.0, reference_year, target_year)
+
+
+# ---------------------------------------------------------------------------
 # 1. Published aggregate fit (Table C.1) — exact, backed by real quotes
 # ---------------------------------------------------------------------------
 
-# UC [EUR / (t . km)] = alpha1 + alpha2 / d[km]  ->  LC[EUR/t] = alpha1*d + alpha2
+# UC [EUR_2021 / (t . km)] = alpha1 + alpha2 / d[km]  ->  LC[EUR_2021/t] = alpha1*d + alpha2
 PUBLISHED_FIT_PARAMS = {
     "container_truck": {"alpha1": 0.15, "alpha2": 5.58},
     "container_train": {"alpha1": 0.07, "alpha2": 28.9},
 }
 
 
-def published_fit(distance_km, option="container_truck"):
+def published_fit(distance_km, option="container_truck", target_year=None):
     """Levelised cost per tonne CO2 [EUR/t] from the paper's fitted curve.
 
     Independent of mass flow: the paper shows container-based options (and
     dedicated truck/train) have unitary costs that depend only on distance,
     since capacity per carrier is small and doesn't benefit from scale.
+
+    target_year : if given, escalates the EUR_2021 result to EUR_{target_year}
+        (see REFERENCE_YEAR / _inflation_factor).
     """
     p = PUBLISHED_FIT_PARAMS[option]
-    unitary_cost = p["alpha1"] + p["alpha2"] / distance_km  # EUR/(t.km)
-    levelised_cost = unitary_cost * distance_km  # EUR/t
-    return {"unitary_cost_eur_per_t_km": unitary_cost, "levelised_cost_eur_per_t": levelised_cost}
+    unitary_cost = p["alpha1"] + p["alpha2"] / distance_km  # EUR_2021/(t.km)
+    levelised_cost = unitary_cost * distance_km  # EUR_2021/t
+    factor = _inflation_factor(target_year)
+    return {
+        "unitary_cost_eur_per_t_km": unitary_cost * factor,
+        "levelised_cost_eur_per_t": levelised_cost * factor,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -139,12 +179,14 @@ TRAIN_PARAMS = {
 }
 
 
-def truck_costs_per_capacity(distance_km, discount_rate=0.08, params=None):
+def truck_costs_per_capacity(distance_km, discount_rate=0.08, params=None, target_year=None):
     """Capacity-based capex/fixed-opex, plus a usage-based variable rate, for
     container-based truck transport.
 
     distance_km: one-way distance [km]
     discount_rate: r used in the capital recovery factor
+    target_year: if given, escalates the EUR_2021 result to EUR_{target_year}
+        (see REFERENCE_YEAR / _inflation_factor).
 
     Returns:
       capex_eur_per_tph_y, fixed_opex_eur_per_tph_y [EUR/(t/h)/y]:
@@ -201,14 +243,15 @@ def truck_costs_per_capacity(distance_km, discount_rate=0.08, params=None):
         + 2 * distance_km * p["hgvt_eur_per_km"]
     ) / mc_co2
 
+    factor = _inflation_factor(target_year)
     return {
-        "capex_eur_per_tph_y": capex_eur_per_tph_y,
-        "fixed_opex_eur_per_tph_y": fixed_opex_eur_per_tph_y,
-        "variable_opex_eur_per_t": variable_opex_eur_per_t,
+        "capex_eur_per_tph_y": capex_eur_per_tph_y * factor,
+        "fixed_opex_eur_per_tph_y": fixed_opex_eur_per_tph_y * factor,
+        "variable_opex_eur_per_t": variable_opex_eur_per_t * factor,
     }
 
 
-def train_costs_per_capacity(distance_km, discount_rate=0.08, params=None):
+def train_costs_per_capacity(distance_km, discount_rate=0.08, params=None, target_year=None):
     """Capacity-based capex/fixed-opex for container-based train transport.
 
     Same capacity logic as truck_costs_per_capacity(), but all per-shipment
@@ -216,6 +259,9 @@ def train_costs_per_capacity(distance_km, discount_rate=0.08, params=None):
     into fixed_opex_eur_per_tph_y rather than split into a separate
     variable rate - train capacity here is normally bought as a single
     bundled per-isotainer rail service, not operated/fuelled directly.
+
+    target_year: if given, escalates the EUR_2021 result to EUR_{target_year}
+        (see REFERENCE_YEAR / _inflation_factor).
 
     Returns capex_eur_per_tph_y, fixed_opex_eur_per_tph_y [EUR/(t/h)/y].
     """
@@ -252,9 +298,10 @@ def train_costs_per_capacity(distance_km, discount_rate=0.08, params=None):
     )
     fixed_opex_eur_per_tph_y = rail_service_eur_per_tph_y + iso_fixed_opex_per_tph_y
 
+    factor = _inflation_factor(target_year)
     return {
-        "capex_eur_per_tph_y": capex_eur_per_tph_y,
-        "fixed_opex_eur_per_tph_y": fixed_opex_eur_per_tph_y,
+        "capex_eur_per_tph_y": capex_eur_per_tph_y * factor,
+        "fixed_opex_eur_per_tph_y": fixed_opex_eur_per_tph_y * factor,
     }
 
 
