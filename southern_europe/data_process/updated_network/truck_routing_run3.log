@@ -1,0 +1,113 @@
+Downloading OSM truck-suitable road network for bbox (7.218, 43.680, 14.100, 46.769) ...
+Road classes included: motorway, motorway_link, trunk, trunk_link, primary, primary_link, secondary, secondary_link
+  Attempt 1/5 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001E879993250>, 'Connection to overpass-api.de timed out. (connect timeout=300)'))); retrying (cached tiles will be reused) ...
+  Attempt 2/5 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001E879993C50>, 'Connection to overpass-api.de timed out. (connect timeout=300)'))); retrying (cached tiles will be reused) ...
+  Attempt 3/5 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001E879B14190>, 'Connection to overpass-api.de timed out. (connect timeout=300)'))); retrying (cached tiles will be reused) ...
+  Attempt 4/5 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001E879B14690>, 'Connection to overpass-api.de timed out. (connect timeout=300)'))); retrying (cached tiles will be reused) ...
+  Attempt 5/5 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001E879993D90>, 'Connection to overpass-api.de timed out. (connect timeout=300)'))); giving up.
+Traceback (most recent call last):
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\connection.py", line 198, in _new_conn
+    sock = connection.create_connection(
+        (self._dns_host, self.port),
+    ...<2 lines>...
+        socket_options=self.socket_options,
+    )
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\util\connection.py", line 85, in create_connection
+    raise err
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\util\connection.py", line 73, in create_connection
+    sock.connect(sa)
+    ~~~~~~~~~~~~^^^^
+TimeoutError: [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\connectionpool.py", line 488, in _make_request
+    raise new_e
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\connectionpool.py", line 464, in _make_request
+    self._validate_conn(conn)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\connectionpool.py", line 1093, in _validate_conn
+    conn.connect()
+    ~~~~~~~~~~~~^^
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\connection.py", line 704, in connect
+    self.sock = sock = self._new_conn()
+                       ~~~~~~~~~~~~~~^^
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\connection.py", line 207, in _new_conn
+    raise ConnectTimeoutError(
+    ...<2 lines>...
+    ) from e
+urllib3.exceptions.ConnectTimeoutError: (<urllib3.connection.HTTPSConnection object at 0x000001E879993D90>, 'Connection to overpass-api.de timed out. (connect timeout=300)')
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\requests\adapters.py", line 667, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\connectionpool.py", line 841, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\urllib3\util\retry.py", line 519, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001E879993D90>, 'Connection to overpass-api.de timed out. (connect timeout=300)'))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\data_process\updated_network\truck_routing.py", line 250, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\data_process\updated_network\truck_routing.py", line 232, in main
+    G = download_truck_road_network(nodes)
+  File "C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\data_process\updated_network\truck_routing.py", line 125, in download_truck_road_network
+    raise last_exc
+  File "C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\data_process\updated_network\truck_routing.py", line 114, in download_truck_road_network
+    G = ox.graph_from_bbox(
+        (west, south, east, north),
+        custom_filter=CUSTOM_FILTER,
+        simplify=True,
+    )
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\graph.py", line 106, in graph_from_bbox
+    G = graph_from_polygon(
+        polygon,
+    ...<4 lines>...
+        custom_filter=custom_filter,
+    )
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\graph.py", line 496, in graph_from_polygon
+    G_buff = _create_graph(response_jsons, bidirectional)
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\graph.py", line 625, in _create_graph
+    for response_json in response_jsons:
+                         ^^^^^^^^^^^^^^
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py", line 402, in _download_overpass_network
+    yield _overpass_request(OrderedDict(data=query_str))
+          ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py", line 469, in _overpass_request
+    response = requests.post(
+        url,
+    ...<3 lines>...
+        **settings.requests_kwargs,
+    )
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\requests\api.py", line 115, in post
+    return request("post", url, data=data, json=json, **kwargs)
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\requests\api.py", line 59, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\requests\sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\requests\sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "C:\AdOpT-NET0\.venv\Lib\site-packages\requests\adapters.py", line 688, in send
+    raise ConnectTimeout(e, request=request)
+requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001E879993D90>, 'Connection to overpass-api.de timed out. (connect timeout=300)'))

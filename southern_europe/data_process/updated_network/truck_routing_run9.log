@@ -1,0 +1,9 @@
+Computing OSM truck-suitable-road distances for the 21 arcs the colleague already computed in ArcGIS (validation set) ...
+  Resuming from checkpoint: 3 pair(s) already computed in C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\data_process\updated_network\truck_routing_checkpoint.csv
+  [1/21] Trino Vercellese (#3) -> S.Giuliano Milanese (#15)
+    (from checkpoint) 101.22
+  [2/21] Trino Vercellese (#3) -> Piacenza (#20)
+    (from checkpoint) 132.19
+  [3/21] Trino Vercellese (#3) -> Eni S.p.A Casalborsetti (#42)
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 15 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)

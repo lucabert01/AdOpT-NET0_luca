@@ -1,0 +1,39 @@
+Computing OSM truck-suitable-road distances for the 21 arcs the colleague already computed in ArcGIS (validation set) ...
+  Resuming from checkpoint: 18 pair(s) already computed in C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\data_process\updated_network\truck_routing_checkpoint.csv
+  [1/21] Trino Vercellese (#3) -> S.Giuliano Milanese (#15)
+    (from checkpoint) 101.22
+  [2/21] Trino Vercellese (#3) -> Piacenza (#20)
+    (from checkpoint) 132.19
+  [3/21] Trino Vercellese (#3) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [4/21] TERMOVALORIZZATORE COMO (#11) -> Piacenza (#20)
+    (from checkpoint) 106.74
+  [5/21] TERMOVALORIZZATORE COMO (#11) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [6/21] TERMOVALORIZZATORE DI DESIO (#12) -> Piacenza (#20)
+    (from checkpoint) 86.96
+  [7/21] TERMOVALORIZZATORE DI DESIO (#12) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [8/21] S.Giuliano Milanese (#15) -> Piacenza (#20)
+    (from checkpoint) nan
+  [9/21] S.Giuliano Milanese (#15) -> TERMOVALORIZZATORE DI BRESCIA (#23)
+    (from checkpoint) nan
+  [10/21] S.Giuliano Milanese (#15) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [11/21] Impianto di termovalorizzazione di Valmadrera (#17) -> Piacenza (#20)
+    (from checkpoint) nan
+  [12/21] Impianto di termovalorizzazione di Valmadrera (#17) -> TERMOVALORIZZATORE DI BRESCIA (#23)
+    (from checkpoint) nan
+  [13/21] Impianto di termovalorizzazione di Valmadrera (#17) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [14/21] TERMOVALORIZZAOTRE DI VERONA (#26) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [15/21] TERMOVALORIZZATORE DI BOLZANO (#28) -> TERMOVALORIZZAOTRE DI VERONA (#26)
+    (from checkpoint) nan
+  [16/21] TERMOVALORIZZATORE DI BOLZANO (#28) -> Impianto di Termovalorizzazione di San Lazzaro (PD) (#34)
+    (from checkpoint) nan
+  [17/21] TERMOVALORIZZATORE DI BOLZANO (#28) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [18/21] Stazione Ferroviaria (#32) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [19/21] Impianto di Termovalorizzazione di San Lazzaro (PD) (#34) -> Eni S.p.A Casalborsetti (#42)

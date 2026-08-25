@@ -1,0 +1,13 @@
+Computing OSM truck-suitable-road distances for the 21 arcs the colleague already computed in ArcGIS (validation set) ...
+  Resuming from checkpoint: 9 pair(s) already computed in C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\data_process\updated_network\truck_routing_checkpoint.csv
+  [1/21] Trino Vercellese (#3) -> S.Giuliano Milanese (#15)
+    (from checkpoint) 101.22
+  [2/21] Trino Vercellese (#3) -> Piacenza (#20)
+    (from checkpoint) 132.19
+  [3/21] Trino Vercellese (#3) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [4/21] TERMOVALORIZZATORE COMO (#11) -> Piacenza (#20)
+    (from checkpoint) 106.74
+  [5/21] TERMOVALORIZZATORE COMO (#11) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [6/21] TERMOVALORIZZATORE DI DESIO (#12) -> Piacenza (#20)

@@ -1,0 +1,22 @@
+from_name,from_node,to_name,to_node,arcgis_km,osm_km,diff_km,pct_diff
+Trino Vercellese,3,S.Giuliano Milanese,15,99.17,101.22,2.049999999999997,2.0671574064737293
+Trino Vercellese,3,Piacenza,20,139.08,132.19,-6.890000000000015,-4.953983318953131
+Trino Vercellese,3,Eni S.p.A Casalborsetti,42,384.092096,374.03,-10.062096000000054,-2.6197092064086767
+TERMOVALORIZZATORE COMO,11,Piacenza,20,107.81,106.74,-1.0700000000000074,-0.9924867823022051
+TERMOVALORIZZATORE COMO,11,Eni S.p.A Casalborsetti,42,344.958568,331.45,-13.508568000000025,-3.915997239413408
+TERMOVALORIZZATORE DI DESIO,12,Piacenza,20,81.08,86.96,5.8799999999999955,7.2520966946225895
+TERMOVALORIZZATORE DI DESIO,12,Eni S.p.A Casalborsetti,42,326.41946,,,
+S.Giuliano Milanese,15,Piacenza,20,53.074448,,,
+S.Giuliano Milanese,15,TERMOVALORIZZATORE DI BRESCIA,23,84.855056,,,
+S.Giuliano Milanese,15,Eni S.p.A Casalborsetti,42,297.565401,,,
+Impianto di termovalorizzazione di Valmadrera,17,Piacenza,20,112.48,,,
+Impianto di termovalorizzazione di Valmadrera,17,TERMOVALORIZZATORE DI BRESCIA,23,83.935719,,,
+Impianto di termovalorizzazione di Valmadrera,17,Eni S.p.A Casalborsetti,42,319.569653,,,
+TERMOVALORIZZAOTRE DI VERONA,26,Eni S.p.A Casalborsetti,42,171.98,,,
+TERMOVALORIZZATORE DI BOLZANO,28,TERMOVALORIZZAOTRE DI VERONA,26,150.61,,,
+TERMOVALORIZZATORE DI BOLZANO,28,Impianto di Termovalorizzazione di San Lazzaro (PD),34,201.9,209.27,7.3700000000000045,3.6503219415552275
+TERMOVALORIZZATORE DI BOLZANO,28,Eni S.p.A Casalborsetti,42,296.328931,,,
+Stazione Ferroviaria,32,Eni S.p.A Casalborsetti,42,99.18,,,
+Impianto di Termovalorizzazione di San Lazzaro (PD),34,Eni S.p.A Casalborsetti,42,115.08,,,
+HERAMBIENTE - 3^ LINEA,35,Eni S.p.A Casalborsetti,42,45.45,,,
+Termovalorizzatore di Rimini,40,Eni S.p.A Casalborsetti,42,82.65,,,

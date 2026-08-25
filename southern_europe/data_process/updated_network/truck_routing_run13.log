@@ -1,0 +1,63 @@
+Computing OSM truck-suitable-road distances for the 21 arcs the colleague already computed in ArcGIS (validation set) ...
+  Resuming from checkpoint: 10 pair(s) already computed in C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\data_process\updated_network\truck_routing_checkpoint.csv
+  [1/21] Trino Vercellese (#3) -> S.Giuliano Milanese (#15)
+    (from checkpoint) 101.22
+  [2/21] Trino Vercellese (#3) -> Piacenza (#20)
+    (from checkpoint) 132.19
+  [3/21] Trino Vercellese (#3) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [4/21] TERMOVALORIZZATORE COMO (#11) -> Piacenza (#20)
+    (from checkpoint) 106.74
+  [5/21] TERMOVALORIZZATORE COMO (#11) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [6/21] TERMOVALORIZZATORE DI DESIO (#12) -> Piacenza (#20)
+    (from checkpoint) 86.96
+  [7/21] TERMOVALORIZZATORE DI DESIO (#12) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [8/21] S.Giuliano Milanese (#15) -> Piacenza (#20)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B9943839D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B994383110>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B9943807D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (9.186, 44.957, 9.804, 45.491): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B9943807D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [9/21] S.Giuliano Milanese (#15) -> TERMOVALORIZZATORE DI BRESCIA (#23)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B994380F50>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B994382710>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B994380690>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (9.148, 45.291, 10.347, 45.613): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B994380690>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [10/21] S.Giuliano Milanese (#15) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [11/21] Impianto di termovalorizzazione di Valmadrera (#17) -> Piacenza (#20)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B994380F50>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B994383250>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B9969047D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (9.260, 44.940, 9.804, 45.957): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B9969047D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [12/21] Impianto di termovalorizzazione di Valmadrera (#17) -> TERMOVALORIZZATORE DI BRESCIA (#23)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996904E10>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996905310>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996905810>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (9.232, 45.413, 10.336, 45.940): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996905810>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [13/21] Impianto di termovalorizzazione di Valmadrera (#17) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [14/21] TERMOVALORIZZAOTRE DI VERONA (#26) -> Eni S.p.A Casalborsetti (#42)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996905D10>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B994380A50>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996905BD0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (10.871, 44.434, 12.458, 45.526): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996905BD0>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [15/21] TERMOVALORIZZATORE DI BOLZANO (#28) -> TERMOVALORIZZAOTRE DI VERONA (#26)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996905950>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B9969051D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996904CD0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (10.954, 45.240, 11.409, 46.629): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996904CD0>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [16/21] TERMOVALORIZZATORE DI BOLZANO (#28) -> Impianto di Termovalorizzazione di San Lazzaro (PD) (#34)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996904910>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B9969060D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B994380CD0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (11.209, 45.250, 12.024, 46.628): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B994380CD0>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [17/21] TERMOVALORIZZATORE DI BOLZANO (#28) -> Eni S.p.A Casalborsetti (#42)
+    (from checkpoint) nan
+  [18/21] Stazione Ferroviaria (#32) -> Eni S.p.A Casalborsetti (#42)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996906210>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B9969047D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996904410>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (11.596, 44.460, 12.374, 45.146): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001B996904410>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [19/21] Impianto di Termovalorizzazione di San Lazzaro (PD) (#34) -> Eni S.p.A Casalborsetti (#42)

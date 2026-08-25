@@ -1,0 +1,22 @@
+Computing OSM truck-suitable-road distances for the 21 arcs the colleague already computed in ArcGIS (validation set) ...
+  [1/21] Trino Vercellese (#3) -> S.Giuliano Milanese (#15)
+    101.22 km
+  [2/21] Trino Vercellese (#3) -> Piacenza (#20)
+    132.19 km
+  [3/21] Trino Vercellese (#3) -> Eni S.p.A Casalborsetti (#42)
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 15 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000001BFDA2D6210>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 15 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 2/3 failed (ConnectionError: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001BFD3994CD0>: Failed to resolve 'overpass-api.de' ([Errno 11001] getaddrinfo failed)")))
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 15 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 3/3 failed (ConnectionError: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001BFD3995810>: Failed to resolve 'overpass-api.de' ([Errno 11001] getaddrinfo failed)")))
+    Giving up on bbox (7.697, 44.460, 12.872, 45.290): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001BFD3995810>: Failed to resolve 'overpass-api.de' ([Errno 11001] getaddrinfo failed)"))
+  [4/21] TERMOVALORIZZATORE COMO (#11) -> Piacenza (#20)
+    Attempt 1/3 failed (ConnectionError: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001BFD3995F90>: Failed to resolve 'overpass-api.de' ([Errno 11001] getaddrinfo failed)")))
+    106.74 km
+  [5/21] TERMOVALORIZZATORE COMO (#11) -> Eni S.p.A Casalborsetti (#42)
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 23 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)

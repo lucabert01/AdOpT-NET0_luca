@@ -1,0 +1,7 @@
+Computing OSM truck-suitable-road distances for the 21 arcs the colleague already computed in ArcGIS (validation set) ...
+  [1/21] Trino Vercellese (#3) -> S.Giuliano Milanese (#15)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x0000023EE1A50F50>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x0000023EE1C7C2D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectionError: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x0000023EE1C7C7D0>: Failed to resolve 'overpass-api.de' ([Errno 11001] getaddrinfo failed)")))
+    Giving up on bbox (8.145, 45.090, 9.435, 45.491): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x0000023EE1C7C7D0>: Failed to resolve 'overpass-api.de' ([Errno 11001] getaddrinfo failed)"))
+  [2/21] Trino Vercellese (#3) -> Piacenza (#20)

@@ -1,0 +1,144 @@
+Computing OSM truck-suitable-road distances for the 21 arcs the colleague already computed in ArcGIS (validation set) ...
+  Resuming from checkpoint: 4 pair(s) already computed in C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\data_process\updated_network\truck_routing_checkpoint.csv
+  [1/21] Trino Vercellese (#3) -> S.Giuliano Milanese (#15)
+    (from checkpoint) 101.22
+  [2/21] Trino Vercellese (#3) -> Piacenza (#20)
+    (from checkpoint) 132.19
+  [3/21] Trino Vercellese (#3) -> Eni S.p.A Casalborsetti (#42)
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 15 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    374.03 km
+  [4/21] TERMOVALORIZZATORE COMO (#11) -> Piacenza (#20)
+    (from checkpoint) 106.74
+  [5/21] TERMOVALORIZZATORE COMO (#11) -> Eni S.p.A Casalborsetti (#42)
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 23 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 1/3 failed (ConnectionError: HTTPSConnectionPool(host='overpass-api.de', port=443): Read timed out.)
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 23 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A19807CCD0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 23 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1B6B30050>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (8.591, 44.378, 12.755, 45.956): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1B6B30050>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [6/21] TERMOVALORIZZATORE DI DESIO (#12) -> Piacenza (#20)
+    (from checkpoint) 86.96
+  [7/21] TERMOVALORIZZATORE DI DESIO (#12) -> Eni S.p.A Casalborsetti (#42)
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 19 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1B6B30550>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 19 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1B604BD90>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 19 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1B6B30B90>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (8.715, 44.403, 12.739, 45.768): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1B6B30B90>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [8/21] S.Giuliano Milanese (#15) -> Piacenza (#20)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1B6B30410>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A4190>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A5310>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (9.186, 44.957, 9.804, 45.491): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A5310>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [9/21] S.Giuliano Milanese (#15) -> TERMOVALORIZZATORE DI BRESCIA (#23)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A5810>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A5E50>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A5A90>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (9.148, 45.291, 10.347, 45.613): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A5A90>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [10/21] S.Giuliano Milanese (#15) -> Eni S.p.A Casalborsetti (#42)
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 14 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A51D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 14 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A6490>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 14 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135B9F90>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (8.838, 44.435, 12.723, 45.516): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135B9F90>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [11/21] Impianto di termovalorizzazione di Valmadrera (#17) -> Piacenza (#20)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BA490>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BAAD0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A5090>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (9.260, 44.940, 9.804, 45.957): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A5090>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [12/21] Impianto di termovalorizzazione di Valmadrera (#17) -> TERMOVALORIZZATORE DI BRESCIA (#23)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A51D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BAC10>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BA850>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (9.232, 45.413, 10.336, 45.940): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BA850>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [13/21] Impianto di termovalorizzazione di Valmadrera (#17) -> Eni S.p.A Casalborsetti (#42)
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 22 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135B9BD0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 22 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135B9D10>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+C:\AdOpT-NET0\.venv\Lib\site-packages\osmnx\_overpass.py:271: UserWarning: This area is 22 times your configured Overpass max query area size. It will automatically be divided up into multiple sub-queries accordingly. This may take a long time.
+  multi_poly_proj = utils_geo._consolidate_subdivide_geometry(poly_proj)
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BB390>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (8.922, 44.368, 12.712, 46.032): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BB390>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [14/21] TERMOVALORIZZAOTRE DI VERONA (#26) -> Eni S.p.A Casalborsetti (#42)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A42D0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2089A5950>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BB610>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (10.871, 44.434, 12.458, 45.526): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BB610>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [15/21] TERMOVALORIZZATORE DI BOLZANO (#28) -> TERMOVALORIZZAOTRE DI VERONA (#26)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BA210>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135B9F90>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BA490>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (10.954, 45.240, 11.409, 46.629): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A2135BA490>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [16/21] TERMOVALORIZZATORE DI BOLZANO (#28) -> Impianto di Termovalorizzazione di San Lazzaro (PD) (#34)
+    209.27 km
+  [17/21] TERMOVALORIZZATORE DI BOLZANO (#28) -> Eni S.p.A Casalborsetti (#42)
+    Attempt 1/3 failed (ConnectionError: HTTPSConnectionPool(host='overpass-api.de', port=443): Read timed out.)
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F4648410>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F4649310>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (11.164, 44.274, 12.419, 46.755): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F4649310>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [18/21] Stazione Ferroviaria (#32) -> Eni S.p.A Casalborsetti (#42)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F464AFD0>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F4648910>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F4648B90>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (11.596, 44.460, 12.374, 45.146): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F4648B90>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [19/21] Impianto di Termovalorizzazione di San Lazzaro (PD) (#34) -> Eni S.p.A Casalborsetti (#42)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F464B610>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F4648E10>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F464B890>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (11.824, 44.433, 12.374, 45.536): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F464B890>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [20/21] HERAMBIENTE - 3^ LINEA (#35) -> Eni S.p.A Casalborsetti (#42)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F464BD90>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F464AD50>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F464A490>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (11.988, 44.134, 12.374, 44.660): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F464A490>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+  [21/21] Termovalorizzatore di Rimini (#40) -> Eni S.p.A Casalborsetti (#42)
+    Attempt 1/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F4649D10>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 2/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F21B7610>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Attempt 3/3 failed (ConnectTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F4648690>, 'Connection to overpass-api.de timed out. (connect timeout=120)')))
+    Giving up on bbox (12.174, 43.880, 12.732, 44.660): HTTPSConnectionPool(host='overpass-api.de', port=443): Max retries exceeded with url: /api/interpreter (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002A1F4648690>, 'Connection to overpass-api.de timed out. (connect timeout=120)'))
+
+================================================================================
+VALIDATION vs. colleague's ArcGIS-computed truck arcs
+================================================================================
+Reference arcs: 21   Matched (routable on OSM filtered network): 6
+Mean abs % diff:   3.6%
+Median abs % diff: 3.1%
+Max abs % diff:    7.3%
+Correlation (ArcGIS vs OSM):  0.9987
+
+15 reference arc(s) had no path on the filtered OSM network:
+                                          from_name  from_node                       to_name  to_node  arcgis_km  osm_km  diff_km  pct_diff
+                            TERMOVALORIZZATORE COMO         11       Eni S.p.A Casalborsetti       42 344.958568     NaN      NaN       NaN
+                        TERMOVALORIZZATORE DI DESIO         12       Eni S.p.A Casalborsetti       42 326.419460     NaN      NaN       NaN
+                                S.Giuliano Milanese         15                      Piacenza       20  53.074448     NaN      NaN       NaN
+                                S.Giuliano Milanese         15 TERMOVALORIZZATORE DI BRESCIA       23  84.855056     NaN      NaN       NaN
+                                S.Giuliano Milanese         15       Eni S.p.A Casalborsetti       42 297.565401     NaN      NaN       NaN
+      Impianto di termovalorizzazione di Valmadrera         17                      Piacenza       20 112.480000     NaN      NaN       NaN
+      Impianto di termovalorizzazione di Valmadrera         17 TERMOVALORIZZATORE DI BRESCIA       23  83.935719     NaN      NaN       NaN
+      Impianto di termovalorizzazione di Valmadrera         17       Eni S.p.A Casalborsetti       42 319.569653     NaN      NaN       NaN
+                       TERMOVALORIZZAOTRE DI VERONA         26       Eni S.p.A Casalborsetti       42 171.980000     NaN      NaN       NaN
+                      TERMOVALORIZZATORE DI BOLZANO         28  TERMOVALORIZZAOTRE DI VERONA       26 150.610000     NaN      NaN       NaN
+                      TERMOVALORIZZATORE DI BOLZANO         28       Eni S.p.A Casalborsetti       42 296.328931     NaN      NaN       NaN
+                               Stazione Ferroviaria         32       Eni S.p.A Casalborsetti       42  99.180000     NaN      NaN       NaN
+Impianto di Termovalorizzazione di San Lazzaro (PD)         34       Eni S.p.A Casalborsetti       42 115.080000     NaN      NaN       NaN
+                             HERAMBIENTE - 3^ LINEA         35       Eni S.p.A Casalborsetti       42  45.450000     NaN      NaN       NaN
+                       Termovalorizzatore di Rimini         40       Eni S.p.A Casalborsetti       42  82.650000     NaN      NaN       NaN
+
+Comparison table saved to C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\data_process\updated_network\truck_distances_osm_computed.csv
