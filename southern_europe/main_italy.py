@@ -346,7 +346,8 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     }
 
     #----- Apply per-pipeline-size-class connection overrides -----#
-    # Curated via visualisation/pipeline_class_connections_dashboard.py - lets
+    # Curated via italy_data/geographical_feature/network_connections_dashboard.py
+    # (Pipeline size classes tab) - lets
     # you remove specific arcs from an individual pipeline size class (e.g.
     # never build 'large' on an arc that only ever carries a small emitter's
     # flow), instead of every class sharing the exact same flat connectivity.

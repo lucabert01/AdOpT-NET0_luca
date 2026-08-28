@@ -972,8 +972,8 @@ def update_network_distance_matrix(input_data_path, network_data_dict, network_t
 
 
 # Pipeline size classes curated via
-# visualisation/pipeline_class_connections_dashboard.py (see
-# load_pipeline_class_connection_matrix below).
+# italy_data/geographical_feature/network_connections_dashboard.py (Pipeline
+# size classes tab; see load_pipeline_class_connection_matrix below).
 PIPELINE_SIZE_CLASSES = ["small", "medium", "large"]
 
 
@@ -984,7 +984,8 @@ def load_pipeline_class_connection_matrix(overrides_path, size_class, base_pipel
     e.g. so a 'large' pipeline is never built on an arc that only ever
     carries a small emitter's flow, even though the arc physically exists.
 
-    The mask is curated via visualisation/pipeline_class_connections_dashboard.py
+    The mask is curated via
+    italy_data/geographical_feature/network_connections_dashboard.py
     and saved to pipeline_size_class_connections.xlsx (one sheet per size
     class, a node_id x node_id matrix of 1=enabled/0=disabled). An arc
     missing from the mask, or the override file/sheet not existing at all,
