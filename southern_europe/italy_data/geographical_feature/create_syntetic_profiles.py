@@ -3,10 +3,13 @@ Generate synthetic hourly emission profiles (8760 hours) for all emitters
 that don't already have real-world data in emission_profile_emitters.xlsx.
 
 Sectors handled:
-  - Cement   → flat, 4-week summer shutdown + 2 random 1-week stops
-  - Waste    → full capacity ±10% noise, 2 random 3-week half-capacity stops (not winter)
-  - Refining → flat, 1 random 1-week stop
-  - Other    → flat, 1 random 1-week stop
+  - Cement   → flat when running; annual capacity factor sampled ~U(65%, 75%),
+               downtime split into 3 maintenance stops (2-6 weeks each) placed in
+               late July-August, Christmas/New Year, and spring
+  - Waste    → running baseline ±5% noise, tuned so annual capacity factor ~U(85%, 90%);
+               fixed 3-week full shutdown + a half-capacity stop of 1-5 weeks (not winter)
+  - Refining → flat, single ~5.2-week stop to bring annual capacity factor to ~90%
+  - Other    → same as Refining
   - Transport / Storage → skipped
 
 All profiles are scaled so that sum(hourly_profile) == annual_flux (tonnes/year).
@@ -37,13 +40,25 @@ SKIP_SECTORS = {"Transport", "Storage"}
 # ---------------------------------------------------------------------------
 # Calendar windows (hour indices, non-leap year)
 # ---------------------------------------------------------------------------
-JAN_FEB_START,  JAN_FEB_END   =   0 * 24,  59 * 24   # 1 Jan – 28 Feb
-APR_MAY_START,  APR_MAY_END   =  90 * 24, 151 * 24   # 1 Apr – 31 May
-SUMMER_START,   SUMMER_END    = 196 * 24, 228 * 24   # 15 Jul – 15 Aug  (4 weeks = 672 h)
+SPRING_START,   SPRING_END    =  59 * 24, 151 * 24   # 1 Mar – 31 May
+SUMMER_START,   SUMMER_END    = 196 * 24, 243 * 24   # 15 Jul – 31 Aug
+XMAS_START                    = 349 * 24              # 15 Dec
+XMAS_END                      = (365 + 31) * 24        # 31 Jan (wraps into next year)
 NO_WINTER_START, NO_WINTER_END =  59 * 24, 334 * 24  # 1 Mar – 30 Nov  (allowed for Waste stops)
 
 WEEK  = 7  * 24   # 168 h
-THREE_WEEKS = 3 * WEEK   # 504 h
+
+CEMENT_CF_LOW, CEMENT_CF_HIGH = 0.65, 0.75   # annual capacity factor range
+CEMENT_MIN_STOP = 2 * WEEK   # 336 h
+CEMENT_MAX_STOP = 6 * WEEK   # 1008 h
+
+WASTE_CF_LOW, WASTE_CF_HIGH = 0.85, 0.90   # annual capacity factor range (vs. nameplate = 1.0)
+WASTE_FULL_STOP     = 3 * WEEK   # 504 h, fixed-length full shutdown
+WASTE_HALF_STOP_MIN = 1 * WEEK   # 168 h
+WASTE_HALF_STOP_MAX = 5 * WEEK   # 840 h
+
+REFINING_CF   = 0.90   # annual capacity factor (vs. nameplate = 1.0)
+REFINING_STOP = int(round((1.0 - REFINING_CF) * HOURS))   # ~876 h ~= 5.2 weeks
 
 
 def _rand_start(window_start: int, window_end: int, stop_len: int) -> int:
@@ -54,6 +69,26 @@ def _rand_start(window_start: int, window_end: int, stop_len: int) -> int:
     return int(RNG.integers(window_start, latest))
 
 
+def _zero_range_wrapped(profile: np.ndarray, start: int, length: int) -> None:
+    """Zero out `length` hours starting at `start`, wrapping around the year boundary."""
+    idx = np.arange(start, start + length) % HOURS
+    profile[idx] = 0.0
+
+
+def _split_stop_lengths_hours(total_hours: float, n: int = 3,
+                               min_len: int = CEMENT_MIN_STOP, max_len: int = CEMENT_MAX_STOP,
+                               max_tries: int = 2000) -> np.ndarray:
+    """Split `total_hours` of downtime into `n` stop lengths, each within [min_len, max_len]."""
+    span = max_len - min_len
+    budget = min(max(total_hours - n * min_len, 0.0), n * span)
+    for _ in range(max_tries):
+        weights = RNG.dirichlet(np.full(n, 4.0))   # moderately concentrated -> near-equal splits
+        extra = weights * budget
+        if np.all(extra <= span):
+            return min_len + extra
+    return np.full(n, np.clip(total_hours / n, min_len, max_len))
+
+
 # ---------------------------------------------------------------------------
 # Normalized profile generators  (output in [0, 1])
 # Scaling to physical units (tonnes/h) is done separately via annual_flux.
@@ -62,59 +97,82 @@ def _rand_start(window_start: int, window_end: int, stop_len: int) -> int:
 def _norm_cement() -> np.ndarray:
     """
     Flat 1.0 when running.
-    Downtime:
-      - fixed 4-week summer shutdown (15 Jul – 15 Aug)
-      - 1 random 1-week stop in Jan–Feb
-      - 1 random 1-week stop in Apr–May
+    Annual capacity factor sampled ~ U(65%, 75%); the resulting downtime is split
+    into 3 maintenance stops (each 2-6 weeks), one per window:
+      - late July – August
+      - Christmas / New Year (wraps around the year boundary)
+      - spring (Mar – May)
     """
     profile = np.ones(HOURS)
-    profile[SUMMER_START:SUMMER_END] = 0.0
-    s1 = _rand_start(JAN_FEB_START, JAN_FEB_END, WEEK)
-    profile[s1:s1 + WEEK] = 0.0
-    s2 = _rand_start(APR_MAY_START, APR_MAY_END, WEEK)
-    profile[s2:s2 + WEEK] = 0.0
+
+    capacity_factor = RNG.uniform(CEMENT_CF_LOW, CEMENT_CF_HIGH)
+    total_downtime_hours = (1.0 - capacity_factor) * HOURS
+    stop_lengths = _split_stop_lengths_hours(total_downtime_hours)
+    RNG.shuffle(stop_lengths)   # random assignment of lengths to windows
+
+    windows = [
+        (SUMMER_START, SUMMER_END),
+        (XMAS_START, XMAS_END),
+        (SPRING_START, SPRING_END),
+    ]
+    for (w_start, w_end), length in zip(windows, stop_lengths):
+        length = int(round(length))
+        s = _rand_start(w_start, w_end, length)
+        _zero_range_wrapped(profile, s, length)
+
     return profile
 
 
 def _norm_waste() -> np.ndarray:
     """
-    Full capacity (1.0 ± 10% uniform noise) when both lines running.
-    2 random 3-week stops, not in winter (Mar–Nov only):
-      - during a stop: 0.5 flat (one line down, no noise)
-    Stops are guaranteed non-overlapping.
+    Running hours sit at a baseline level B (± 5% noise), where B is tuned per
+    node so the annual capacity factor (relative to nameplate = 1.0) lands in
+    U(85%, 90%). Two non-overlapping, non-winter (Mar–Nov) stops:
+      - a fixed 3-week full shutdown (0.0)
+      - a half-capacity stop (0.5 of nameplate, no noise), length U(1, 5) weeks
     """
-    profile = RNG.uniform(0.95, 1.05, HOURS)      # full capacity with ±10% noise
+    half_len = int(round(RNG.uniform(WASTE_HALF_STOP_MIN, WASTE_HALF_STOP_MAX)))
+    full_len = WASTE_FULL_STOP
 
-    starts: list[int] = []
-    for _ in range(2):
+    placed: list[tuple[int, int]] = []
+    for length in (full_len, half_len):
         for _ in range(10_000):                  # retry until non-overlapping
-            s = _rand_start(NO_WINTER_START, NO_WINTER_END, THREE_WEEKS)
-            if all(abs(s - s2) >= THREE_WEEKS for s2 in starts):
-                starts.append(s)
+            s = _rand_start(NO_WINTER_START, NO_WINTER_END, length)
+            if all(s + length <= s0 or s >= s0 + l0 for s0, l0 in placed):
+                placed.append((s, length))
                 break
+        else:
+            placed.append((s, length))            # fallback: rare, window nearly full
+    (full_start, _), (half_start, _) = placed
 
-    for s in starts:
-        profile[s:s + THREE_WEEKS] = 0.5        # half capacity, no noise
+    target_cf = RNG.uniform(WASTE_CF_LOW, WASTE_CF_HIGH)
+    running_hours = HOURS - full_len - half_len
+    baseline = (target_cf * HOURS - half_len * 0.5) / running_hours
+
+    profile = baseline * RNG.uniform(0.95, 1.05, HOURS)
+    profile[full_start:full_start + full_len] = 0.0
+    profile[half_start:half_start + half_len] = 0.5
 
     return profile
 
 
-def _norm_flat_one_stop() -> np.ndarray:
+def _norm_refining() -> np.ndarray:
     """
-    Flat 1.0 when running, one random 1-week stop anywhere in the year.
+    Flat 1.0 when running, one random stop long enough (~5.2 weeks) to bring
+    the annual capacity factor (relative to nameplate = 1.0) down to ~90%.
     Used for Refining and Other.
     """
     profile = np.ones(HOURS)
-    s = _rand_start(0, HOURS, WEEK)
-    profile[s:s + WEEK] = 0.0
+    s = _rand_start(0, HOURS, REFINING_STOP)
+    profile[s:s + REFINING_STOP] = 0.0
     return profile
 
 
 NORM_GENERATORS = {
     "Cement":   _norm_cement,
     "Waste":    _norm_waste,
-    "Refining": _norm_flat_one_stop,
-    "Other":    _norm_flat_one_stop,
+    "Refining": _norm_refining,
+    "Other":    _norm_refining,
 }
 
 # ---------------------------------------------------------------------------
