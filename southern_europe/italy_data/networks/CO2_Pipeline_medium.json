@@ -22,7 +22,7 @@
   "Performance": {
     "carrier": "CO2captured",
     "bidirectional_network": 0,
-    "loss": 1.25e-07,
+    "loss": 0,
     "min_transport": 0,
     "loss2emissions": 1,
     "emissionfactor": 0,
