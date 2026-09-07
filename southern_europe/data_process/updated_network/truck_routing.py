@@ -45,10 +45,12 @@ internet access.
 import argparse
 from pathlib import Path
 
+import geopandas as gpd
 import networkx as nx
 import numpy as np
 import osmnx as ox
 import pandas as pd
+from shapely.geometry import LineString
 
 # osmnx pins Overpass DNS resolution to a single IP for the whole process
 # (via socket.gethostbyname, which returns only one address of possibly
@@ -103,6 +105,15 @@ OVERPASS_MIRRORS = [
 ]
 
 DEFAULT_NODE_METRICS = Path(__file__).resolve().parent.parent.parent / "italy_data" / "geographical_feature" / "node_metrics_paper.xlsx"
+
+# Where OSM-computed arcs' actual road-network paths get saved, in the same
+# Length/Node/geometry shape as the colleague's ArcGIS-computed
+# truck_italy_150.shp/truck_italy_200.shp (see visualisation/routes_connection.py,
+# which plots the real path per arc rather than a straight line) - so a
+# dashboard-added or dashboard-rerouted arc can be plotted the same way as
+# the original ones, not just listed with a distance number.
+GIS_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "italy_data" / "raw_data" / "gis_data"
+DASHBOARD_TRUCK_ROUTES_PATH = GIS_DATA_DIR / "truck_italy_dashboard.shp"
 
 # Padding around a single arc's two endpoints, as a fraction of their own
 # lon/lat span, floored at a minimum in degrees - gives short hops enough
@@ -182,6 +193,60 @@ def route_distance_km(G: nx.MultiDiGraph, from_lon: float, from_lat: float,
                   f"result as suspect, not a confirmed unreachability")
         return None
     return round(length_m / 1000.0, 2)
+
+
+def route_geometry_lonlat(G: nx.MultiDiGraph, from_lon: float, from_lat: float,
+                           to_lon: float, to_lat: float) -> list[tuple[float, float]] | None:
+    """Ordered [(lon, lat), ...] along the same shortest path route_distance_km
+    scores (same node snapping, same edge weight) - call this on the same G
+    right after computing the distance, no extra download needed. None if
+    unreachable. G is unprojected (EPSG:4326), so node 'x'/'y' are already
+    lon/lat."""
+    from_node, to_node = ox.distance.nearest_nodes(G, X=[from_lon, to_lon], Y=[from_lat, to_lat])
+    try:
+        path = nx.shortest_path(G, from_node, to_node, weight="length")
+    except nx.NetworkXNoPath:
+        return None
+    if len(path) < 2:
+        return None
+    return [(G.nodes[n]["x"], G.nodes[n]["y"]) for n in path]
+
+
+def save_route_geometry(from_node: int, to_node: int, distance_km: float,
+                         coords_lonlat: list[tuple[float, float]], method: str,
+                         path: Path = DASHBOARD_TRUCK_ROUTES_PATH) -> None:
+    """Upsert one directed arc's real road-network path into
+    DASHBOARD_TRUCK_ROUTES_PATH, replacing any path previously saved for the
+    same (from_node, to_node) - e.g. a later re-route (a relocated node,
+    say) supersedes an earlier one rather than leaving both. No-op if there
+    is no geometry to save (a manually-typed distance has no path)."""
+    if not coords_lonlat or len(coords_lonlat) < 2:
+        return
+    node_str = f"{from_node},{to_node}"
+    new_row = {
+        "Length": round(float(distance_km), 2), "Node": node_str, "method": method,
+        "added_at": pd.Timestamp.now().isoformat(timespec="seconds"),
+        "geometry": LineString(coords_lonlat),
+    }
+    if path.exists():
+        gdf = gpd.read_file(path)
+        gdf = gdf[gdf["Node"] != node_str]
+        gdf = pd.concat([gdf, gpd.GeoDataFrame([new_row], crs="EPSG:4326")], ignore_index=True)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        gdf = gpd.GeoDataFrame([new_row], crs="EPSG:4326")
+    gdf.to_file(path)
+
+
+def remove_route_geometry(from_node: int, to_node: int, path: Path = DASHBOARD_TRUCK_ROUTES_PATH) -> None:
+    """Drop one directed arc's saved path, if any - mirrors the dashboard's
+    own arc-removal convention (0 = no connection) for the geometry side."""
+    if not path.exists():
+        return
+    gdf = gpd.read_file(path)
+    node_str = f"{from_node},{to_node}"
+    if (gdf["Node"] == node_str).any():
+        gdf[gdf["Node"] != node_str].to_file(path)
 
 
 def compute_distances_for_pairs(nodes: pd.DataFrame, pairs: list[tuple[int, int]],

@@ -48,6 +48,31 @@ routes_pipeline = routes_pipeline.to_crs(target_crs)
 routes_railway = routes_railway.to_crs(target_crs)
 routes_truck = routes_truck.to_crs(target_crs)
 
+# --- Merge in dashboard-computed truck routes (real OSM road-network paths,
+# not straight lines) on top of the colleague's ArcGIS-computed ones ---
+# italy_data/geographical_feature/network_connections_dashboard.py's "Compute
+# all via OSM routing" saves each arc's actual path here (same Length/Node/
+# geometry shape as truck_italy_150.shp) via
+# data_process/updated_network/truck_routing.py::save_route_geometry - this
+# covers both brand-new arcs the colleague never routed, and any of the
+# original 21 that got re-routed (e.g. a relocated node) since a dashboard
+# route always supersedes the older ArcGIS one for the same directed pair.
+truck_routes_dashboard_path = path_files_gis / "truck_italy_dashboard.shp"
+if truck_routes_dashboard_path.exists():
+    routes_truck_dashboard = gpd.read_file(truck_routes_dashboard_path).to_crs(target_crs)
+    superseded = routes_truck['Node'].isin(routes_truck_dashboard['Node'])
+    routes_truck = pd.concat(
+        [routes_truck[~superseded], routes_truck_dashboard[['Length', 'Node', 'geometry']]],
+        ignore_index=True,
+    )
+    print(f"Merged in {len(routes_truck_dashboard)} dashboard-computed truck route(s) "
+          f"({int(superseded.sum())} superseded an original ArcGIS route for the same arc) "
+          f"from {truck_routes_dashboard_path.name}")
+else:
+    print(f"No dashboard-computed truck routes yet ({truck_routes_dashboard_path.name} not found) - "
+          f"only the original {len(routes_truck)} ArcGIS routes will be plotted. Add/re-route arcs "
+          f"via network_connections_dashboard.py's Truck tab to populate this.")
+
 print("Data loaded successfully!")
 print(f"Italy boundary: {italy.shape[0]} features")
 print(f"Selected nodes: {nodes_selected.shape[0]} nodes")

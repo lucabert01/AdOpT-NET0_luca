@@ -47,12 +47,25 @@ Three tabs over the same node_metrics_paper.xlsx:
        freight-equipped facilities before editing the sheet by hand.
 
 3. "Truck network" - the only tab that writes anything back to
-   node_metrics_paper.xlsx. Lets you add a new truck arc (a node pair not yet
-   connected in the 'truck' sheet), get its distance from live OSM routing
-   (reusing data_process/updated_network/truck_routing.py's own
+   node_metrics_paper.xlsx. Lets you add new truck arcs and get their
+   distance from live OSM routing (reusing
+   data_process/updated_network/truck_routing.py's own
    download_od_subgraph/route_distance_km - restricted to truck-suitable
-   road classes) or type one in by hand, then save it directly into the
-   'truck' sheet's matching cell.
+   road classes), or type a distance in by hand, then save into the 'truck'
+   sheet's matching cell(s).
+
+   Add-then-compute-all workflow: OSM routing is slow per pair (a fresh
+   Overpass download per arc, sometimes tens of seconds to a few minutes -
+   see truck_routing.py's own retry/timeout comments), so picking a node
+   pair here only QUEUES it (no network call). Queue as many pairs as you
+   like, then click "Compute all via OSM" once - it processes the whole
+   queue in a background thread while you keep using the dashboard, polling
+   for progress every ~1s. An arc that fails to route (no path found, or
+   Overpass unreachable - it does time out repeatedly from this environment)
+   is flagged "error" with the reason, not silently estimated - pick it from
+   the "Fix" dropdown and type a distance in by hand instead. Only once a
+   queued row has a distance (computed or manual) does "Save queued arcs"
+   write it into the sheet.
 
    The 150 kt CO2/y cutoff: trucking is only a modelling option for small
    emitters, so an arc's ORIGIN must emit <= TRUCK_CUTOFF_T_PER_YEAR
@@ -61,7 +74,13 @@ Three tabs over the same node_metrics_paper.xlsx:
    into a large one's capture plant, a rail terminal or a storage site is
    exactly the point. The "From" dropdown therefore only lists eligible
    nodes, map clicks on an over-cutoff node are refused as a "From" (still
-   accepted as a "To"), and the save path re-checks the rule before writing.
+   accepted as a "To"), and both the queue-add and save paths re-check the
+   rule.
+
+   The "All truck arcs" table's Remove column zeroes an existing arc (0 = no
+   connection, same convention the pipeline/railway sheets use) - it does
+   not delete the cell or the row, so nothing about the sheet's shape
+   changes and the removal is logged to the audit CSV like any other write.
 
    This writes straight into the sheet (not a side override file) because
    defined_functions.compute_opex_var_arcs and .update_capex_gamma2_per_arc
@@ -94,6 +113,7 @@ import datetime
 import math
 import shutil
 import sys
+import threading
 from pathlib import Path
 
 import openpyxl
@@ -126,7 +146,10 @@ if not NODE_METRICS_PATH.exists():
 
 # Reuse the actual OSM-routing implementation rather than duplicating it.
 sys.path.append(str(SOUTHERN_EUROPE_DIR / "data_process" / "updated_network"))
-from truck_routing import download_od_subgraph, route_distance_km  # noqa: E402
+from truck_routing import (  # noqa: E402
+    download_od_subgraph, route_distance_km, route_geometry_lonlat,
+    save_route_geometry, remove_route_geometry,
+)
 
 SIZE_CLASSES = ["small", "medium", "large"]
 
@@ -490,49 +513,26 @@ def write_truck_arc(from_node: int, to_node: int, distance_km: float, method: st
 
 
 def compute_truck_distance(from_node: int, to_node: int):
-    """Live OSM-routed distance (km) for one directed pair, via
-    truck_routing.py's own download+shortest-path helpers (same
-    truck-suitable road-class filter it uses for the reference validation
-    set). Returns (distance_km_or_None, status_message)."""
+    """Live OSM-routed distance (km) + actual road-network path for one
+    directed pair, via truck_routing.py's own download+shortest-path helpers
+    (same truck-suitable road-class filter it uses for the reference
+    validation set). Returns (distance_km_or_None, coords_lonlat_or_None,
+    status_message). No estimate fallback: a pair OSM can't route comes back
+    None and is flagged for a manual distance instead, never silently
+    guessed (and there is no path to save for a manual distance either)."""
     if from_node is None or to_node is None:
-        return None, "Select both a From and To node first."
+        return None, None, "Select both a From and To node first."
     if from_node == to_node:
-        return None, "From and To must be different nodes."
+        return None, None, "From and To must be different nodes."
     fr, to = NODES_RAW.loc[from_node], NODES_RAW.loc[to_node]
     G = download_od_subgraph(fr.longitude, fr.latitude, to.longitude, to.latitude)
     if G is None:
-        return None, ("Could not download the OSM road network for this pair (connection issue). "
-                       "Try again, or enter a distance manually below.")
+        return None, None, "Could not download the OSM road network for this pair (connection issue)."
     d = route_distance_km(G, fr.longitude, fr.latitude, to.longitude, to.latitude)
     if d is None:
-        return None, ("No truck-suitable road path found between these two nodes on OSM. "
-                       "Enter a distance manually below if you have one from another source.")
-    return d, f"Computed via OSM routing: {d:.2f} km"
-
-
-# Typical road-network detour over the great-circle distance - only used for
-# the manual fallback estimate below, never for a saved "computed" value.
-STRAIGHT_LINE_DETOUR_FACTOR = 1.3
-
-
-def straight_line_distance_km(from_node: int, to_node: int):
-    """Great-circle distance x a detour factor - a rough fallback for when
-    Overpass/OSM is unreachable (truck_routing.py documents that happening
-    from this environment). Clearly labelled as an estimate everywhere it
-    surfaces, so it never gets mistaken for a routed distance."""
-    if from_node is None or to_node is None:
-        return None, "Select both a From and To node first."
-    if from_node == to_node:
-        return None, "From and To must be different nodes."
-    fr, to = NODES_RAW.loc[from_node], NODES_RAW.loc[to_node]
-    lat1, lon1, lat2, lon2 = map(math.radians, [fr.latitude, fr.longitude, to.latitude, to.longitude])
-    a = (math.sin((lat2 - lat1) / 2) ** 2
-         + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2)
-    great_circle = 2 * 6371.0 * math.asin(math.sqrt(a))
-    d = round(great_circle * STRAIGHT_LINE_DETOUR_FACTOR, 2)
-    return d, (f"ESTIMATE only: {great_circle:.2f} km straight line x "
-               f"{STRAIGHT_LINE_DETOUR_FACTOR} detour factor = {d:.2f} km. "
-               f"Prefer OSM routing when it is reachable.")
+        return None, None, "No truck-suitable road path found between these two nodes on OSM."
+    geom = route_geometry_lonlat(G, fr.longitude, fr.latitude, to.longitude, to.latitude)
+    return d, geom, f"Computed via OSM routing: {d:.2f} km"
 
 
 def build_truck_arcs_table_data():
@@ -551,7 +551,186 @@ def build_truck_arcs_table_data():
             "rule": "OK" if eligible else "OVER CUTOFF",
             "source": f"Dashboard ({entry.method})" if entry is not None else "Base (migrated)",
             "added_at": entry.timestamp if entry is not None else "",
+            "remove_action": "🗑 Remove",
         })
+    return rows
+
+
+# ------------------------------------------------------------------------
+# Truck-arc QUEUE: add-then-compute-all-at-once workflow. Adding a pair
+# appends a row to the "truck-queue" dcc.Store (drives the UI) AND to a
+# 'truck_pending' sheet in node_metrics_paper.xlsx (drives persistence) -
+# every change to the store gets mirrored to the sheet by persist_truck_queue
+# below, so the queue survives a closed browser tab or a restarted dashboard
+# process. This matters specifically because OSM routing needs live internet
+# access to Overpass, which has been unreachable from this environment - the
+# intended workflow while that's down is: mark which node pairs SHOULD be
+# truck-connected now (on/off only, no distance yet), and let "Compute all
+# via OSM routing" (+ its route-geometry save) fill in the numbers and
+# shapefile paths later, whenever Overpass is reachable again, from
+# whichever machine/session that happens to be.
+#
+# 'truck_pending' is a staging area only - like truck_arcs_added_via_dashboard.csv,
+# main_italy.py never reads it. A row leaves it (and the sheet) only once
+# "Save queued arcs" writes it into the real 'truck' sheet.
+# ------------------------------------------------------------------------
+TRUCK_PENDING_SHEET = "truck_pending"
+TRUCK_PENDING_COLUMNS = ["qid", "from", "to", "from_name", "to_name", "reverse",
+                         "distance_km", "reverse_distance_km", "status", "note", "added_at"]
+
+
+def load_truck_pending() -> list[dict]:
+    """Read the 'truck_pending' sheet back into the same row shape the queue
+    Store uses (see add_to_queue), so a restarted dashboard picks up right
+    where a previous session left off. Empty list if the sheet doesn't exist
+    yet (nothing queued so far)."""
+    try:
+        df = pd.read_excel(NODE_METRICS_PATH, sheet_name=TRUCK_PENDING_SHEET)
+    except ValueError:
+        return []
+    rows = []
+    for rec in df.to_dict("records"):
+        rec = {k: (None if isinstance(v, float) and pd.isna(v) else v) for k, v in rec.items()}
+        rec["from"], rec["to"], rec["qid"] = int(rec["from"]), int(rec["to"]), int(rec["qid"])
+        rec["reverse"] = bool(rec["reverse"])
+        rec["reverse_label"] = "Yes" if rec["reverse"] else ""
+        rec["remove_action"] = "\U0001F5D1"
+        rows.append(rec)
+    return rows
+
+
+def save_truck_pending(rows: list[dict]) -> None:
+    """Upsert the whole 'truck_pending' sheet (every row, replacing the
+    prior content) - only that sheet is touched, same round-trip approach
+    (and the same one-time-backup) as write_truck_arc uses for 'truck'."""
+    _ensure_truck_backup()
+    keep = [{c: r.get(c) for c in TRUCK_PENDING_COLUMNS} for r in rows]
+    df = pd.DataFrame(keep, columns=TRUCK_PENDING_COLUMNS)
+    with pd.ExcelWriter(NODE_METRICS_PATH, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
+        df.to_excel(writer, sheet_name=TRUCK_PENDING_SHEET, index=False)
+
+
+_INITIAL_TRUCK_QUEUE = load_truck_pending()
+print(f"Loaded {len(_INITIAL_TRUCK_QUEUE)} pending truck arc(s) from the '{TRUCK_PENDING_SHEET}' sheet.")
+
+_truck_queue_id_lock = threading.Lock()
+_truck_queue_next_id = max((r["qid"] for r in _INITIAL_TRUCK_QUEUE), default=0) + 1
+
+TRUCK_COMPUTE_LOCK = threading.Lock()
+TRUCK_COMPUTE_PROGRESS = {}   # qid -> {"status", "distance_km", "reverse_distance_km", "note"}
+TRUCK_COMPUTE_RUNNING = False
+
+
+def next_queue_id() -> int:
+    global _truck_queue_next_id
+    with _truck_queue_id_lock:
+        qid = _truck_queue_next_id
+        _truck_queue_next_id += 1
+    return qid
+
+
+def run_batch_compute(rows_to_compute: list[dict]):
+    """Background-thread worker: routes every queued row in order, writing
+    each result into TRUCK_COMPUTE_PROGRESS as it lands so the poll callback
+    can pick it up incrementally rather than waiting for the whole batch.
+    Also saves each leg's actual road-network path (not just the distance)
+    to DASHBOARD_TRUCK_ROUTES_PATH via truck_routing.save_route_geometry, so
+    it can be plotted alongside the colleague's ArcGIS-computed routes
+    instead of just appearing as a number in the table."""
+    global TRUCK_COMPUTE_RUNNING
+    try:
+        for row in rows_to_compute:
+            qid, f, t = row["qid"], row["from"], row["to"]
+            with TRUCK_COMPUTE_LOCK:
+                TRUCK_COMPUTE_PROGRESS[qid] = {"status": "computing", "distance_km": None,
+                                                "reverse_distance_km": None, "note": "Computing forward leg..."}
+            d, geom, msg = compute_truck_distance(f, t)
+            if d is not None:
+                save_route_geometry(f, t, d, geom, method="dashboard_osm")
+                msg += " (path saved for plotting)" if geom else " (no path geometry returned - distance only)"
+            entry = {"status": "done" if d is not None else "error",
+                     "distance_km": d, "reverse_distance_km": None, "note": msg}
+            if row.get("reverse"):
+                if not is_eligible_truck_origin(t):
+                    entry["note"] += " | Reverse skipped: " + origin_rejection_msg(t)
+                else:
+                    with TRUCK_COMPUTE_LOCK:
+                        TRUCK_COMPUTE_PROGRESS[qid] = {**entry, "status": "computing",
+                                                        "note": entry["note"] + " | Computing reverse leg..."}
+                    dr, geom_r, msg_r = compute_truck_distance(t, f)
+                    if dr is not None:
+                        save_route_geometry(t, f, dr, geom_r, method="dashboard_osm")
+                        msg_r += " (path saved)" if geom_r else " (no path geometry - distance only)"
+                    entry["reverse_distance_km"] = dr
+                    entry["note"] += f" | Reverse: {msg_r}"
+                    if dr is None and d is not None:
+                        entry["status"] = "partial"
+                    elif dr is None:
+                        entry["status"] = "error"
+            with TRUCK_COMPUTE_LOCK:
+                TRUCK_COMPUTE_PROGRESS[qid] = entry
+    finally:
+        with TRUCK_COMPUTE_LOCK:
+            TRUCK_COMPUTE_RUNNING = False
+
+
+# ==========================================
+# 4C. TRUCK AVAILABILITY (0/1 mask) - a separate, simpler concern from the
+# OSM-routing queue above: which node pairs SHOULD eventually be
+# truck-connected, decided by clicking here (same interaction as the
+# Pipeline size classes tab), independent of whether a distance/route has
+# been computed for them yet. Lives in its own 'truck_availability' sheet in
+# node_metrics_paper.xlsx (plain 0/1, node_id x node_id) - not read by
+# main_italy.py, not the 'truck' sheet itself. A colleague's separate GIS
+# script can read this sheet directly to know which pairs to route.
+# ==========================================
+TRUCK_AVAILABILITY_SHEET = "truck_availability"
+
+
+def load_truck_availability_mask() -> pd.DataFrame:
+    default = pd.DataFrame(0, index=ALL_NODE_IDS, columns=ALL_NODE_IDS)
+    try:
+        df = pd.read_excel(NODE_METRICS_PATH, sheet_name=TRUCK_AVAILABILITY_SHEET, index_col=0)
+        df.index = df.index.astype(int)
+        df.columns = df.columns.astype(int)
+    except ValueError:
+        return default
+    return df.reindex(index=ALL_NODE_IDS, columns=ALL_NODE_IDS, fill_value=0).fillna(0).astype(int)
+
+
+def save_truck_availability_mask(mask_df: pd.DataFrame) -> None:
+    _ensure_truck_backup()
+    with pd.ExcelWriter(NODE_METRICS_PATH, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
+        mask_df.to_excel(writer, sheet_name=TRUCK_AVAILABILITY_SHEET, index=True)
+
+
+def set_truck_availability(from_node: int, to_node: int, value: int) -> None:
+    mask_df = load_truck_availability_mask()
+    mask_df.loc[from_node, to_node] = int(value)
+    save_truck_availability_mask(mask_df)
+
+
+def toggle_truck_availability(from_node: int, to_node: int) -> int:
+    mask_df = load_truck_availability_mask()
+    new_val = 0 if int(mask_df.loc[from_node, to_node]) == 1 else 1
+    mask_df.loc[from_node, to_node] = new_val
+    save_truck_availability_mask(mask_df)
+    return new_val
+
+
+def build_truck_availability_table_data():
+    mask_df = load_truck_availability_mask()
+    rows = []
+    for f in mask_df.index:
+        for t in mask_df.columns:
+            if int(mask_df.loc[f, t]) == 1:
+                rows.append({
+                    "from_name": NODE_NAME.get(f, f"Node {f}"), "from_node": f,
+                    "to_name": NODE_NAME.get(t, f"Node {t}"), "to_node": t,
+                    "from_flux_kt": round(NODE_FLUX.get(f, 0.0) / 1000, 1),
+                    "rule": "OK" if is_eligible_truck_origin(f) else "OVER CUTOFF",
+                    "remove_action": "🗑",
+                })
     return rows
 
 
@@ -912,6 +1091,86 @@ def generate_truck_map_figure(from_sel=None, to_sel=None):
 
 
 # ==========================================
+# 7C. MAP RENDERING - TRUCK AVAILABILITY TAB
+# ==========================================
+def generate_truck_availability_map_figure(from_sel=None, to_sel=None):
+    mask_df = load_truck_availability_mask()
+    fig = go.Figure()
+
+    arrow_lons, arrow_lats, arrow_angles, arrow_hovers = [], [], [], []
+    hit_lons, hit_lats, hit_hovers, hit_customdata = [], [], [], []
+
+    for f in mask_df.index:
+        for t in mask_df.columns:
+            if int(mask_df.loc[f, t]) != 1 or f not in NODES_RAW.index or t not in NODES_RAW.index:
+                continue
+            node_a, node_b = NODES_RAW.loc[f], NODES_RAW.loc[t]
+            hover_txt = (f"<b>{node_a.node_name}</b> (#{f}) &rarr; <b>{node_b.node_name}</b> (#{t})<br>"
+                         f"Available for truck - click to mark unavailable")
+            fig.add_trace(go.Scattergeo(
+                lon=[node_a.longitude, node_b.longitude], lat=[node_a.latitude, node_b.latitude],
+                mode="lines", line=dict(width=2.5, color=ENABLED_SOLID), hoverinfo="skip",
+            ))
+            hit_lons += [node_a.longitude, node_b.longitude, None]
+            hit_lats += [node_a.latitude, node_b.latitude, None]
+            hit_hovers += [hover_txt, hover_txt, hover_txt]
+            hit_customdata += [[int(f), int(t)], [int(f), int(t)], [int(f), int(t)]]
+            tip_lat, tip_lon = _arrow_tip(node_a.latitude, node_a.longitude, node_b.latitude, node_b.longitude)
+            arrow_angles.append(_bearing(node_a.latitude, node_a.longitude, node_b.latitude, node_b.longitude))
+            arrow_lats.append(tip_lat)
+            arrow_lons.append(tip_lon)
+            arrow_hovers.append(hover_txt)
+
+    if hit_lons:
+        fig.add_trace(go.Scattergeo(
+            lon=hit_lons, lat=hit_lats, mode="lines",
+            line=dict(width=14, color="rgba(0,0,0,0.001)"),
+            hoverinfo="text", hovertext=hit_hovers, customdata=hit_customdata, name="Arc (click to remove)",
+        ))
+    if arrow_lons:
+        fig.add_trace(go.Scattergeo(
+            lon=arrow_lons, lat=arrow_lats, mode="markers",
+            marker=dict(symbol="arrow", size=11, color=ENABLED_SOLID, angle=arrow_angles, line=dict(width=0)),
+            hoverinfo="text", hovertext=arrow_hovers, name="Direction",
+        ))
+
+    # Nodes: square/red-outlined = above the truck cutoff (can only be a
+    # destination, same convention as the Truck network tab's map).
+    node_colors = [_node_color(t) for t in NODES_RAW["node_type"]]
+    node_symbols, node_outlines, node_hover = [], [], []
+    for nid, row in NODES_RAW.iterrows():
+        eligible = is_eligible_truck_origin(nid)
+        node_symbols.append("circle" if eligible else "square")
+        node_outlines.append("#ffffff" if eligible else TRUCK_OVER_CUTOFF_COLOR)
+        node_hover.append(
+            f"{row.node_name} (#{nid})<br>Type: {row.node_type}<br>"
+            f"Emissions: {row.annual_flux / 1000:,.0f} kt CO2/y<br>"
+            + ("Click to set as From/To"
+               if eligible else
+               f"Above the {TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt/y cutoff - destination only")
+        )
+    fig.add_trace(go.Scattergeo(
+        lon=NODES_RAW["longitude"], lat=NODES_RAW["latitude"],
+        mode="markers+text", text=NODES_RAW.index.astype(str), textposition="top right",
+        marker=dict(size=10, color=node_colors, symbol=node_symbols, line=dict(width=1.6, color=node_outlines)),
+        hoverinfo="text", hovertext=node_hover,
+        customdata=[int(nid) for nid in NODES_RAW.index], name="Nodes",
+    ))
+
+    for sel, label, color in [(from_sel, "From", TRUCK_FROM_SEL_COLOR), (to_sel, "To", TRUCK_TO_SEL_COLOR)]:
+        if sel is not None and sel in NODES_RAW.index:
+            row = NODES_RAW.loc[sel]
+            fig.add_trace(go.Scattergeo(
+                lon=[row.longitude], lat=[row.latitude], mode="markers",
+                marker=dict(size=24, color="rgba(0,0,0,0)", line=dict(width=3, color=color)),
+                hoverinfo="text", hovertext=[f"{label}: {row.node_name}"], name=label,
+            ))
+
+    fig.update_layout(uirevision="truck-availability-map")
+    return _base_geo_layout(fig)
+
+
+# ==========================================
 # 8. APP LAYOUT
 # ==========================================
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -1095,6 +1354,9 @@ TRUCK_LEGEND = dbc.Row([
 TRUCK_TAB_CONTENT = html.Div([
     dcc.Store(id="truck-data-version", data=0),
     dcc.Store(id="truck-pending-save", data=None),
+    dcc.Store(id="truck-pending-remove", data=None),
+    dcc.Store(id="truck-queue", data=_INITIAL_TRUCK_QUEUE),
+    dcc.Interval(id="truck-compute-interval", interval=900, disabled=True),
     dbc.Row([dbc.Col(TRUCK_LEGEND, width=12)]),
     dbc.Row([
         dbc.Col([
@@ -1103,10 +1365,11 @@ TRUCK_TAB_CONTENT = html.Div([
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
-                    html.H5("Add a new truck arc", className="card-title"),
+                    html.H5("Queue new truck arcs", className="card-title"),
                     html.P(
-                        "Pick two nodes - via the dropdowns or by clicking their markers on the map "
-                        "(fills From, then To; use Clear to start over).",
+                        "Pick two nodes - via the dropdowns or by clicking their markers on the map - "
+                        "then 'Add to queue'. Queue as many pairs as you like before computing anything; "
+                        "OSM routing runs once, for the whole queue, when you click 'Compute all'.",
                         className="small text-muted",
                     ),
                     dbc.Alert(
@@ -1131,37 +1394,48 @@ TRUCK_TAB_CONTENT = html.Div([
                         ], width=6),
                     ], className="mb-2"),
                     html.Div(id="truck-pick-status", className="small mb-2"),
-                    dbc.Button("Clear selection", id="truck-clear-btn", size="sm", color="secondary",
-                               outline=True, className="mb-3"),
-
-                    dbc.Button("Compute via OSM routing", id="truck-compute-btn", color="primary",
-                               size="sm", className="w-100 mb-2"),
-                    dbc.Button("Straight-line × 1.3 estimate (fallback)", id="truck-estimate-btn",
-                               color="primary", outline=True, size="sm", className="w-100 mb-2"),
                     dcc.Checklist(
                         id="truck-reverse-checkbox",
-                        options=[{"label": " Also compute/save the reverse direction", "value": "rev"}],
+                        options=[{"label": " Also queue the reverse direction", "value": "rev"}],
                         value=[], className="small mb-2",
                     ),
-                    dcc.Loading(html.Div(id="truck-compute-status", className="small mb-2"), type="dot"),
-
                     dbc.Row([
                         dbc.Col([
-                            html.Label("Distance from→to (km)", className="small"),
-                            dcc.Input(id="truck-distance-input", type="number", min=0,
+                            html.Label("Distance from→to (km) - optional, skips OSM if set", className="small"),
+                            dcc.Input(id="truck-manual-distance-input", type="number", min=0,
                                       className="form-control form-control-sm"),
                         ], width=6),
                         dbc.Col([
-                            html.Label("Distance to→from (km)", className="small"),
-                            dcc.Input(id="truck-reverse-distance-input", type="number", min=0,
+                            html.Label("Distance to→from (km) - optional", className="small"),
+                            dcc.Input(id="truck-manual-reverse-distance-input", type="number", min=0,
                                       className="form-control form-control-sm"),
                         ], width=6),
                     ], className="mb-2"),
+                    dbc.Row([
+                        dbc.Col(dbc.Button("Add to queue", id="truck-queue-add-btn", color="primary",
+                                            size="sm", className="w-100"), width=6),
+                        dbc.Col(dbc.Button("Clear selection", id="truck-clear-btn", size="sm",
+                                            color="secondary", outline=True, className="w-100"), width=6),
+                    ], className="mb-3"),
 
-                    dbc.Button("Save arc", id="truck-save-btn", color="success", size="sm", className="w-100 mb-2"),
-                    dbc.Button("Confirm overwrite", id="truck-overwrite-btn", color="danger", size="sm",
-                               className="w-100 mb-2", style={"display": "none"}),
-                    html.Div(id="truck-save-status", className="small"),
+                    dbc.Button("Compute all via OSM routing", id="truck-compute-all-btn", color="primary",
+                               size="sm", className="w-100 mb-2"),
+                    dcc.Loading(html.Div(id="truck-compute-status", className="small mb-2"), type="dot"),
+
+                    html.Hr(),
+                    html.H6("Fix a queued arc manually", className="mb-1"),
+                    html.P("For a row flagged 'error' (OSM couldn't route it) - pick it and type a distance.",
+                           className="small text-muted mb-1"),
+                    dcc.Dropdown(id="truck-queue-fix-dropdown", placeholder="Queued arc", className="mb-2"),
+                    dbc.Button("Apply distance above to selected queued arc", id="truck-queue-fix-btn",
+                               size="sm", color="warning", outline=True, className="w-100 mb-2"),
+
+                    html.Hr(),
+                    dbc.Button("Save queued arcs", id="truck-queue-save-btn", color="success", size="sm",
+                               className="w-100 mb-2"),
+                    dbc.Button("Confirm overwrite & save", id="truck-confirm-save-btn", color="danger",
+                               size="sm", className="w-100 mb-2", style={"display": "none"}),
+                    html.Div(id="truck-queue-status", className="small"),
 
                     html.Hr(),
                     html.H6("Summary", className="mb-1"),
@@ -1179,7 +1453,47 @@ TRUCK_TAB_CONTENT = html.Div([
         ], width=5),
     ]),
     html.Hr(),
+    html.H5("Queued arcs"),
+    dash_table.DataTable(
+        id="truck-queue-table",
+        columns=[
+            {"name": "From", "id": "from_name"}, {"name": "To", "id": "to_name"},
+            {"name": "Reverse too?", "id": "reverse_label"},
+            {"name": "Distance (km)", "id": "distance_km"},
+            {"name": "Reverse dist (km)", "id": "reverse_distance_km"},
+            {"name": "Status", "id": "status"},
+            {"name": "Note", "id": "note"},
+            {"name": "", "id": "remove_action"},
+        ],
+        data=[],
+        style_table={"overflowX": "auto"},
+        style_cell={"fontSize": 12, "padding": "4px", "textAlign": "center"},
+        style_cell_conditional=[
+            {"if": {"column_id": c}, "textAlign": "left"} for c in ["from_name", "to_name", "note"]
+        ],
+        style_data_conditional=[
+            {"if": {"filter_query": '{status} = "error"'}, "backgroundColor": "#fdecea", "color": "#c0392b"},
+            {"if": {"filter_query": '{status} = "partial"'}, "backgroundColor": "#fdecea", "color": "#c0392b"},
+            {"if": {"filter_query": '{status} = "done"'}, "backgroundColor": "#eafaf1"},
+            {"if": {"filter_query": '{status} = "manual"'}, "backgroundColor": "#fef9e7"},
+            {"if": {"filter_query": '{status} = "computing"'}, "backgroundColor": "#eaf2fb"},
+            {"if": {"column_id": "remove_action"}, "cursor": "pointer", "color": "#c0392b"},
+        ],
+        page_size=10,
+    ),
+    html.P("Click a row's last (blank-header) cell to remove it from the queue.", className="small text-muted"),
+    html.Div(id="truck-queue-persist-status", className="small"),
+    html.P(
+        f"Every change here is mirrored to node_metrics_paper.xlsx's '{TRUCK_PENDING_SHEET}' sheet, so the "
+        f"queue survives closing the browser tab or restarting the dashboard - pick which node pairs should "
+        f"be truck-connected now, come back and hit 'Compute all via OSM routing' once it's reachable.",
+        className="small text-muted",
+    ),
+    html.Hr(),
     html.H5("All truck arcs"),
+    html.Div(id="truck-remove-status", className="small mb-1"),
+    dbc.Button("Confirm removal", id="truck-confirm-remove-btn", color="danger", size="sm",
+               className="mb-2", style={"display": "none"}),
     dash_table.DataTable(
         id="truck-arcs-table",
         columns=[
@@ -1190,6 +1504,7 @@ TRUCK_TAB_CONTENT = html.Div([
             {"name": "Cutoff rule", "id": "rule"},
             {"name": "Source", "id": "source"},
             {"name": "Added at", "id": "added_at"},
+            {"name": "", "id": "remove_action"},
         ],
         data=build_truck_arcs_table_data(),
         style_table={"overflowX": "auto"},
@@ -1201,11 +1516,106 @@ TRUCK_TAB_CONTENT = html.Div([
             {"if": {"filter_query": '{source} contains "Dashboard"'}, "backgroundColor": "#f4ecf7"},
             {"if": {"filter_query": '{rule} = "OVER CUTOFF"'},
              "backgroundColor": "#fdecea", "color": "#c0392b", "fontWeight": "bold"},
+            {"if": {"column_id": "remove_action"}, "cursor": "pointer", "color": "#c0392b"},
         ],
         sort_action="native",
         filter_action="native",
         page_size=15,
     ),
+    html.P("Click a row's last (blank-header) cell to remove that arc (zeroes it - logged to the audit CSV).",
+           className="small text-muted"),
+], className="pt-3")
+
+TRUCK_AVAIL_LEGEND = dbc.Row([
+    dbc.Col(html.Span("─ ", style={"color": ENABLED_SOLID, "fontWeight": "bold"}), width="auto"),
+    dbc.Col("Available - click the line to mark unavailable", width="auto", className="me-3"),
+    dbc.Col(html.Span("◯/□ ", style={"fontWeight": "bold"}), width="auto"),
+    dbc.Col("Circle = eligible origin, square/red outline = over the cutoff (destination only)",
+            width="auto"),
+], className="small text-muted mb-2 flex-wrap")
+
+TRUCK_AVAILABILITY_TAB_CONTENT = html.Div([
+    dcc.Store(id="truck-avail-version", data=0),
+    dbc.Row([dbc.Col(TRUCK_AVAIL_LEGEND, width=12)]),
+    dbc.Row([
+        dbc.Col([
+            dcc.Graph(id="truck-avail-map", style={"height": "65vh"}),
+        ], width=7),
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H5("Set truck availability", className="card-title"),
+                    html.P(
+                        "This is just a 0/1 'should this pair be truck-connected' flag, saved straight "
+                        "to node_metrics_paper.xlsx's 'truck_availability' sheet - it doesn't compute a "
+                        "distance or route anything (see the separate Truck network tab for that).",
+                        className="small text-muted",
+                    ),
+                    dbc.Alert(
+                        [html.B(f"Cutoff: {TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt CO2/y. "),
+                         "Same 'From' restriction as the Truck network tab - only eligible-origin "
+                         "nodes can be marked as a pair's source."],
+                        color="info", className="small py-2 mb-2",
+                    ),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label(f"From (≤{TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt/y only)",
+                                       className="small"),
+                            dcc.Dropdown(id="truck-avail-from-dropdown", options=TRUCK_FROM_OPTIONS,
+                                         placeholder="From node"),
+                        ], width=6),
+                        dbc.Col([
+                            html.Label("To", className="small"),
+                            dcc.Dropdown(id="truck-avail-to-dropdown", options=NODE_DROPDOWN_OPTIONS,
+                                         placeholder="To node"),
+                        ], width=6),
+                    ], className="mb-2"),
+                    html.Div(id="truck-avail-pick-status", className="small mb-2"),
+                    dbc.Button("Clear selection", id="truck-avail-clear-btn", size="sm", color="secondary",
+                               outline=True, className="mb-3 w-100"),
+                    html.Div(id="truck-avail-current-status", className="small mb-2 fw-bold"),
+                    dbc.Row([
+                        dbc.Col(dbc.Button("Set available (1)", id="truck-avail-on-btn", color="success",
+                                            size="sm", className="w-100"), width=6),
+                        dbc.Col(dbc.Button("Set unavailable (0)", id="truck-avail-off-btn", color="danger",
+                                            size="sm", outline=True, className="w-100"), width=6),
+                    ], className="mb-2"),
+                    html.Div(id="truck-avail-set-status", className="small"),
+                    html.Hr(),
+                    html.H6("Summary", className="mb-1"),
+                    html.Div(id="truck-avail-summary", className="small"),
+                ])
+            ], style={"height": "65vh", "overflowY": "auto"}),
+        ], width=5),
+    ]),
+    html.Hr(),
+    html.H5("Available truck arcs (mask)"),
+    dash_table.DataTable(
+        id="truck-avail-table",
+        columns=[
+            {"name": "From", "id": "from_name"}, {"name": "id", "id": "from_node"},
+            {"name": "To", "id": "to_name"}, {"name": "id", "id": "to_node"},
+            {"name": "From emissions (kt/y)", "id": "from_flux_kt"},
+            {"name": "Cutoff rule", "id": "rule"},
+            {"name": "", "id": "remove_action"},
+        ],
+        data=build_truck_availability_table_data(),
+        style_table={"overflowX": "auto"},
+        style_cell={"fontSize": 12, "padding": "4px", "textAlign": "center"},
+        style_cell_conditional=[
+            {"if": {"column_id": c}, "textAlign": "left"} for c in ["from_name", "to_name"]
+        ],
+        style_data_conditional=[
+            {"if": {"filter_query": '{rule} = "OVER CUTOFF"'},
+             "backgroundColor": "#fdecea", "color": "#c0392b", "fontWeight": "bold"},
+            {"if": {"column_id": "remove_action"}, "cursor": "pointer", "color": "#c0392b"},
+        ],
+        sort_action="native",
+        filter_action="native",
+        page_size=15,
+    ),
+    html.P("Click a row's last (blank-header) cell to mark that pair unavailable.",
+           className="small text-muted"),
 ], className="pt-3")
 
 app.layout = dbc.Container([
@@ -1214,6 +1624,7 @@ app.layout = dbc.Container([
         dbc.Tab(PIPELINE_TAB_CONTENT, label="Pipeline size classes", tab_id="pipeline-tab"),
         dbc.Tab(RAIL_TAB_CONTENT, label="Railway network", tab_id="rail-tab"),
         dbc.Tab(TRUCK_TAB_CONTENT, label="Truck network", tab_id="truck-tab"),
+        dbc.Tab(TRUCK_AVAILABILITY_TAB_CONTENT, label="Truck availability", tab_id="truck-avail-tab"),
     ], id="main-tabs", active_tab="pipeline-tab"),
 ], fluid=True)
 
@@ -1380,121 +1791,444 @@ def pick_or_clear_truck_nodes(click_data, _clear_clicks, from_val, to_val):
 
 
 @app.callback(
-    Output("truck-distance-input", "value"),
-    Output("truck-reverse-distance-input", "value"),
-    Output("truck-compute-status", "children"),
-    Input("truck-compute-btn", "n_clicks"),
-    Input("truck-estimate-btn", "n_clicks"),
+    Output("truck-queue", "data"),
+    Output("truck-from-dropdown", "value", allow_duplicate=True),
+    Output("truck-to-dropdown", "value", allow_duplicate=True),
+    Output("truck-manual-distance-input", "value"),
+    Output("truck-manual-reverse-distance-input", "value"),
+    Output("truck-queue-status", "children"),
+    Input("truck-queue-add-btn", "n_clicks"),
     State("truck-from-dropdown", "value"),
     State("truck-to-dropdown", "value"),
     State("truck-reverse-checkbox", "value"),
+    State("truck-manual-distance-input", "value"),
+    State("truck-manual-reverse-distance-input", "value"),
+    State("truck-queue", "data"),
     prevent_initial_call=True,
 )
-def do_compute_truck_distance(_n_osm, _n_est, from_node, to_node, reverse_checked):
-    if not is_eligible_truck_origin(from_node) and from_node is not None:
-        return dash.no_update, dash.no_update, html.Span("⛔ " + origin_rejection_msg(from_node),
-                                                          className="text-danger")
-    fn = straight_line_distance_km if dash.ctx.triggered_id == "truck-estimate-btn" else compute_truck_distance
-    d_fwd, msg_fwd = fn(from_node, to_node)
-    d_rev, msg_rev = None, None
-    if reverse_checked:
-        # The reverse arc's origin is the "To" node, so it must clear the
-        # cutoff on its own before it is worth routing.
-        if not is_eligible_truck_origin(to_node):
-            msg_rev = "skipped - " + origin_rejection_msg(to_node)
-        else:
-            d_rev, msg_rev = fn(to_node, from_node)
-    full_msg = msg_fwd if not reverse_checked else f"Forward: {msg_fwd} | Reverse: {msg_rev}"
-    return d_fwd, d_rev, full_msg
+def add_to_queue(_n, from_node, to_node, reverse_checked, manual_d, manual_rd, queue_data):
+    queue_data = queue_data or []
+    no5 = (dash.no_update,) * 5
+
+    if from_node is None or to_node is None:
+        return (*no5, "Select both From and To first.")
+    if from_node == to_node:
+        return (*no5, "From and To must be different nodes.")
+    if not is_eligible_truck_origin(from_node):
+        return (*no5, html.Span("⛔ " + origin_rejection_msg(from_node), className="text-danger"))
+    want_reverse = bool(reverse_checked)
+    if want_reverse and not is_eligible_truck_origin(to_node):
+        return (*no5, html.Span(
+            "⛔ Reverse direction refused: " + origin_rejection_msg(to_node) +
+            " Untick 'Also queue the reverse direction' to queue the forward arc only.",
+            className="text-danger"))
+    if any(r["from"] == from_node and r["to"] == to_node for r in queue_data):
+        return (*no5, f"{NODE_NAME.get(from_node)} → {NODE_NAME.get(to_node)} is already queued.")
+
+    manual = manual_d is not None
+    row = {
+        "qid": next_queue_id(), "from": int(from_node), "to": int(to_node),
+        "from_name": NODE_NAME.get(from_node), "to_name": NODE_NAME.get(to_node),
+        "reverse": want_reverse, "reverse_label": "Yes" if want_reverse else "",
+        "distance_km": manual_d, "reverse_distance_km": manual_rd if want_reverse else None,
+        "status": "manual" if manual else "queued",
+        "note": "Manually entered." if manual else "Waiting to compute.",
+        "added_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "remove_action": "🗑",
+    }
+    msg = f"Queued {row['from_name']} → {row['to_name']}" + (" (+ reverse)" if want_reverse else "") + "."
+    return queue_data + [row], None, None, None, None, msg
 
 
 @app.callback(
-    Output("truck-save-status", "children"),
+    Output("truck-queue", "data", allow_duplicate=True),
+    Input("truck-queue-table", "active_cell"),
+    State("truck-queue-table", "data"),
+    State("truck-queue", "data"),
+    prevent_initial_call=True,
+)
+def remove_from_queue(active_cell, table_data, queue_data):
+    if not active_cell or active_cell["column_id"] != "remove_action":
+        return dash.no_update
+    qid = table_data[active_cell["row"]]["qid"]
+    return [r for r in (queue_data or []) if r["qid"] != qid]
+
+
+@app.callback(Output("truck-queue-table", "data"), Input("truck-queue", "data"))
+def refresh_queue_table(queue_data):
+    return queue_data or []
+
+
+@app.callback(
+    Output("truck-queue-persist-status", "children"),
+    Input("truck-queue", "data"),
+    prevent_initial_call=True,
+)
+def persist_queue(queue_data):
+    """Mirrors every queue change to the 'truck_pending' sheet - fires on
+    every add/remove/manual-fix and on every OSM-compute progress update, so
+    the sheet always matches what's on screen. Silent on success (would
+    otherwise flash on every poll tick during a batch compute); only
+    surfaces a problem, e.g. the workbook being open in Excel."""
+    try:
+        save_truck_pending(queue_data or [])
+    except PermissionError as e:
+        return html.Span(f"⚠️ Queue changed but could not save to the sheet (file open in Excel?): {e}",
+                         className="text-danger")
+    return ""
+
+
+@app.callback(Output("truck-queue-fix-dropdown", "options"), Input("truck-queue", "data"))
+def refresh_queue_fix_dropdown(queue_data):
+    return [
+        {"label": f"{r['from_name']} → {r['to_name']} [{r['status']}]", "value": r["qid"]}
+        for r in (queue_data or [])
+    ]
+
+
+@app.callback(
+    Output("truck-queue", "data", allow_duplicate=True),
+    Output("truck-queue-status", "children", allow_duplicate=True),
+    Input("truck-queue-fix-btn", "n_clicks"),
+    State("truck-queue-fix-dropdown", "value"),
+    State("truck-manual-distance-input", "value"),
+    State("truck-manual-reverse-distance-input", "value"),
+    State("truck-queue", "data"),
+    prevent_initial_call=True,
+)
+def apply_manual_fix(_n, qid, manual_d, manual_rd, queue_data):
+    if qid is None or manual_d is None:
+        return dash.no_update, "Pick a queued arc from 'Fix a queued arc manually' and enter a distance first."
+    new_rows, found = [], False
+    for r in queue_data or []:
+        if r["qid"] == qid:
+            found = True
+            r = {**r, "distance_km": manual_d,
+                 "reverse_distance_km": manual_rd if r.get("reverse") else None,
+                 "status": "manual", "note": "Manually entered."}
+        new_rows.append(r)
+    if not found:
+        return dash.no_update, "That queued arc no longer exists."
+    return new_rows, f"Applied manual distance ({manual_d} km) to that queued arc."
+
+
+@app.callback(
+    Output("truck-compute-status", "children"),
+    Output("truck-compute-interval", "disabled"),
+    Input("truck-compute-all-btn", "n_clicks"),
+    State("truck-queue", "data"),
+    prevent_initial_call=True,
+)
+def start_batch_compute(_n, queue_data):
+    global TRUCK_COMPUTE_RUNNING
+    if not queue_data:
+        return "Queue is empty - add some arcs first.", True
+    with TRUCK_COMPUTE_LOCK:
+        if TRUCK_COMPUTE_RUNNING:
+            return "A batch computation is already running - wait for it to finish.", False
+        to_compute = [r for r in queue_data if r["status"] in ("queued", "error", "partial")]
+        if not to_compute:
+            return "Nothing to compute - every queued arc already has a distance (computed or manual).", True
+        TRUCK_COMPUTE_RUNNING = True
+    threading.Thread(target=run_batch_compute, args=(to_compute,), daemon=True).start()
+    return (f"Computing {len(to_compute)} arc(s) via OSM routing in the background - this can take a while "
+            f"per arc. Feel free to keep using the dashboard; progress updates here.", False)
+
+
+@app.callback(
+    Output("truck-queue", "data", allow_duplicate=True),
+    Output("truck-compute-status", "children", allow_duplicate=True),
+    Output("truck-compute-interval", "disabled", allow_duplicate=True),
+    Input("truck-compute-interval", "n_intervals"),
+    State("truck-queue", "data"),
+    prevent_initial_call=True,
+)
+def poll_batch_compute(_n, queue_data):
+    if not queue_data:
+        return dash.no_update, dash.no_update, True
+    with TRUCK_COMPUTE_LOCK:
+        progress_snapshot = dict(TRUCK_COMPUTE_PROGRESS)
+        running = TRUCK_COMPUTE_RUNNING
+
+    new_rows, changed = [], False
+    for row in queue_data:
+        p = progress_snapshot.get(row["qid"])
+        if p and (row.get("status") != p["status"] or row.get("distance_km") != p["distance_km"]
+                  or row.get("note") != p["note"]):
+            row = {**row, **p}
+            changed = True
+        new_rows.append(row)
+
+    n_computing = sum(1 for r in new_rows if r["status"] == "computing")
+    n_queued = sum(1 for r in new_rows if r["status"] == "queued")
+    finished = not running and n_computing == 0 and n_queued == 0
+
+    if not changed and not finished:
+        return dash.no_update, dash.no_update, dash.no_update
+
+    n_done = sum(1 for r in new_rows if r["status"] in ("done", "manual"))
+    n_err = sum(1 for r in new_rows if r["status"] in ("error", "partial"))
+    status_msg = f"{n_done} done, {n_err} flagged, {n_computing} computing, {n_queued} waiting."
+    if finished:
+        status_msg = "✅ Batch compute finished. " + status_msg
+    return new_rows, status_msg, finished
+
+
+@app.callback(
+    Output("truck-queue-status", "children", allow_duplicate=True),
+    Output("truck-queue", "data", allow_duplicate=True),
     Output("truck-data-version", "data", allow_duplicate=True),
     Output("truck-pending-save", "data"),
-    Output("truck-overwrite-btn", "style"),
-    Input("truck-save-btn", "n_clicks"),
-    State("truck-from-dropdown", "value"),
-    State("truck-to-dropdown", "value"),
-    State("truck-distance-input", "value"),
-    State("truck-reverse-checkbox", "value"),
-    State("truck-reverse-distance-input", "value"),
+    Output("truck-confirm-save-btn", "style"),
+    Input("truck-queue-save-btn", "n_clicks"),
+    State("truck-queue", "data"),
     State("truck-data-version", "data"),
     prevent_initial_call=True,
 )
-def save_truck_arc(_n, from_node, to_node, distance, reverse_checked, reverse_distance, version):
+def save_queue(_n, queue_data, version):
     hide, show = {"display": "none"}, {"display": "block"}
+    if not queue_data:
+        return "Queue is empty.", dash.no_update, dash.no_update, dash.no_update, hide
 
-    if from_node is None or to_node is None or distance is None:
-        return "Select From and To, then compute or enter a distance first.", dash.no_update, None, hide
-    if from_node == to_node:
-        return "From and To must be different nodes.", dash.no_update, None, hide
-    # Last line of defence for the cutoff: the dropdown and the map click are
-    # both already restricted, but a stale browser state could still post an
-    # ineligible origin here.
-    if not is_eligible_truck_origin(from_node):
-        return html.Span("⛔ " + origin_rejection_msg(from_node), className="text-danger"), \
-            dash.no_update, None, hide
+    ready = [r for r in queue_data if r.get("distance_km") is not None]
+    not_ready = [r for r in queue_data if r.get("distance_km") is None]
+    if not ready:
+        return ("No queued arc has a distance yet - run 'Compute all via OSM routing' or enter one "
+                 "manually first.", dash.no_update, dash.no_update, dash.no_update, hide)
 
-    want_reverse = bool(reverse_checked) and reverse_distance is not None
-    if want_reverse and not is_eligible_truck_origin(to_node):
-        return html.Span("⛔ Reverse direction refused: " + origin_rejection_msg(to_node)
-                         + " Untick 'Also compute/save the reverse direction' to save the forward arc only.",
-                         className="text-danger"), dash.no_update, None, hide
-    current_fwd = get_current_truck_value(from_node, to_node)
-    current_rev = get_current_truck_value(to_node, from_node) if want_reverse else None
-    fwd_conflict = current_fwd not in (None, 0)
-    rev_conflict = want_reverse and current_rev not in (None, 0)
-
-    if fwd_conflict or rev_conflict:
-        msg = "⚠️ Existing value(s) would be overwritten - "
-        if fwd_conflict:
-            msg += f"{NODE_NAME.get(from_node)}→{NODE_NAME.get(to_node)}: {current_fwd} km → {distance} km. "
-        if rev_conflict:
-            msg += f"{NODE_NAME.get(to_node)}→{NODE_NAME.get(from_node)}: {current_rev} km → {reverse_distance} km. "
-        msg += "Click 'Confirm overwrite' to proceed."
-        pending = {"from": from_node, "to": to_node, "distance": distance,
-                   "reverse": want_reverse, "reverse_distance": reverse_distance}
-        return msg, dash.no_update, pending, show
+    conflicts = []
+    for r in ready:
+        if get_current_truck_value(r["from"], r["to"]) not in (None, 0):
+            conflicts.append(f"{r['from_name']} → {r['to_name']}")
+        if r.get("reverse") and r.get("reverse_distance_km") is not None:
+            if get_current_truck_value(r["to"], r["from"]) not in (None, 0):
+                conflicts.append(f"{r['to_name']} → {r['from_name']}")
+    if conflicts:
+        msg = ("⚠️ These would overwrite an existing value: " + "; ".join(conflicts)
+               + ". Click 'Confirm overwrite & save' to proceed with all " + str(len(ready)) + " ready arc(s).")
+        return msg, dash.no_update, dash.no_update, ready, show
 
     try:
-        write_truck_arc(from_node, to_node, distance, method="dashboard_new")
-        if want_reverse:
-            write_truck_arc(to_node, from_node, reverse_distance, method="dashboard_new")
+        for r in ready:
+            write_truck_arc(r["from"], r["to"], r["distance_km"], method="dashboard_new")
+            if r.get("reverse") and r.get("reverse_distance_km") is not None:
+                write_truck_arc(r["to"], r["from"], r["reverse_distance_km"], method="dashboard_new")
     except (ValueError, PermissionError) as e:
         # PermissionError = the workbook is open in Excel; ValueError = a node
         # with no row/column in the 'truck' sheet.
-        return html.Span(f"⛔ Could not save: {e}", className="text-danger"), dash.no_update, None, hide
-    saved = (f"✅ Saved {NODE_NAME.get(from_node)} → {NODE_NAME.get(to_node)} ({distance} km)"
-             + (f" and the reverse ({reverse_distance} km)" if want_reverse else "")
-             + f" to {NODE_METRICS_PATH.name}.")
-    return saved, (version or 0) + 1, None, hide
+        return html.Span(f"⛔ Could not save: {e}", className="text-danger"), \
+            dash.no_update, dash.no_update, dash.no_update, hide
+
+    msg = f"✅ Saved {len(ready)} arc(s) to {NODE_METRICS_PATH.name}."
+    if not_ready:
+        msg += f" {len(not_ready)} still have no distance and stayed in the queue."
+    return msg, not_ready, (version or 0) + 1, None, hide
 
 
 @app.callback(
-    Output("truck-save-status", "children", allow_duplicate=True),
+    Output("truck-queue-status", "children", allow_duplicate=True),
+    Output("truck-queue", "data", allow_duplicate=True),
     Output("truck-data-version", "data", allow_duplicate=True),
     Output("truck-pending-save", "data", allow_duplicate=True),
-    Output("truck-overwrite-btn", "style", allow_duplicate=True),
-    Input("truck-overwrite-btn", "n_clicks"),
+    Output("truck-confirm-save-btn", "style", allow_duplicate=True),
+    Input("truck-confirm-save-btn", "n_clicks"),
     State("truck-pending-save", "data"),
+    State("truck-queue", "data"),
     State("truck-data-version", "data"),
     prevent_initial_call=True,
 )
-def confirm_overwrite_truck_arc(_n, pending, version):
+def confirm_save_queue(_n, pending, queue_data, version):
+    hide = {"display": "none"}
+    if not pending:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, hide
+    for r in pending:
+        write_truck_arc(r["from"], r["to"], r["distance_km"], method="dashboard_overwrite")
+        if r.get("reverse") and r.get("reverse_distance_km") is not None:
+            write_truck_arc(r["to"], r["from"], r["reverse_distance_km"], method="dashboard_overwrite")
+    saved_qids = {r["qid"] for r in pending}
+    remaining = [r for r in (queue_data or []) if r["qid"] not in saved_qids]
+    return f"✅ Overwritten and saved {len(pending)} arc(s).", remaining, (version or 0) + 1, None, hide
+
+
+@app.callback(
+    Output("truck-remove-status", "children"),
+    Output("truck-pending-remove", "data"),
+    Output("truck-confirm-remove-btn", "style"),
+    Input("truck-arcs-table", "active_cell"),
+    State("truck-arcs-table", "data"),
+    prevent_initial_call=True,
+)
+def request_remove_arc(active_cell, table_data):
+    hide, show = {"display": "none"}, {"display": "inline-block"}
+    if not active_cell or active_cell["column_id"] != "remove_action":
+        return dash.no_update, dash.no_update, dash.no_update
+    row = table_data[active_cell["row"]]
+    pending = {"from": int(row["from_node"]), "to": int(row["to_node"])}
+    msg = (f"Remove {row['from_name']} → {row['to_name']} ({row['distance_km']} km)? This zeroes the arc in "
+           f"{NODE_METRICS_PATH.name} (0 = no connection, same as the pipeline/railway sheets) - logged to "
+           f"the audit CSV, not a silent delete.")
+    return msg, pending, show
+
+
+@app.callback(
+    Output("truck-remove-status", "children", allow_duplicate=True),
+    Output("truck-data-version", "data", allow_duplicate=True),
+    Output("truck-pending-remove", "data", allow_duplicate=True),
+    Output("truck-confirm-remove-btn", "style", allow_duplicate=True),
+    Input("truck-confirm-remove-btn", "n_clicks"),
+    State("truck-pending-remove", "data"),
+    State("truck-data-version", "data"),
+    prevent_initial_call=True,
+)
+def confirm_remove_arc(_n, pending, version):
     hide = {"display": "none"}
     if not pending:
         return dash.no_update, dash.no_update, dash.no_update, hide
-    write_truck_arc(pending["from"], pending["to"], pending["distance"], method="dashboard_overwrite")
-    if pending.get("reverse") and pending.get("reverse_distance") is not None:
-        write_truck_arc(pending["to"], pending["from"], pending["reverse_distance"], method="dashboard_overwrite")
-    return "✅ Overwritten and saved to node_metrics_paper.xlsx.", (version or 0) + 1, None, hide
+    try:
+        write_truck_arc(pending["from"], pending["to"], 0.0, method="dashboard_removed")
+        remove_route_geometry(pending["from"], pending["to"])
+    except (ValueError, PermissionError) as e:
+        return html.Span(f"⛔ Could not remove: {e}", className="text-danger"), dash.no_update, None, hide
+    msg = f"🗑 Removed {NODE_NAME.get(pending['from'])} → {NODE_NAME.get(pending['to'])}."
+    return msg, (version or 0) + 1, None, hide
+
+
+# ==========================================
+# 12. CALLBACKS - TRUCK AVAILABILITY TAB
+# ==========================================
+@app.callback(
+    Output("truck-avail-map", "figure"),
+    Input("truck-avail-version", "data"),
+    Input("truck-avail-from-dropdown", "value"),
+    Input("truck-avail-to-dropdown", "value"),
+)
+def refresh_truck_avail_map(_version, from_sel, to_sel):
+    return generate_truck_availability_map_figure(from_sel, to_sel)
+
+
+@app.callback(Output("truck-avail-table", "data"), Input("truck-avail-version", "data"))
+def refresh_truck_avail_table(_version):
+    return build_truck_availability_table_data()
+
+
+@app.callback(Output("truck-avail-summary", "children"), Input("truck-avail-version", "data"))
+def refresh_truck_avail_summary(_version):
+    mask_df = load_truck_availability_mask()
+    n_on = int(mask_df.values.sum())
+    n_total = mask_df.size - len(mask_df.index)  # exclude the diagonal
+    return [
+        html.Div(f"{n_on} of {n_total} possible directed pairs marked available."),
+        html.Div(f"Eligible origins: {len(TRUCK_ELIGIBLE_ORIGINS)}/{len(NODES_RAW)} nodes "
+                 f"(≤{TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt CO2/y)."),
+    ]
+
+
+@app.callback(
+    Output("truck-avail-from-dropdown", "value"),
+    Output("truck-avail-to-dropdown", "value"),
+    Output("truck-avail-pick-status", "children"),
+    Output("truck-avail-version", "data", allow_duplicate=True),
+    Input("truck-avail-map", "clickData"),
+    Input("truck-avail-clear-btn", "n_clicks"),
+    State("truck-avail-from-dropdown", "value"),
+    State("truck-avail-to-dropdown", "value"),
+    State("truck-avail-version", "data"),
+    prevent_initial_call=True,
+)
+def pick_or_clear_truck_avail_nodes(click_data, _clear_clicks, from_val, to_val, version):
+    no4 = (dash.no_update,) * 4
+    if dash.ctx.triggered_id == "truck-avail-clear-btn":
+        return None, None, "", dash.no_update
+    if not click_data:
+        return no4
+    point = click_data["points"][0]
+    cd = point.get("customdata")
+    if cd is None:
+        return no4
+    if isinstance(cd, list):
+        # A click on an already-available arc's line: toggle it straight off,
+        # same one-click behaviour as the Pipeline size classes tab, rather
+        # than loading it into the From/To pickers.
+        from_node, to_node = cd
+        toggle_truck_availability(int(from_node), int(to_node))
+        return dash.no_update, dash.no_update, dash.no_update, (version or 0) + 1
+    node_id = int(cd)
+    if from_val is None:
+        if not is_eligible_truck_origin(node_id):
+            return dash.no_update, dash.no_update, html.Span(
+                "⛔ " + origin_rejection_msg(node_id) + " Pick an eligible origin first, then click "
+                "this node again to use it as the destination.", className="text-danger"), dash.no_update
+        return node_id, dash.no_update, f"From set to #{node_id} {NODE_NAME.get(node_id)}.", dash.no_update
+    if to_val is None:
+        return dash.no_update, node_id, f"To set to #{node_id} {NODE_NAME.get(node_id)}.", dash.no_update
+    return dash.no_update, dash.no_update, "Both nodes are set - use 'Clear selection' to start over.", dash.no_update
+
+
+@app.callback(
+    Output("truck-avail-current-status", "children"),
+    Input("truck-avail-from-dropdown", "value"),
+    Input("truck-avail-to-dropdown", "value"),
+    Input("truck-avail-version", "data"),
+)
+def show_truck_avail_current_status(from_node, to_node, _version):
+    if from_node is None or to_node is None:
+        return "Pick both From and To to see/set their current availability."
+    if from_node == to_node:
+        return html.Span("From and To must be different nodes.", className="text-danger")
+    current = int(load_truck_availability_mask().loc[from_node, to_node])
+    label = "1 (available)" if current else "0 (not available)"
+    color = "text-success" if current else "text-muted"
+    return html.Span(f"{NODE_NAME.get(from_node)} → {NODE_NAME.get(to_node)}: currently {label}",
+                     className=color)
+
+
+@app.callback(
+    Output("truck-avail-set-status", "children"),
+    Output("truck-avail-version", "data", allow_duplicate=True),
+    Input("truck-avail-on-btn", "n_clicks"),
+    Input("truck-avail-off-btn", "n_clicks"),
+    State("truck-avail-from-dropdown", "value"),
+    State("truck-avail-to-dropdown", "value"),
+    State("truck-avail-version", "data"),
+    prevent_initial_call=True,
+)
+def set_truck_avail(_n_on, _n_off, from_node, to_node, version):
+    if from_node is None or to_node is None:
+        return "Select both From and To first.", dash.no_update
+    if from_node == to_node:
+        return "From and To must be different nodes.", dash.no_update
+    if dash.ctx.triggered_id == "truck-avail-on-btn" and not is_eligible_truck_origin(from_node):
+        return html.Span("⛔ " + origin_rejection_msg(from_node), className="text-danger"), dash.no_update
+    value = 1 if dash.ctx.triggered_id == "truck-avail-on-btn" else 0
+    try:
+        set_truck_availability(from_node, to_node, value)
+    except PermissionError as e:
+        return html.Span(f"⛔ Could not save (file open in Excel?): {e}", className="text-danger"), dash.no_update
+    label = "available (1)" if value else "unavailable (0)"
+    return f"✅ {NODE_NAME.get(from_node)} → {NODE_NAME.get(to_node)} set to {label}.", (version or 0) + 1
+
+
+@app.callback(
+    Output("truck-avail-version", "data", allow_duplicate=True),
+    Input("truck-avail-table", "active_cell"),
+    State("truck-avail-table", "data"),
+    State("truck-avail-version", "data"),
+    prevent_initial_call=True,
+)
+def remove_from_truck_avail_table(active_cell, table_data, version):
+    if not active_cell or active_cell["column_id"] != "remove_action":
+        return dash.no_update
+    row = table_data[active_cell["row"]]
+    set_truck_availability(int(row["from_node"]), int(row["to_node"]), 0)
+    return (version or 0) + 1
 
 
 if __name__ == "__main__":
-    # threaded=True matters here specifically: "Compute via OSM routing" can
-    # block for a long time (tens of seconds to a few minutes for a distant
-    # node pair - see truck_routing.py's own per-arc retry/timeout comments).
-    # Without it, the single-threaded dev server would freeze every other
-    # tab/user for the whole app while one such request is in flight.
+    # threaded=True matters here specifically: "Compute all via OSM routing"
+    # runs in its own background thread and can take a long time (tens of
+    # seconds to a few minutes per arc - see truck_routing.py's own per-arc
+    # retry/timeout comments). Without it, the single-threaded dev server
+    # would freeze every other tab/user while that thread's requests are in
+    # flight (the GIL still serializes actual CPU work, but network waits
+    # release it, which is exactly where OSM routing spends most of its time).
     app.run(debug=True, port=8052, threaded=True)
