@@ -1,7 +1,7 @@
 """
 Automated truck-routing distances via OpenStreetMap, as a replacement for the
 manual ArcGIS Network Analyst workflow a colleague used to produce the 21
-arcs currently in node_metrics_150.xlsx's 'truck' sheet (routing on the road
+arcs currently in node_metrics_paper.xlsx's 'truck' sheet (routing on the road
 network while excluding tertiary/smaller streets not suitable for HGVs).
 
 Approach:
@@ -15,7 +15,7 @@ Approach:
     2. Snap both endpoints to their nearest graph node.
     3. Run Dijkstra (edge weight = OSM way length, metres) between them.
     4. Compare against the 21 arcs the colleague already computed in ArcGIS
-       (node_metrics_150.xlsx's 'truck' sheet) as a validation check before
+       (node_metrics_paper.xlsx's 'truck' sheet) as a validation check before
        trusting this for any node pair the colleague didn't already do.
 
 Why per-arc instead of one regional download: downloading the OSM road
@@ -31,7 +31,7 @@ tight bbox per arc instead: slower in wall-clock time across many arcs, but
 each request is small and independent, so one failure doesn't cascade and
 lose progress on arcs already computed.
 
-This script deliberately does NOT write back into node_metrics_150.xlsx -
+This script deliberately does NOT write back into node_metrics_paper.xlsx -
 after the full pipeline-mirrored truck connectivity made the MILP
 unsolvable, expanding truck connectivity is a decision for a human to make
 deliberately (e.g. a curated subset), not something to auto-apply. Run this
@@ -102,7 +102,7 @@ OVERPASS_MIRRORS = [
     "https://overpass.kumi.systems/api",
 ]
 
-DEFAULT_NODE_METRICS = Path(__file__).resolve().parent.parent.parent / "italy_data" / "geographical_feature" / "node_metrics_150.xlsx"
+DEFAULT_NODE_METRICS = Path(__file__).resolve().parent.parent.parent / "italy_data" / "geographical_feature" / "node_metrics_paper.xlsx"
 
 # Padding around a single arc's two endpoints, as a fraction of their own
 # lon/lat span, floored at a minimum in degrees - gives short hops enough

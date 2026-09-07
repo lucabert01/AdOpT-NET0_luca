@@ -1,7 +1,7 @@
 """
 Network Connections Dashboard (Pipeline + Railway + Truck)
 
-Three tabs over the same node_metrics_150.xlsx:
+Three tabs over the same node_metrics_paper.xlsx:
 
 1. "Pipeline size classes" - the three CO2 pipeline size classes
    (CO2_Pipeline_small/medium/large - see main_italy.py's
@@ -27,11 +27,11 @@ Three tabs over the same node_metrics_150.xlsx:
 
    An arc not touched here stays enabled for every class (identical to the
    flat, pre-size-class behaviour), so this tab only ever narrows
-   connectivity, never adds arcs beyond what node_metrics_150.xlsx's
+   connectivity, never adds arcs beyond what node_metrics_paper.xlsx's
    'pipeline' sheet already allows.
 
 2. "Railway network" - read-only viewer over the 'railway' sheet's arcs.
-   node_metrics_150.xlsx is hand-maintained and this tab never writes to it.
+   node_metrics_paper.xlsx is hand-maintained and this tab never writes to it.
    It exists to make the rail network's actual shape visible at a glance:
      - which arcs exist, and whether each is one-way or bidirectional in the
        raw data (update_network_connection_matrix() in defined_functions.py
@@ -47,16 +47,25 @@ Three tabs over the same node_metrics_150.xlsx:
        freight-equipped facilities before editing the sheet by hand.
 
 3. "Truck network" - the only tab that writes anything back to
-   node_metrics_150.xlsx. Lets you add a new truck arc (a node pair not yet
+   node_metrics_paper.xlsx. Lets you add a new truck arc (a node pair not yet
    connected in the 'truck' sheet), get its distance from live OSM routing
    (reusing data_process/updated_network/truck_routing.py's own
    download_od_subgraph/route_distance_km - restricted to truck-suitable
    road classes) or type one in by hand, then save it directly into the
    'truck' sheet's matching cell.
 
+   The 150 kt CO2/y cutoff: trucking is only a modelling option for small
+   emitters, so an arc's ORIGIN must emit <= TRUCK_CUTOFF_T_PER_YEAR
+   (non-emitters - Transport/Storage nodes at 0 t/y - always qualify, they
+   are hubs/sinks). The destination is unrestricted: a small emitter trucking
+   into a large one's capture plant, a rail terminal or a storage site is
+   exactly the point. The "From" dropdown therefore only lists eligible
+   nodes, map clicks on an over-cutoff node are refused as a "From" (still
+   accepted as a "To"), and the save path re-checks the rule before writing.
+
    This writes straight into the sheet (not a side override file) because
    defined_functions.compute_opex_var_arcs and .update_capex_gamma2_per_arc
-   independently re-read node_metrics_150.xlsx's 'truck' sheet by path when
+   independently re-read node_metrics_paper.xlsx's 'truck' sheet by path when
    main_italy.py runs - an override layer only this dashboard knew about
    would desync from the cost model. Truck cost is a pure function of
    distance (no manual per-arc curation step like the pipeline mass-flow
@@ -66,11 +75,16 @@ Three tabs over the same node_metrics_150.xlsx:
 
    Only the 'truck' sheet's specific cell is touched (via openpyxl, not a
    full-sheet pandas rewrite) - every other sheet/cell is left as-is. The
-   whole file is backed up once per dashboard session (node_metrics_150.xlsx.bak-
+   whole file is backed up once per dashboard session (node_metrics_paper.xlsx.bak-
    <timestamp>) before the first write. A separate audit log
    (truck_arcs_added_via_dashboard.csv, not read by main_italy.py) records
    every arc added here, and is what distinguishes "added via dashboard"
-   arcs from the original 21 ArcGIS-computed ones on the map/table.
+   arcs from the migrated base ones on the map/table.
+
+   The base truck arcs in this file came from node_metrics_150.xlsx via
+   migrate_truck_arcs_150_to_paper.py (node_metrics_paper.xlsx's own
+   inherited 'truck' sheet was the un-curated 75-arc one from the base
+   node_metrics.xlsx) - see that script for the node-id remapping.
 
 Run with: python network_connections_dashboard.py, then open
 http://127.0.0.1:8052
@@ -93,17 +107,17 @@ import plotly.graph_objects as go
 # 1. PATH SETUP
 # ==========================================
 # This script lives inside italy_data/geographical_feature itself, alongside
-# node_metrics_150.xlsx, so paths are relative to that.
+# node_metrics_paper.xlsx, so paths are relative to that.
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_PATH = SCRIPT_DIR.parent
 SOUTHERN_EUROPE_DIR = DATA_PATH.parent
 CAPEX_METRICS_DIR = DATA_PATH / "network_capex_metrics"
 
-# Must match main_italy.py's node_metrics_suffix (default 150) - this is the
+# Must match main_italy.py's node_metrics_suffix (currently "paper") - this is the
 # exact 'pipeline'/'railway'/'truck' connectivity/distance matrices
 # main_italy.py reads before applying the per-class overrides the pipeline
 # tab curates (or, for truck, straight as-is).
-NODE_METRICS_PATH = SCRIPT_DIR / "node_metrics_150.xlsx"
+NODE_METRICS_PATH = SCRIPT_DIR / "node_metrics_paper.xlsx"
 OVERRIDES_PATH = CAPEX_METRICS_DIR / "pipeline_size_class_connections.xlsx"
 TRUCK_AUDIT_LOG_PATH = SCRIPT_DIR / "truck_arcs_added_via_dashboard.csv"
 
@@ -128,7 +142,7 @@ TONNES_TO_KG = 1000  # 'annual_flux' is in tonnes CO2/year despite the column na
 
 # Candidate replacement/new rail stations from the station audit - see
 # train_stations_analysis/README.md for full sourcing and reasoning. Purely a
-# visual overlay; none of this is written back to node_metrics_150.xlsx.
+# visual overlay; none of this is written back to node_metrics_paper.xlsx.
 CANDIDATE_STATIONS = [
     {"replaces": 3, "replaces_name": "Trino Vercellese", "name": "Torino Orbassano",
      "lon": 7.5712, "lat": 45.0311,
@@ -180,6 +194,29 @@ NODES_RAW = _nodes_raw.groupby(_nodes_raw.index).agg(
 NODES_RAW.index.name = "node_id"
 NODES_RAW["emission_kg_s"] = NODES_RAW["annual_flux"].fillna(0.0) * TONNES_TO_KG / SECONDS_PER_YEAR
 NODE_NAME = NODES_RAW["node_name"].to_dict()
+NODE_FLUX = NODES_RAW["annual_flux"].fillna(0.0).to_dict()
+
+# Truck arcs are only a modelling option for small emitters: an arc's ORIGIN
+# must be at or below this annual emission. Non-emitters (Transport/Storage
+# nodes, 0 t/y) qualify trivially - they are hubs/sinks, not sources. The
+# DESTINATION is deliberately unrestricted (trucking into a large emitter's
+# capture plant, a rail terminal or a storage site is the whole point).
+# This is the same cutoff that named node_metrics_150.xlsx.
+TRUCK_CUTOFF_T_PER_YEAR = 150_000
+TRUCK_ELIGIBLE_ORIGINS = {
+    int(nid) for nid, flux in NODE_FLUX.items() if float(flux) <= TRUCK_CUTOFF_T_PER_YEAR
+}
+
+
+def is_eligible_truck_origin(node_id) -> bool:
+    return node_id is not None and int(node_id) in TRUCK_ELIGIBLE_ORIGINS
+
+
+def origin_rejection_msg(node_id) -> str:
+    return (f"#{node_id} {NODE_NAME.get(node_id, '?')} emits "
+            f"{NODE_FLUX.get(node_id, 0.0) / 1000:,.0f} kt CO2/y, above the "
+            f"{TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt/y truck cutoff - it cannot be the ORIGIN of a "
+            f"truck arc. It can still be a destination.")
 
 ALL_NODE_IDS = sorted(set(BASE_PIPELINE.index) | set(BASE_PIPELINE.columns))
 
@@ -308,10 +345,22 @@ def build_orphaned_stations_list():
 # ==========================================
 # 4B. TRUCK TAB HELPERS - routing, audit log, xlsx write
 # ==========================================
+def _node_option_label(nid, row):
+    return f"{row.node_name} (#{nid}, {row.annual_flux / 1000:,.0f} kt/y)"
+
+
+# Destinations: every node. Origins: only those at or below the cutoff.
 NODE_DROPDOWN_OPTIONS = [
-    {"label": f"{row.node_name} (#{nid})", "value": int(nid)}
+    {"label": _node_option_label(nid, row), "value": int(nid)}
     for nid, row in NODES_RAW.sort_values("node_name").iterrows()
 ]
+TRUCK_FROM_OPTIONS = [
+    {"label": _node_option_label(nid, row), "value": int(nid)}
+    for nid, row in NODES_RAW.sort_values("node_name").iterrows()
+    if is_eligible_truck_origin(nid)
+]
+print(f"Truck origins eligible under the {TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt CO2/y cutoff: "
+      f"{len(TRUCK_FROM_OPTIONS)}/{len(NODES_RAW)} nodes.")
 
 TRUCK_AUDIT_COLUMNS = ["timestamp", "from_node", "from_name", "to_node", "to_name",
                        "distance_km", "method", "previous_value"]
@@ -321,7 +370,7 @@ _truck_backup_done = False
 
 
 def _ensure_truck_backup():
-    """Copy node_metrics_150.xlsx to a timestamped .bak file once per
+    """Copy node_metrics_paper.xlsx to a timestamped .bak file once per
     dashboard session, before the very first write to it - so a mistaken
     save (bad node pair, bad distance) is trivially reversible."""
     global _truck_backup_done
@@ -411,7 +460,7 @@ def get_current_truck_value(from_node: int, to_node: int):
 
 def write_truck_arc(from_node: int, to_node: int, distance_km: float, method: str) -> float | None:
     """Writes one directed truck-arc distance directly into
-    node_metrics_150.xlsx's 'truck' sheet, at the (from_node, to_node) cell
+    node_metrics_paper.xlsx's 'truck' sheet, at the (from_node, to_node) cell
     only - every other sheet and cell is left untouched. Backs up the whole
     file once per session first (see _ensure_truck_backup). Returns the
     previous value (None/0 if the arc didn't exist before) and appends an
@@ -461,6 +510,31 @@ def compute_truck_distance(from_node: int, to_node: int):
     return d, f"Computed via OSM routing: {d:.2f} km"
 
 
+# Typical road-network detour over the great-circle distance - only used for
+# the manual fallback estimate below, never for a saved "computed" value.
+STRAIGHT_LINE_DETOUR_FACTOR = 1.3
+
+
+def straight_line_distance_km(from_node: int, to_node: int):
+    """Great-circle distance x a detour factor - a rough fallback for when
+    Overpass/OSM is unreachable (truck_routing.py documents that happening
+    from this environment). Clearly labelled as an estimate everywhere it
+    surfaces, so it never gets mistaken for a routed distance."""
+    if from_node is None or to_node is None:
+        return None, "Select both a From and To node first."
+    if from_node == to_node:
+        return None, "From and To must be different nodes."
+    fr, to = NODES_RAW.loc[from_node], NODES_RAW.loc[to_node]
+    lat1, lon1, lat2, lon2 = map(math.radians, [fr.latitude, fr.longitude, to.latitude, to.longitude])
+    a = (math.sin((lat2 - lat1) / 2) ** 2
+         + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2)
+    great_circle = 2 * 6371.0 * math.asin(math.sqrt(a))
+    d = round(great_circle * STRAIGHT_LINE_DETOUR_FACTOR, 2)
+    return d, (f"ESTIMATE only: {great_circle:.2f} km straight line x "
+               f"{STRAIGHT_LINE_DETOUR_FACTOR} detour factor = {d:.2f} km. "
+               f"Prefer OSM routing when it is reachable.")
+
+
 def build_truck_arcs_table_data():
     df = load_truck_matrix()
     arcs = get_truck_arcs(df)
@@ -468,11 +542,14 @@ def build_truck_arcs_table_data():
     rows = []
     for f, t in arcs:
         entry = added.get((f, t))
+        eligible = is_eligible_truck_origin(f)
         rows.append({
             "from_name": NODE_NAME.get(f, f"Node {f}"), "from_node": f,
             "to_name": NODE_NAME.get(t, f"Node {t}"), "to_node": t,
             "distance_km": round(float(df.loc[f, t]), 2),
-            "source": f"Dashboard ({entry.method})" if entry is not None else "Original (ArcGIS)",
+            "from_flux_kt": round(NODE_FLUX.get(f, 0.0) / 1000, 1),
+            "rule": "OK" if eligible else "OVER CUTOFF",
+            "source": f"Dashboard ({entry.method})" if entry is not None else "Base (migrated)",
             "added_at": entry.timestamp if entry is not None else "",
         })
     return rows
@@ -734,6 +811,7 @@ TRUCK_BASE_COLOR = "#2980b9"
 TRUCK_ADDED_COLOR = "#8e44ad"
 TRUCK_FROM_SEL_COLOR = "#27ae60"
 TRUCK_TO_SEL_COLOR = "#e74c3c"
+TRUCK_OVER_CUTOFF_COLOR = "#c0392b"
 
 
 def generate_truck_map_figure(from_sel=None, to_sel=None):
@@ -750,17 +828,22 @@ def generate_truck_map_figure(from_sel=None, to_sel=None):
             continue
         node_a, node_b = NODES_RAW.loc[f], NODES_RAW.loc[t]
         is_added = (f, t) in added
+        over_cutoff = not is_eligible_truck_origin(f)
         color = TRUCK_ADDED_COLOR if is_added else TRUCK_BASE_COLOR
 
         hover_txt = (
             f"<b>{node_a.node_name}</b> (#{f}) &rarr; <b>{node_b.node_name}</b> (#{t})<br>"
             f"Distance: {df.loc[f, t]:.2f} km<br>"
-            f"{'Added via dashboard' if is_added else 'Original (ArcGIS)'}"
+            f"{'Added via dashboard' if is_added else 'Base (migrated)'}"
+            + (f"<br><b>Origin is {NODE_FLUX.get(f, 0.0) / 1000:,.0f} kt CO2/y - above the "
+               f"{TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt/y cutoff</b>" if over_cutoff else "")
         )
 
         fig.add_trace(go.Scattergeo(
             lon=[node_a.longitude, node_b.longitude], lat=[node_a.latitude, node_b.latitude],
-            mode="lines", line=dict(width=3, color=color), hoverinfo="skip",
+            mode="lines",
+            line=dict(width=3, color=color, dash="dot" if over_cutoff else "solid"),
+            hoverinfo="skip",
         ))
         hit_lons += [node_a.longitude, node_b.longitude, None]
         hit_lats += [node_a.latitude, node_b.latitude, None]
@@ -787,18 +870,29 @@ def generate_truck_map_figure(from_sel=None, to_sel=None):
             hoverinfo="text", hovertext=arrow_hovers, name="Direction",
         ))
 
-    # All nodes, colored by type and click-able (customdata=node_id) to pick From/To.
+    # All nodes, colored by type and click-able (customdata=node_id) to pick
+    # From/To. Nodes above the cutoff are drawn as squares with a red outline:
+    # they can only ever be a destination.
     node_colors = [_node_color(t) for t in NODES_RAW["node_type"]]
-    node_hover = [
-        f"{row.node_name} (#{nid})<br>Type: {row.node_type}<br>Click to set as From/To"
-        for nid, row in NODES_RAW.iterrows()
-    ]
+    node_symbols, node_outlines, node_hover = [], [], []
+    for nid, row in NODES_RAW.iterrows():
+        eligible = is_eligible_truck_origin(nid)
+        node_symbols.append("circle" if eligible else "square")
+        node_outlines.append("#ffffff" if eligible else TRUCK_OVER_CUTOFF_COLOR)
+        node_hover.append(
+            f"{row.node_name} (#{nid})<br>Type: {row.node_type}<br>"
+            f"Emissions: {row.annual_flux / 1000:,.0f} kt CO2/y<br>"
+            + ("Click to set as From/To"
+               if eligible else
+               f"Above the {TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt/y cutoff - destination only")
+        )
     fig.add_trace(go.Scattergeo(
         lon=NODES_RAW["longitude"], lat=NODES_RAW["latitude"],
         mode="markers+text",
         text=NODES_RAW.index.astype(str),
         textposition="top right",
-        marker=dict(size=10, color=node_colors, line=dict(width=1.2, color="#ffffff")),
+        marker=dict(size=10, color=node_colors, symbol=node_symbols,
+                    line=dict(width=1.6, color=node_outlines)),
         hoverinfo="text", hovertext=node_hover,
         customdata=[int(nid) for nid in NODES_RAW.index], name="Nodes",
     ))
@@ -949,7 +1043,7 @@ RAIL_TAB_CONTENT = html.Div([
                         html.P("None.", className="small text-muted"),
                     html.Hr(),
                     html.P(
-                        "This tab is read-only: node_metrics_150.xlsx is hand-maintained and is never "
+                        "This tab is read-only: node_metrics_paper.xlsx is hand-maintained and is never "
                         "written to from here. See train_stations_analysis/README.md for the full audit "
                         "behind the candidate stations and orphan/one-way findings.",
                         className="small text-muted",
@@ -987,9 +1081,11 @@ RAIL_TAB_CONTENT = html.Div([
 
 TRUCK_LEGEND = dbc.Row([
     dbc.Col(html.Span("─ ", style={"color": TRUCK_BASE_COLOR, "fontWeight": "bold"}), width="auto"),
-    dbc.Col("Original (ArcGIS) arc", width="auto", className="me-3"),
+    dbc.Col("Base (migrated) arc", width="auto", className="me-3"),
     dbc.Col(html.Span("─ ", style={"color": TRUCK_ADDED_COLOR, "fontWeight": "bold"}), width="auto"),
     dbc.Col("Added via dashboard", width="auto", className="me-3"),
+    dbc.Col(html.Span("┈ ", style={"fontWeight": "bold"}), width="auto"),
+    dbc.Col("Dotted / □ red outline: origin above the cutoff", width="auto", className="me-3"),
     dbc.Col(html.Span("◯ ", style={"color": TRUCK_FROM_SEL_COLOR, "fontWeight": "bold"}), width="auto"),
     dbc.Col("Selected 'From'", width="auto", className="me-3"),
     dbc.Col(html.Span("◯ ", style={"color": TRUCK_TO_SEL_COLOR, "fontWeight": "bold"}), width="auto"),
@@ -1013,21 +1109,35 @@ TRUCK_TAB_CONTENT = html.Div([
                         "(fills From, then To; use Clear to start over).",
                         className="small text-muted",
                     ),
+                    dbc.Alert(
+                        [
+                            html.B(f"Cutoff: {TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt CO2/y. "),
+                            f"Only the {len(TRUCK_FROM_OPTIONS)} nodes at or below it (including "
+                            f"0 t/y hubs and storage) can be an arc's ORIGIN, so the 'From' list is "
+                            f"restricted to those. Any node can be a destination.",
+                        ],
+                        color="info", className="small py-2 mb-2",
+                    ),
                     dbc.Row([
                         dbc.Col([
-                            html.Label("From", className="small"),
-                            dcc.Dropdown(id="truck-from-dropdown", options=NODE_DROPDOWN_OPTIONS, placeholder="From node"),
+                            html.Label(f"From (≤{TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt/y only)",
+                                       className="small"),
+                            dcc.Dropdown(id="truck-from-dropdown", options=TRUCK_FROM_OPTIONS,
+                                         placeholder="From node"),
                         ], width=6),
                         dbc.Col([
                             html.Label("To", className="small"),
                             dcc.Dropdown(id="truck-to-dropdown", options=NODE_DROPDOWN_OPTIONS, placeholder="To node"),
                         ], width=6),
                     ], className="mb-2"),
+                    html.Div(id="truck-pick-status", className="small mb-2"),
                     dbc.Button("Clear selection", id="truck-clear-btn", size="sm", color="secondary",
                                outline=True, className="mb-3"),
 
                     dbc.Button("Compute via OSM routing", id="truck-compute-btn", color="primary",
                                size="sm", className="w-100 mb-2"),
+                    dbc.Button("Straight-line × 1.3 estimate (fallback)", id="truck-estimate-btn",
+                               color="primary", outline=True, size="sm", className="w-100 mb-2"),
                     dcc.Checklist(
                         id="truck-reverse-checkbox",
                         options=[{"label": " Also compute/save the reverse direction", "value": "rev"}],
@@ -1058,7 +1168,7 @@ TRUCK_TAB_CONTENT = html.Div([
                     html.Ul(id="truck-summary", className="small"),
                     html.Hr(),
                     html.P(
-                        "Saving writes straight into node_metrics_150.xlsx's 'truck' sheet (only that "
+                        "Saving writes straight into node_metrics_paper.xlsx's 'truck' sheet (only that "
                         "sheet's cell(s) - every other sheet is untouched), so the next main_italy.py run "
                         "picks the new arc up automatically. The file is backed up once per dashboard "
                         "session before the first write.",
@@ -1076,6 +1186,8 @@ TRUCK_TAB_CONTENT = html.Div([
             {"name": "From", "id": "from_name"}, {"name": "id", "id": "from_node"},
             {"name": "To", "id": "to_name"}, {"name": "id", "id": "to_node"},
             {"name": "Distance (km)", "id": "distance_km"},
+            {"name": "From emissions (kt/y)", "id": "from_flux_kt"},
+            {"name": "Cutoff rule", "id": "rule"},
             {"name": "Source", "id": "source"},
             {"name": "Added at", "id": "added_at"},
         ],
@@ -1087,6 +1199,8 @@ TRUCK_TAB_CONTENT = html.Div([
         ],
         style_data_conditional=[
             {"if": {"filter_query": '{source} contains "Dashboard"'}, "backgroundColor": "#f4ecf7"},
+            {"if": {"filter_query": '{rule} = "OVER CUTOFF"'},
+             "backgroundColor": "#fdecea", "color": "#c0392b", "fontWeight": "bold"},
         ],
         sort_action="native",
         filter_action="native",
@@ -1213,16 +1327,26 @@ def refresh_truck_summary(_version):
     arcs = get_truck_arcs()
     added = dashboard_added_truck_arcs()
     n_added = sum(1 for a in arcs if a in added)
-    return [
+    n_over = sum(1 for f, _ in arcs if not is_eligible_truck_origin(f))
+    items = [
         html.Li(f"Directed arcs total: {len(arcs)}"),
-        html.Li(f"Original (ArcGIS) arcs: {len(arcs) - n_added}"),
+        html.Li(f"Base (migrated) arcs: {len(arcs) - n_added}"),
         html.Li(f"Added via dashboard: {n_added}"),
+        html.Li(f"Nodes eligible as an origin: {len(TRUCK_ELIGIBLE_ORIGINS)}/{len(NODES_RAW)}"),
     ]
+    if n_over:
+        items.append(html.Li(
+            f"Existing arcs whose origin is above the "
+            f"{TRUCK_CUTOFF_T_PER_YEAR / 1000:,.0f} kt/y cutoff: {n_over} "
+            f"(pre-existing, flagged in the table - nothing is removed automatically)",
+            className="text-danger"))
+    return items
 
 
 @app.callback(
     Output("truck-from-dropdown", "value"),
     Output("truck-to-dropdown", "value"),
+    Output("truck-pick-status", "children"),
     Input("truck-map", "clickData"),
     Input("truck-clear-btn", "n_clicks"),
     State("truck-from-dropdown", "value"),
@@ -1231,23 +1355,28 @@ def refresh_truck_summary(_version):
 )
 def pick_or_clear_truck_nodes(click_data, _clear_clicks, from_val, to_val):
     if dash.ctx.triggered_id == "truck-clear-btn":
-        return None, None
+        return None, None, ""
 
     if not click_data:
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
     point = click_data["points"][0]
     cd = point.get("customdata")
     # Node markers carry a scalar node_id; arc/direction traces carry no
     # customdata (or a list, for other tabs' click-to-toggle arcs) - only
     # react to an actual node click here.
     if cd is None or isinstance(cd, list):
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
     node_id = int(cd)
     if from_val is None:
-        return node_id, dash.no_update
+        # Same rule as the restricted "From" dropdown, enforced for map clicks.
+        if not is_eligible_truck_origin(node_id):
+            return dash.no_update, dash.no_update, html.Span(
+                "⛔ " + origin_rejection_msg(node_id) + " Pick an eligible origin first, then click "
+                "this node again to use it as the destination.", className="text-danger")
+        return node_id, dash.no_update, f"From set to #{node_id} {NODE_NAME.get(node_id)}."
     if to_val is None:
-        return dash.no_update, node_id
-    return dash.no_update, dash.no_update
+        return dash.no_update, node_id, f"To set to #{node_id} {NODE_NAME.get(node_id)}."
+    return dash.no_update, dash.no_update, "Both nodes are set - use 'Clear selection' to start over."
 
 
 @app.callback(
@@ -1255,16 +1384,26 @@ def pick_or_clear_truck_nodes(click_data, _clear_clicks, from_val, to_val):
     Output("truck-reverse-distance-input", "value"),
     Output("truck-compute-status", "children"),
     Input("truck-compute-btn", "n_clicks"),
+    Input("truck-estimate-btn", "n_clicks"),
     State("truck-from-dropdown", "value"),
     State("truck-to-dropdown", "value"),
     State("truck-reverse-checkbox", "value"),
     prevent_initial_call=True,
 )
-def do_compute_truck_distance(_n, from_node, to_node, reverse_checked):
-    d_fwd, msg_fwd = compute_truck_distance(from_node, to_node)
+def do_compute_truck_distance(_n_osm, _n_est, from_node, to_node, reverse_checked):
+    if not is_eligible_truck_origin(from_node) and from_node is not None:
+        return dash.no_update, dash.no_update, html.Span("⛔ " + origin_rejection_msg(from_node),
+                                                          className="text-danger")
+    fn = straight_line_distance_km if dash.ctx.triggered_id == "truck-estimate-btn" else compute_truck_distance
+    d_fwd, msg_fwd = fn(from_node, to_node)
     d_rev, msg_rev = None, None
     if reverse_checked:
-        d_rev, msg_rev = compute_truck_distance(to_node, from_node)
+        # The reverse arc's origin is the "To" node, so it must clear the
+        # cutoff on its own before it is worth routing.
+        if not is_eligible_truck_origin(to_node):
+            msg_rev = "skipped - " + origin_rejection_msg(to_node)
+        else:
+            d_rev, msg_rev = fn(to_node, from_node)
     full_msg = msg_fwd if not reverse_checked else f"Forward: {msg_fwd} | Reverse: {msg_rev}"
     return d_fwd, d_rev, full_msg
 
@@ -1290,8 +1429,18 @@ def save_truck_arc(_n, from_node, to_node, distance, reverse_checked, reverse_di
         return "Select From and To, then compute or enter a distance first.", dash.no_update, None, hide
     if from_node == to_node:
         return "From and To must be different nodes.", dash.no_update, None, hide
+    # Last line of defence for the cutoff: the dropdown and the map click are
+    # both already restricted, but a stale browser state could still post an
+    # ineligible origin here.
+    if not is_eligible_truck_origin(from_node):
+        return html.Span("⛔ " + origin_rejection_msg(from_node), className="text-danger"), \
+            dash.no_update, None, hide
 
     want_reverse = bool(reverse_checked) and reverse_distance is not None
+    if want_reverse and not is_eligible_truck_origin(to_node):
+        return html.Span("⛔ Reverse direction refused: " + origin_rejection_msg(to_node)
+                         + " Untick 'Also compute/save the reverse direction' to save the forward arc only.",
+                         className="text-danger"), dash.no_update, None, hide
     current_fwd = get_current_truck_value(from_node, to_node)
     current_rev = get_current_truck_value(to_node, from_node) if want_reverse else None
     fwd_conflict = current_fwd not in (None, 0)
@@ -1308,10 +1457,18 @@ def save_truck_arc(_n, from_node, to_node, distance, reverse_checked, reverse_di
                    "reverse": want_reverse, "reverse_distance": reverse_distance}
         return msg, dash.no_update, pending, show
 
-    write_truck_arc(from_node, to_node, distance, method="dashboard_new")
-    if want_reverse:
-        write_truck_arc(to_node, from_node, reverse_distance, method="dashboard_new")
-    return "✅ Saved to node_metrics_150.xlsx.", (version or 0) + 1, None, hide
+    try:
+        write_truck_arc(from_node, to_node, distance, method="dashboard_new")
+        if want_reverse:
+            write_truck_arc(to_node, from_node, reverse_distance, method="dashboard_new")
+    except (ValueError, PermissionError) as e:
+        # PermissionError = the workbook is open in Excel; ValueError = a node
+        # with no row/column in the 'truck' sheet.
+        return html.Span(f"⛔ Could not save: {e}", className="text-danger"), dash.no_update, None, hide
+    saved = (f"✅ Saved {NODE_NAME.get(from_node)} → {NODE_NAME.get(to_node)} ({distance} km)"
+             + (f" and the reverse ({reverse_distance} km)" if want_reverse else "")
+             + f" to {NODE_METRICS_PATH.name}.")
+    return saved, (version or 0) + 1, None, hide
 
 
 @app.callback(
@@ -1331,7 +1488,7 @@ def confirm_overwrite_truck_arc(_n, pending, version):
     write_truck_arc(pending["from"], pending["to"], pending["distance"], method="dashboard_overwrite")
     if pending.get("reverse") and pending.get("reverse_distance") is not None:
         write_truck_arc(pending["to"], pending["from"], pending["reverse_distance"], method="dashboard_overwrite")
-    return "✅ Overwritten and saved to node_metrics_150.xlsx.", (version or 0) + 1, None, hide
+    return "✅ Overwritten and saved to node_metrics_paper.xlsx.", (version or 0) + 1, None, hide
 
 
 if __name__ == "__main__":
