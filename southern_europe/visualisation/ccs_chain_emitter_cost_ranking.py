@@ -12,25 +12,38 @@ a node has more than one.
 
 Capture cost is each technology's own capture cost (capex + opex + its own
 electricity/heat draw, attributed via that technology's own consumption
-series x the node's import price - exact, since node-level import cost is
-just the sum of every technology's own draw at that node) divided by its own
-annual captured CO2.
+series x the node's import price - exact, since it uses only that
+technology's own operation dataset, not the node's total import) divided by
+its own annual captured CO2. This deliberately excludes any electricity/heat
+also drawn at that node by a network passing through it (pipeline
+compression/pumping power) - that portion is transport cost, see below.
 
-Storage cost is the single storage site's total annual cost divided by total
-annual tonnes stored - a flat €/t added to every emitter, since storage is a
-shared, non-allocable resource.
+Storage cost is the single storage site's total annual cost (capex + opex +
+its own electricity/heat draw, net of any network-consumption draw at that
+node - see transport, below) divided by total annual tonnes stored - a flat
+€/t added to every emitter, since storage is a shared, non-allocable
+resource.
 
 Transport cost is allocated by CAPACITY SHARE, not by flow share: for every
 arc on an emitter's path to the storage node, the emitter pays
     arc's annual cost x (emitter's own max captured CO2, t/h) / (arc's built size, t/h)
 i.e. a 15 t/h emitter on a 150 t/h pipeline pays 10% of that arc's annual
-cost; on a 15 t/h pipeline it pays 100%. This is summed over every arc on the
-emitter's path (not just the first arc out of its node) and then divided by
-the emitter's own annual captured tonnes. Two emitters with identical paths
-and capture technology therefore end up with different €/t if one runs at a
-lower load factor (same nameplate share of the pipeline cost, spread over
-fewer actual tonnes) - which is the point: a poorly-utilized reservation
-costs more per tonne, same as an oversized capture unit does.
+cost; on a 15 t/h pipeline it pays 100%. An arc's annual cost is its
+capex + opex, PLUS the electricity/heat cost of the network flowing along it
+- pipeline pumping/compression power is a per-arc send/receive consumption
+(operation/networks/.../consumption_send<carrier> and
+consumption_receive<carrier>, priced at the sending/receiving node's own
+import price - see genericNetworks/fluid.py's _define_energyconsumption_arc)
+that would otherwise fall through the cracks: it isn't any technology's own
+draw (excluded from capture above) and, except at the storage node, isn't
+counted in any node-level total this module reads either. This is summed
+over every arc on the emitter's path (not just the first arc out of its
+node) and then divided by the emitter's own annual captured tonnes. Two
+emitters with identical paths and capture technology therefore end up with
+different €/t if one runs at a lower load factor (same nameplate share of
+the pipeline cost, spread over fewer actual tonnes) - which is the point: a
+poorly-utilized reservation costs more per tonne, same as an oversized
+capture unit does.
 
 Output:
   - ccs_chain_emitter_cost_ranking.png  (ranked stacked-bar chart)
@@ -147,6 +160,44 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
             price = eb[node_name][carrier]["import_price"][()][seq - 1]
             return float((imp * price).sum())
 
+        def network_consumption_cost(node_name, carrier):
+            """EUR/year of `carrier` import at this node drawn by a network
+            passing through it, not by any technology - see module
+            docstring. Only relevant here at the storage node (the only node
+            whose electricity/heat cost is read via the node-level total,
+            node_carrier_cost, rather than per-technology); it must be
+            carved out of that total since it is accounted for instead via
+            arc_energy_cost below, on whichever arc actually carries it."""
+            if node_name not in eb or carrier not in eb[node_name]:
+                return 0.0
+            g = eb[node_name][carrier]
+            price = g["import_price"][()][seq - 1]
+            total = 0.0
+            for key in ("network_consumption", "compressor_input"):
+                if key in g:
+                    total += float((g[key][()][seq - 1] * price).sum())
+            return total
+
+        def arc_energy_cost(ntype, arc_name, from_node, to_node):
+            """EUR/year this specific arc cost in electricity/heat to move
+            CO2 along it (e.g. pipeline compression power) - the per-arc
+            send/receive consumption from genericNetworks/fluid.py, priced
+            at the sending/receiving node's own import price. This is the
+            network-consumption counterpart of tech_carrier_cost above: it
+            isolates the network's own draw from everything else importing
+            at that node."""
+            g = net_op[ntype][arc_name]
+            total = 0.0
+            for carrier in ("electricity", "heat"):
+                send_key, receive_key = f"consumption_send{carrier}", f"consumption_receive{carrier}"
+                if send_key in g and from_node in eb and carrier in eb[from_node]:
+                    price = eb[from_node][carrier]["import_price"][()]
+                    total += float((g[send_key][()] * price)[seq - 1].sum())
+                if receive_key in g and to_node in eb and carrier in eb[to_node]:
+                    price = eb[to_node][carrier]["import_price"][()]
+                    total += float((g[receive_key][()] * price)[seq - 1].sum())
+            return total
+
         def tech_carrier_cost(node_name, tech_name, op_keys, key, carrier):
             """Same node-level import price, but only this technology's own
             consumption - exact, not an approximation, since the node-level
@@ -212,13 +263,20 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
                 }
 
         # ---- storage cost: one flat €/t added to every emitter ----
+        # node_carrier_cost is storage_node's FULL electricity/heat import,
+        # which (unlike the per-technology draws above) may also include a
+        # network's own consumption at that node (e.g. an arriving pipeline's
+        # receive-side pumping power) - that portion is carved out here and
+        # picked up instead by arc_energy_cost on the incoming arc, below.
         g_store = nodes[storage_node][storage_tech]
         storage_cost = (
             float(g_store["capex_tot"][()][0])
             + float(g_store["opex_fixed"][()][0])
             + float(g_store["opex_variable"][()][0])
             + node_carrier_cost(storage_node, "electricity")
+            - network_consumption_cost(storage_node, "electricity")
             + node_carrier_cost(storage_node, "heat")
+            - network_consumption_cost(storage_node, "heat")
         )
         total_stored_t = expand(op_tech[storage_node][storage_tech]["CO2captured_input"])
         storage_eur_per_t = storage_cost / total_stored_t
@@ -243,7 +301,14 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
                 ov = gd["opex_variable"][()]
                 opex_fixed = float(of[0]) if hasattr(of, "__len__") else float(of)
                 opex_variable = float(ov[0]) if hasattr(ov, "__len__") else float(ov)
-                annual_cost = float(gd["capex"][()]) + opex_fixed + opex_variable
+                from_node = gd["fromNode"][()].decode()
+                to_node = gd["toNode"][()].decode()
+                annual_cost = (
+                    float(gd["capex"][()])
+                    + opex_fixed
+                    + opex_variable
+                    + arc_energy_cost(ntype, arc_name, from_node, to_node)
+                )
 
                 annual_flow = expand(net_op[ntype][arc_name]["flow"])
                 if annual_flow <= 0:
@@ -251,8 +316,8 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
 
                 edge_rows.append(
                     {
-                        "from": gd["fromNode"][()].decode(),
-                        "to": gd["toNode"][()].decode(),
+                        "from": from_node,
+                        "to": to_node,
                         "cost": annual_cost,
                         "flow": annual_flow,
                         "size": size,

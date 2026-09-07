@@ -429,7 +429,16 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
     :func:`construct_import_costs`). It is attributed to whichever node
     consumes it: the storage node's own electricity draw counts as "storage",
     everything else counts as "capture" (and, within that, its node's capture
-    family).
+    family) -- EXCEPT for the portion of a node's electricity/heat import that
+    is drawn by a network passing through it (pipeline compression/pumping
+    power, stored per node/carrier as operation/energy_balance's
+    "network_consumption" and, if the pressure model is on, "compressor_input"
+    -- see construct_balances.py's const_energybalance and
+    genericNetworks/fluid.py's const_netw_consumption), which is transport
+    cost and is carved out of the node's capture/storage bucket into
+    "transport" instead. Both draws are met out of the same node-level import
+    and priced at the same import_price, so the split is exact, not an
+    approximation.
 
     Carrier-balance arrays (operation/energy_balance) are stored at the
     design-days (clustered) resolution; they are expanded back to the full
@@ -452,10 +461,28 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
             price = eb[node_name][carrier]["import_price"][()][seq - 1]
             return float((imp * price).sum())
 
+        def network_consumption_cost(node_name, carrier):
+            """EUR/year of `carrier` import at this node that was drawn by a
+            network passing through it (pipeline pumping/compression power),
+            not by the node's own technologies -- transport cost, not
+            capture/storage. Priced at the same import_price as
+            carrier_import_cost, since it is met out of the same import."""
+            eb = f["operation"]["energy_balance"]["period1"]
+            if node_name not in eb or carrier not in eb[node_name]:
+                return 0.0
+            g = eb[node_name][carrier]
+            price = g["import_price"][()][seq - 1]
+            total = 0.0
+            for key in ("network_consumption", "compressor_input"):
+                if key in g:
+                    total += float((g[key][()][seq - 1] * price).sum())
+            return total
+
         nodes = f["design"]["nodes"]["period1"]
         capture = {k: 0.0 for k in COMPONENT_COLORS}
         capture_by_family = {}
         storage = {k: 0.0 for k in COMPONENT_COLORS}
+        transport = {k: 0.0 for k in COMPONENT_COLORS}
 
         for node_name in nodes.keys():
             node_family = None
@@ -487,6 +514,12 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
 
             elec_cost = carrier_import_cost(node_name, "electricity")
             heat_cost = carrier_import_cost(node_name, "heat")
+            transport_elec_cost = network_consumption_cost(node_name, "electricity")
+            transport_heat_cost = network_consumption_cost(node_name, "heat")
+            transport["Electricity"] += transport_elec_cost
+            transport["Heat"] += transport_heat_cost
+            elec_cost -= transport_elec_cost
+            heat_cost -= transport_heat_cost
             if node_name == storage_node:
                 storage["Electricity"] += elec_cost
                 storage["Heat"] += heat_cost
@@ -498,7 +531,6 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
                     capture_by_family[node_family]["Heat"] += heat_cost
 
         net = f["design"]["networks"]["period1"]
-        transport = {k: 0.0 for k in COMPONENT_COLORS}
         for ntype in net.keys():
             for arc_name in net[ntype].keys():
                 g = net[ntype][arc_name]
