@@ -1,0 +1,63 @@
+{
+  "tec_type": "CONV3",
+  "size_min": 0,
+  "size_max": 1000,
+  "size_is_int": 0,
+  "decommission": "impossible",
+  "Economics": {
+    "comment": "capex in EUR/unit or as a piecewise function, opex_variable in EUR/unit total output, opex_fixed in % of capex_annual. Costs and performance are the one of a CO2 compressor for an emitter of size 19tCO2/h, taken from Riccardo's simulations. Opex fixed value is the one used for MEA",
+    "capex_model": 1,
+    "unit_capex": 239887,
+    "fix_capex": 0,
+    "piecewise_capex": {
+      "bp_x": "not defined",
+      "bp_y": "not defined"
+    },
+    "opex_variable": 0,
+    "opex_fixed": 0.02,
+    "discount_rate": 0.08,
+    "lifetime": 25,
+    "decommission_cost": 0
+  },
+  "Performance": {
+    "comment": "contains fitting data on unit of input, technology types and input/output carriers",
+    "performance_function_type": 1,
+    "input_carrier": [
+      "electricity"
+    ],
+    "main_input_carrier": "electricity",
+    "output_carrier": [
+      "hydrogenForFertilizers",
+      "CO2captured"
+    ],
+    "emission_factor": 0,
+    "min_part_load": 0,
+    "performance": {
+      "in": [
+        0,
+        1
+      ],
+      "out": {
+        "hydrogenForFertilizers": [
+          0,
+          13.05
+        ],
+        "CO2captured": [
+          0,
+          13.05
+        ]
+      },
+    "input_ratios": {}
+    }
+  },
+  "Units": {
+    "size": "MW",
+    "input_carrier": {
+      "electricity": "MW"
+    },
+    "output_carrier": {
+      "hydrogenForFertilizers": "tonne/hr",
+      "CO2captured": "MW"
+    }
+  }
+}
