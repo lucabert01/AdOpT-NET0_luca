@@ -87,13 +87,23 @@ def load_network_data(data_path):
 
     # Load network data - UPDATED TO USE CONFIRMED SHEET NAMES
     print("Loading network data...")
-    network_nodes = pd.read_excel(path_files_node_flux / "node_metrics.xlsx", index_col=0, sheet_name='nodes')
-    network_emission_flux = pd.read_excel(path_files_node_flux / "node_metrics.xlsx", index_col=0, sheet_name='nodes')
+    network_nodes = pd.read_excel(path_files_node_flux / "node_metrics_paper.xlsx", index_col=0, sheet_name='nodes')
+    network_emission_flux = pd.read_excel(path_files_node_flux / "node_metrics_paper.xlsx", index_col=0, sheet_name='nodes')
 
     # Load pipeline data (contains both distance and connection info)
-    network_pipeline = pd.read_excel(path_files_node_flux / "node_metrics.xlsx", index_col=0, sheet_name='pipeline')
+    network_pipeline = pd.read_excel(path_files_node_flux / "node_metrics_paper.xlsx", index_col=0, sheet_name='pipeline')
     network_distance = network_pipeline.copy()  # Use pipeline data as distance matrix
     print(f"✅ Loaded network data: {len(network_nodes)} nodes, {network_distance.shape} distance matrix, {network_pipeline.shape} pipeline matrix")
+
+    # Some node_metrics_paper.xlsx entries carry stray leading/trailing whitespace in
+    # node_name/node_type (e.g. "Unicalce Val Brembilla Lime " with a trailing space) --
+    # strip it here too, otherwise it silently breaks the "{node_type} - {node_name}"
+    # lookup key used against emission_profile_emitters.xlsx (see main_italy.py's
+    # run_scenario, which does the same strip for the same reason).
+    network_nodes['node_name'] = network_nodes['node_name'].str.strip()
+    network_nodes['node_type'] = network_nodes['node_type'].str.strip()
+    network_emission_flux['node_name'] = network_emission_flux['node_name'].str.strip()
+    network_emission_flux['node_type'] = network_emission_flux['node_type'].str.strip()
 
     # Load electricity data
     print("Loading electricity data...")

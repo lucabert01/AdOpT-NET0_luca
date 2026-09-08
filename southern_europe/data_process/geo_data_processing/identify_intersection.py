@@ -17,7 +17,7 @@ path_data_case_study = Path("../../italy_data")
 path_files_gis = path_data_case_study / "raw_data/gis_data"
 path_files_node_flux = path_data_case_study / "geographical_feature"
 
-route = gpd.read_file(path_files_gis / "routes_distances_pipelines.shp")
+route = gpd.read_file(path_files_gis / "routes_distances_pipeline.shp")
 fishnet = gpd.read_file(path_files_gis / "fishnet_italy_5km.shp")
 
 route = route.to_crs(epsg=4326)
@@ -45,8 +45,8 @@ print("LOADING NODE DATA...")
 print("="*50)
 
 try:
-    print(f"Looking for node file at: {path_files_node_flux / 'node_metrics.xlsx'}")
-    network_nodes = pd.read_excel(path_files_node_flux/"node_metrics.xlsx", index_col=0, sheet_name='nodes') # nodes
+    print(f"Looking for node file at: {path_files_node_flux / 'node_metrics_paper.xlsx'}")
+    network_nodes = pd.read_excel(path_files_node_flux/"node_metrics_paper.xlsx", index_col=0, sheet_name='nodes') # nodes
     print("✓ Node data loaded successfully!")
     print(f"✓ Nodes: {network_nodes.index.nunique()} nodes")
     print("✓ Sample node data:")
@@ -76,9 +76,19 @@ print(f"Fishnet: {len(fishnet)} grids")
 # Run intersection analysis
 intersection_results = analyze_route_grid_intersections(route, fishnet)
 
+# routes_distances_pipeline.shp's own "Name" attribute still carries this node's
+# older/longer name from before it was renamed in node_metrics_paper.xlsx -- without
+# this alias, every route touching it (including its arc to Ferrara) falls back to a
+# garbled literal sheet name instead of "{id1}_{id2}" (see create_node_name_to_id_mapping's
+# docstring).
+ROUTE_NAME_ALIASES = {
+    "HERAMBIENTE S.R.L.  - IMPIANTO DI TERMOVALORIZZAZIONE RIFIUTI NON PERICOLOSI":
+        "HERAMBIENTE S.R.L.  - Termovalorizzatore",
+}
+
 # Export results - FIXED: Now passing network_nodes parameter!
 output_file = path_data_case_study / "geographical_feature/route_grid_intersections.xlsx"
-export_to_excel(intersection_results, output_file, network_nodes)
+export_to_excel(intersection_results, output_file, network_nodes, name_aliases=ROUTE_NAME_ALIASES)
 
 #----- Summary statistics -----#
 

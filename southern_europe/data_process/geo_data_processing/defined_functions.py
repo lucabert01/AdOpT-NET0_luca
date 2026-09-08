@@ -78,7 +78,7 @@ def analyze_route_grid_intersections(route_gdf, fishnet_gdf):
     return results
 
 
-def create_node_name_to_id_mapping(nodes_df):
+def create_node_name_to_id_mapping(nodes_df, name_aliases=None):
     """
     Create a mapping from node names to node IDs.
 
@@ -86,6 +86,17 @@ def create_node_name_to_id_mapping(nodes_df):
     -----------
     nodes_df : DataFrame
         DataFrame containing node information with 'node_name' and index as node_id
+    name_aliases : dict, optional
+        Extra {alias_name: canonical_node_name} entries to add to the mapping,
+        pointing at the SAME node_id as canonical_name. Needed because the route
+        shapefile's own "Name" attribute can still carry an older/longer node name
+        that was since renamed in node_metrics_*.xlsx (e.g. a route endpoint saved
+        as "HERAMBIENTE S.R.L.  - IMPIANTO DI TERMOVALORIZZAZIONE RIFIUTI NON
+        PERICOLOSI" when the node is now named "HERAMBIENTE S.R.L.  -
+        Termovalorizzatore") -- without an alias, that route's name never matches
+        any node_name and convert_route_name_to_node_ids() falls back to a garbled
+        literal sheet name instead of the "{id1}_{id2}" form the gamma calculator
+        looks up by.
 
     Returns:
     --------
@@ -97,6 +108,14 @@ def create_node_name_to_id_mapping(nodes_df):
         node_name = row['node_name']
         if node_name not in name_to_id:
             name_to_id[node_name] = node_id
+
+    if name_aliases:
+        for alias_name, canonical_name in name_aliases.items():
+            if canonical_name in name_to_id:
+                name_to_id[alias_name] = name_to_id[canonical_name]
+            else:
+                print(f"  ⚠️  Alias '{alias_name}' -> '{canonical_name}' skipped: "
+                      f"canonical name not found in node data")
 
     return name_to_id
 
@@ -119,14 +138,34 @@ def convert_route_name_to_node_ids(route_name, name_to_id_mapping):
     try:
         print(f"    Converting route: '{route_name}'")
 
-        # Split the route name by " - "
-        parts = route_name.split(' - ')
+        # A plain route_name.split(' - ') breaks when a node's OWN name contains
+        # " - " (e.g. "TERMOVALORIZZATORE - PAIP"), since it then splits into more
+        # than 2 parts and the correct split point is ambiguous. Instead, try every
+        # " - " occurrence as a candidate split point and use the one where BOTH
+        # sides are exact known node names -- this correctly disambiguates even
+        # when one side's name itself contains " - ".
+        sep = ' - '
+        node1_name = node2_name = None
+        search_start = 0
+        while True:
+            idx = route_name.find(sep, search_start)
+            if idx == -1:
+                break
+            candidate1 = route_name[:idx].strip()
+            candidate2 = route_name[idx + len(sep):].strip()
+            if candidate1 in name_to_id_mapping and candidate2 in name_to_id_mapping:
+                node1_name, node2_name = candidate1, candidate2
+                break
+            search_start = idx + 1
 
-        if len(parts) != 2:
-            print(f"      Warning: Route name doesn't follow expected format (found {len(parts)} parts)")
-            return route_name.replace(' ', '_')[:31]  # Fallback to modified original name
-
-        node1_name, node2_name = parts[0].strip(), parts[1].strip()
+        if node1_name is None:
+            # Fall back to the naive 2-part split (original behavior) so the
+            # partial-matching logic below still gets a shot at it.
+            parts = route_name.split(' - ')
+            if len(parts) != 2:
+                print(f"      Warning: Route name doesn't follow expected format (found {len(parts)} parts)")
+                return route_name.replace(' ', '_')[:31]  # Fallback to modified original name
+            node1_name, node2_name = parts[0].strip(), parts[1].strip()
         print(f"      Node 1: '{node1_name}'")
         print(f"      Node 2: '{node2_name}'")
 
@@ -170,7 +209,7 @@ def convert_route_name_to_node_ids(route_name, name_to_id_mapping):
         return route_name.replace(' ', '_').replace('-', '_')[:31]
 
 
-def export_to_excel(results_dict, output_path, nodes_df=None):
+def export_to_excel(results_dict, output_path, nodes_df=None, name_aliases=None):
     """
     Export intersection results to Excel file with separate sheets for each route.
 
@@ -182,6 +221,8 @@ def export_to_excel(results_dict, output_path, nodes_df=None):
         Path where the Excel file will be saved
     nodes_df : DataFrame, optional
         DataFrame containing node information for creating node ID-based sheet names
+    name_aliases : dict, optional
+        Forwarded to create_node_name_to_id_mapping() -- see its docstring.
     """
 
     if not results_dict:
@@ -193,7 +234,7 @@ def export_to_excel(results_dict, output_path, nodes_df=None):
     # Create node name to ID mapping if nodes_df is provided
     name_to_id_mapping = None
     if nodes_df is not None:
-        name_to_id_mapping = create_node_name_to_id_mapping(nodes_df)
+        name_to_id_mapping = create_node_name_to_id_mapping(nodes_df, name_aliases=name_aliases)
         print(f"  Created mapping for {len(name_to_id_mapping)} nodes")
 
         # Debug: print some of the mapping

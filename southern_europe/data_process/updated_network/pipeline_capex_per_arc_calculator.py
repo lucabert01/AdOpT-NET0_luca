@@ -190,7 +190,7 @@ def main():
         print(f"   Current working directory: {os.getcwd()}")
         print(f"   Data path exists: {Path('../../italy_data').exists()}")
         print(
-            f"   Excel file exists: {Path('../../italy_data/geographical_feature/node_metrics.xlsx').exists()}")
+            f"   Excel file exists: {Path('../../italy_data/geographical_feature/node_metrics_paper.xlsx').exists()}")
         print(f"   Output directory: {Path('../../italy_data/network_capex_metrics').exists()}")
 
         try:
