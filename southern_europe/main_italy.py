@@ -21,12 +21,14 @@ from data_process.utilities.defined_functions import (
     load_sector_reference_values,
     update_cement_hybrid_ccs_capacities,
     update_wastecal_ccs_capacities,
+    free_cement_hybrid_ccs_sizing,
     convert_network_data_indices_to_names,
     apply_carbon_pricing_to_all_nodes,
     compute_opex_var_arcs,
     update_capex_gamma2_per_arc,
     load_pipeline_class_connection_matrix,
-    PIPELINE_SIZE_CLASSES
+    PIPELINE_SIZE_CLASSES,
+    ALWAYS_NEW_TECHNOLOGIES,
 )
 
 
@@ -92,29 +94,39 @@ REFERENCE_EMITTER_TECHNOLOGIES = {
 }
 
 #----- Multi-run scenario matrix -----#
-# 2x2 factorial: cement {baseline MEA retrofit, oxyfuel hybrid} x waste {baseline MEA
-# retrofit, calcium looping}. Each entry's "name" becomes both the case-study working
-# folder (Italy_CaseStudy/<name>) and the results folder
-# (Results_CCSchainOptimization/<name>), numbered so they sort in a stable, readable
-# order.
+# Each entry's "name" becomes both the case-study working folder
+# (Italy_CaseStudy/<name>) and the results folder
+# (Results_CCSchainOptimization/<name>).
+#
 # NOTE: entries below are matched by FILENAME (via find_technology_file), not by the
 # JSON's own "tec_type" field -- for CementHybridCCS those happen to be the same
 # string, but WasteCaL_CCS.json's tec_type is "WasteToEnergyCaLCCS" while its filename
 # (and therefore what must go here) is "WasteCaL_CCS".
+#
+# Listing MORE THAN ONE technology for a sector here means a genuine CHOICE, not a
+# separate run per option: with tech_as_existing=True, the sector's one baseline
+# (non-ALWAYS_NEW_TECHNOLOGIES) technology is still assigned "existing" as usual,
+# while every ALWAYS_NEW_TECHNOLOGIES alternative (CementHybridCCS/WasteCaL_CCS) is
+# assigned "new" and left to compete on cost against it -- see
+# assign_ccs_technologies_debug and the tech_as_existing validation below. For
+# CementHybridCCS specifically, choice-scenario runs also need
+# free_cement_hybrid_ccs_sizing() instead of update_cement_hybrid_ccs_capacities()
+# (see that function's docstring for why) -- handled automatically below based on
+# whether "CementHybridCCS" is the sector's ONLY selected technology or one of several.
 SCENARIOS = [
-    {"name": "mea",    "tech_for_cement": ["CementEmitter"],   "tech_for_waste": ["WasteToEnergyEmitter"]},
-    {"name": "oxy",    "tech_for_cement": ["CementHybridCCS"], "tech_for_waste": ["WasteToEnergyEmitter"]},
-    {"name": "cal",    "tech_for_cement": ["CementEmitter"],   "tech_for_waste": ["WasteCaL_CCS"]},
-    {"name": "oxyCal", "tech_for_cement": ["CementHybridCCS"], "tech_for_waste": ["WasteCaL_CCS"]},
-    # "Timeless" variant of "mea": every hourly demand/electricity/heat profile is
-    # replaced by its own annual average (still 8760 values, so annual totals -- and
-    # therefore annual emissions -- are unchanged), and only 1 typical/design day is
-    # used instead of nr_DD_days. Since the flattened profiles have zero variance, 1
-    # day reproduces the full year exactly, isolating the effect of removing hourly
-    # variance with minimal change from the "mea" base case. Emitter/CCS capacity
-    # sizing is untouched -- it's computed from the raw (non-flattened) profile.
-    {"name": "mea_timeless", "tech_for_cement": ["CementEmitter"], "tech_for_waste": ["WasteToEnergyEmitter"],
-     "flatten_profiles": True, "nr_dd_days": 1},
+    # Baseline choice: cement picks between the existing MEA-retrofit route and a
+    # new oxyfuel-hybrid plant; waste picks between the existing MEA-retrofit route
+    # and a new calcium-looping unit. All other sectors stay at their fixed baseline
+    # (MEA retrofit where applicable).
+    {"name": "technology_selection",
+     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
+     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"]},
+    # Same cement choice, but waste is forced to calcium looping only (no MEA-retrofit
+    # alternative) -- isolates the effect of removing waste's own technology choice
+    # while keeping cement's choice active.
+    {"name": "technology_selection_wasteCaL",
+     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
+     "tech_for_waste": ["WasteCaL_CCS"]},
 ]
 
 #----- Import data-----#
@@ -194,12 +206,20 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
 
     if tech_as_existing:
         for sector, techs in technology_selection.items():
-            if len(techs) != 1:
+            # At most one NON-ALWAYS_NEW technology per sector -- that's the one
+            # that would be assigned "existing" (a node's 'existing' plant can't
+            # be two technologies at once). Any number of ALWAYS_NEW_TECHNOLOGIES
+            # (CementHybridCCS/WasteCaL_CCS) may additionally be listed alongside
+            # it -- they're always assigned "new" regardless of tech_as_existing
+            # (see assign_ccs_technologies_debug), so offering one as a genuine
+            # cost-competing alternative to the sector's existing baseline is fine.
+            baseline_candidates = [t for t in techs if t not in ALWAYS_NEW_TECHNOLOGIES]
+            if len(baseline_candidates) > 1:
                 raise ValueError(
-                    f"tech_as_existing=True requires exactly one technology per sector "
-                    f"(a node's 'existing' plant can't be two technologies at once), but "
-                    f"'{sector}' has {len(techs)}: {techs}. Either trim it to one "
-                    f"technology or set tech_as_existing=False."
+                    f"tech_as_existing=True requires at most one non-ALWAYS_NEW_TECHNOLOGIES "
+                    f"technology per sector (a node's 'existing' plant can't be two "
+                    f"technologies at once), but '{sector}' has {len(baseline_candidates)}: "
+                    f"{baseline_candidates}. Trim it to one, or set tech_as_existing=False."
                 )
 
     #----- Create folder for results -----#
@@ -333,13 +353,26 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     # Update CCS references in emitter technologies to match determined MEA sizes
     update_emitter_ccs_references(input_data_path, network_emission_flux, technology_selection, co2_concentration_by_type)
 
-    # Write each cement node's own fixed clinker capacity into its copied CementHybridCCS.json
-    # (only has an effect at nodes where CementHybridCCS was actually selected, i.e. it's a
-    # no-op unless "CementHybridCCS" is in tech_for_cement)
-    update_cement_hybrid_ccs_capacities(input_data_path, network_emission_flux)
+    # CementHybridCCS.json's fixed clinker capacity (Performance.size_is_fixed == 1,
+    # pinning its capex to a real, unavoidable investment) is only correct when it's
+    # the sector's SOLE technology -- a genuine one-vs-another choice needs its
+    # capex tied to a free decision variable instead, so the optimizer can pick zero
+    # CementHybridCCS capacity where the baseline route is cheaper (see
+    # free_cement_hybrid_ccs_sizing's docstring). No-op (for either call) unless
+    # "CementHybridCCS" is in tech_for_cement.
+    if "CementHybridCCS" in tech_for_cement:
+        if len(tech_for_cement) == 1:
+            update_cement_hybrid_ccs_capacities(input_data_path, network_emission_flux)
+        else:
+            free_cement_hybrid_ccs_sizing(input_data_path)
 
-    # Same, for WasteCaL_CCS's fixed waste-processing capacity (no-op unless
-    # "WasteCaL_CCS" is in tech_for_waste)
+    # WasteCaL_CCS's fixed waste-processing capacity stays correct even when offered
+    # as a choice alongside another Waste technology -- its own capex is already tied
+    # to the free var_size_cal decision variable regardless of size_is_fixed (that
+    # flag there only pins the cost-free waste-processing throughput, not the
+    # CO2-capture capacity that actually drives cost) -- see
+    # free_cement_hybrid_ccs_sizing's docstring for the contrast with CementHybridCCS.
+    # No-op unless "WasteCaL_CCS" is in tech_for_waste.
     update_wastecal_ccs_capacities(input_data_path, network_emission_flux)
 
     #----- Add networks -----#
@@ -594,8 +627,8 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
 if __name__ == "__main__":
     import sys
 
-    # Optional CLI filter: `python main_italy.py mea_timeless [other_name ...]` runs
-    # only the named scenario(s) instead of the full SCENARIOS list.
+    # Optional CLI filter: `python main_italy.py technology_selection [other_name ...]`
+    # runs only the named scenario(s) instead of the full SCENARIOS list.
     requested_names = sys.argv[1:]
     scenarios_to_run = (
         [s for s in SCENARIOS if s["name"] in requested_names] if requested_names else SCENARIOS

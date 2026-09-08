@@ -882,6 +882,71 @@ def update_wastecal_ccs_capacities(input_data_path, network_emission_flux, tech_
     print(f"{tech_name} capacity updates completed.")
 
 
+def free_cement_hybrid_ccs_sizing(input_data_path, tech_name="CementHybridCCS"):
+    """
+    Flips Performance.size_is_fixed from 1 to 0 in every node's copied
+    {tech_name}.json -- used instead of update_cement_hybrid_ccs_capacities()
+    when CementHybridCCS is offered as a genuine ALTERNATIVE alongside another
+    Cement technology (a "which route is cheaper" choice scenario), rather than
+    as the sector's sole/exclusive technology.
+
+    Why this matters: cement_hybrid_ccs.py's _define_capex_constraints computes
+    the oxyfuel capex component as a fixed constant (np.interp against the
+    STATIC prod_capacity_clinker value, not a Pyomo variable at all) whenever
+    size_is_fixed == 1 -- appropriate for the exclusive "oxy" scenario (this
+    node's real plant simply IS the oxyfuel-hybrid one, capex charged
+    accordingly), but WRONG for a choice scenario: it would charge that capex
+    UNCONDITIONALLY even if the optimizer picks the baseline MEA-retrofit route
+    instead at every single node, since there is no Pyomo variable this capex
+    is tied to that could ever be driven to 0. With size_is_fixed == 0, oxyfuel
+    capex instead becomes a piecewise function of the free var_size decision
+    variable (bp_x starts at 0 with bp_y=0), so the model can genuinely choose
+    zero CementHybridCCS capacity -- and therefore zero capex -- at any node
+    where the baseline route is cheaper.
+
+    (WasteCaL_CCS needs no equivalent override: its own capex is already tied
+    to the free var_size_cal decision variable regardless of size_is_fixed --
+    that flag there only pins the (cost-free) waste-processing throughput, not
+    the CO2-capture capacity that actually drives cost -- so
+    update_wastecal_ccs_capacities() stays correct and should still be called
+    even in a choice scenario, unlike this function's Cement counterpart.)
+
+    Only touches nodes that actually have a copied {tech_name}.json under
+    technology_data/ -- other Cement nodes are skipped with a note, not
+    treated as an error, same convention as update_cement_hybrid_ccs_capacities.
+
+    Parameters:
+        - input_data_path: Path to the case-study input data directory
+        - tech_name: technology filename (without ".json") to patch; defaults
+          to "CementHybridCCS"
+    """
+    with open(input_data_path / "Topology.json", "r") as f:
+        topology = json.load(f)
+
+    print(f"Freeing {tech_name} sizing (size_is_fixed -> 0) for choice-scenario nodes...")
+
+    for period in topology["investment_periods"]:
+        for node_name in topology["nodes"]:
+            tech_file_path = (
+                input_data_path / period / "node_data" / node_name / "technology_data" / f"{tech_name}.json"
+            )
+            if not tech_file_path.exists():
+                continue
+
+            with open(tech_file_path, "r") as f:
+                tech_data = json.load(f)
+
+            tech_data["Performance"]["size_is_fixed"] = 0
+
+            with open(tech_file_path, "w") as f:
+                json.dump(tech_data, f, indent=2)
+
+            print(f"  ✅ {node_name}: {tech_name} Performance.size_is_fixed = 0 (free var_size, 0-"
+                  f"{tech_data.get('size_max')} t/h)")
+
+    print(f"{tech_name} free-sizing update completed.")
+
+
 def update_network_distance_matrix(input_data_path, network_data_dict, network_types, decimal_places=2):
     """
     Update distance matrices for multiple network types using network data where values > 0 represent distances.
