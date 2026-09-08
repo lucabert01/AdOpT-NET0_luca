@@ -99,26 +99,74 @@ STORAGE_COLOR = BATLOW[6]    # storage marker
 # which explicitly skips MEA-retrofit wiring for these):
 #   - CementHybridCCS   (oxyfuel + MEA polish, cement sector)
 #   - WasteCaL_CCS      (calcium looping, waste sector; tec_type WasteToEnergyCaLCCS)
-# Encoding capture technology as marker SHAPE (rather than a 4th hue) keeps
+#   - FertilizerSMREmitter (direct capture, FertilizersSMR sector) -- a plain
+#     CONV3 technology with no Performance.ccs block at all (main_italy.py
+#     deliberately skips MEA-retrofit wiring for this sector -- see
+#     assign_mea_technology's skip for "FertilizersSMR"); it outputs
+#     CO2captured directly as one of its base output carriers, so its own
+#     capex_tot/opex_* (there is no separate retrofit component to split out)
+#     IS the capture cost, same accounting convention as the other two
+#     self-contained technologies -- see classify_capture_family below.
+# Encoding capture technology as marker SHAPE (rather than a 5th hue) keeps
 # it legible under the same batlow-derived color language already used for
 # CCS status (green=captured, muted=not) and avoids adding low-contrast
 # batlow hues for identity (validated: adjacent-pair contrast among mid-tone
 # batlow stops falls below the CVD-safe floor for small filled markers).
-FAMILY_ORDER = ["mea_retrofit", "oxyfuel_hybrid", "calcium_looping"]
+FAMILY_ORDER = ["mea_retrofit", "oxyfuel_hybrid", "calcium_looping", "direct_capture"]
 FAMILY_LABELS = {
     "mea_retrofit": "MEA retrofit",
     "oxyfuel_hybrid": "Oxyfuel + MEA hybrid",
     "calcium_looping": "Calcium looping",
+    "direct_capture": "Direct capture (integrated)",
 }
 FAMILY_MARKERS = {
     "mea_retrofit": "o",
     "oxyfuel_hybrid": "^",
     "calcium_looping": "D",
+    # "P" (filled plus), not "s" (square) -- transport hubs already use a
+    # square marker (TRANSPORT_COLOR) elsewhere on the same maps, and reusing
+    # it here for a technology family would be ambiguous with node type.
+    "direct_capture": "P",
 }
-# matplotlib scatter `s` is a bounding-box area, so a triangle/diamond of the
-# same `s` as a circle reads as visually smaller (lower fill ratio) -- scale
-# up so the three shapes read as equal-weight on the map.
-FAMILY_MARKER_SCALE = {"mea_retrofit": 1.0, "oxyfuel_hybrid": 1.35, "calcium_looping": 1.2}
+# matplotlib scatter `s` is a bounding-box area, so a triangle/diamond/plus of
+# the same `s` as a circle reads as visually smaller (lower fill ratio) -- scale
+# up so the shapes read as equal-weight on the map.
+FAMILY_MARKER_SCALE = {
+    "mea_retrofit": 1.0, "oxyfuel_hybrid": 1.35, "calcium_looping": 1.2, "direct_capture": 1.3,
+}
+
+# Each capture technology family reports its own electricity/heat draw under a
+# different operation dataset name -- canonical home for this mapping (shared
+# with ccs_chain_emitter_cost_ranking.py, which imports it from here rather
+# than keeping its own copy) since it's tied one-to-one to classify_capture_family
+# above:
+#   - "mea_retrofit"    -- the generic CCS mixin's own suffixed variables
+#                          (technology.py's _define_ccs_performance)
+#   - "oxyfuel_hybrid"  -- CementHybridCCS is a plain generic technology as far
+#                          as operation reporting goes (no override), so its
+#                          main input carrier is written under the base
+#                          Technology class's unsuffixed "{carrier}_input"
+#   - "calcium_looping" -- WasteCaL_CCS draws neither (the calcium-looping
+#                          process is self-sufficient -- no purchased
+#                          electricity/heat operation variable at all)
+#   - "direct_capture"  -- FertilizerSMREmitter is likewise a plain generic
+#                          technology (no specificTechnologies override), so
+#                          its electricity draw is under the same unsuffixed
+#                          "electricity_input" convention as oxyfuel_hybrid
+#                          (electricity is its only input_carrier -- see
+#                          FertilizerSMREmitter.json); it has no heat input.
+ELEC_INPUT_KEY_BY_FAMILY = {
+    "mea_retrofit": "electricity_var_input_ccs",
+    "oxyfuel_hybrid": "electricity_input",
+    "calcium_looping": None,
+    "direct_capture": "electricity_input",
+}
+HEAT_INPUT_KEY_BY_FAMILY = {
+    "mea_retrofit": "heat_var_input_ccs",
+    "oxyfuel_hybrid": None,
+    "calcium_looping": None,
+    "direct_capture": None,
+}
 
 # CO2 captured vs. emitted -- used for the emitter zoom plot
 CAPTURED_COLOR = BATLOW[0]
@@ -150,7 +198,7 @@ path_cost_factor_table = Path(
 GIS_NODES = path_files_gis / "all_nodes_italy.shp"
 ITALY_SHP = path_files_gis / "italy_WGS1984.shp"
 ROUTES = {
-    "CO2_Pipeline": path_files_gis / "routes_distances_pipelines.shp",
+    "CO2_Pipeline": path_files_gis / "routes_distances_pipeline.shp",
     "CO2Truck": path_files_gis / "truck_italy_150.shp",
     "CO2Railway": path_files_gis / "routes_distances_railway.shp",
 }
@@ -216,7 +264,7 @@ def compute_cost_factor_grid(italy: gpd.GeoDataFrame, category: float = COST_FAC
     return gpd.clip(fishnet, italy)
 
 
-def classify_capture_family(design_keys) -> str | None:
+def classify_capture_family(design_keys, operation_keys=None) -> str | None:
     """
     Identifies which capture technology a node's technology block belongs to,
     from the dataset names present in its design/nodes/period1/<node>/<tech>
@@ -230,6 +278,20 @@ def classify_capture_family(design_keys) -> str | None:
       - "size_cal"  -- WasteCaL_CCS / WasteToEnergyCaLCCS (calcium looping);
                        written by wasteToEnergy_CaL_ccs.py:write_results_tec_design
 
+    A fourth family, "direct_capture", has NO distinguishing design key at all
+    -- FertilizerSMREmitter (FertilizersSMR sector) is a plain CONV3
+    technology with no Performance.ccs block (main_italy.py deliberately
+    skips the generic MEA-retrofit wiring for it), so its design group looks
+    like any ordinary non-capturing technology's (just the base
+    capex_tot/opex_fixed/opex_variable technology.py writes for everyone).
+    The only way to tell it apart from a genuinely non-capturing technology
+    is that it still directly outputs "CO2captured" as one of its own output
+    carriers (technology.py:write_results_tec_operation writes an unsuffixed
+    "CO2captured_output" for any technology whose output_carrier list
+    includes it) -- hence the operation_keys parameter. Pass None only when
+    the caller already knows design_keys alone is sufficient (e.g. a context
+    where a False positive for "direct_capture" is impossible).
+
     Returns None for technologies with none of these keys (transport/storage
     technologies, or an emitter with no capture at all).
     """
@@ -240,6 +302,8 @@ def classify_capture_family(design_keys) -> str | None:
         return "oxyfuel_hybrid"
     if "size_cal" in keys:
         return "calcium_looping"
+    if operation_keys is not None and "CO2captured_output" in set(operation_keys):
+        return "direct_capture"
     return None
 
 
@@ -368,11 +432,12 @@ def load_ccs_status(h5_path: Path) -> pd.DataFrame:
             for tech in nodes[node_name].keys():
                 g = nodes[node_name][tech]
                 design_keys = list(g.keys())
-                family = classify_capture_family(design_keys)
+                op_keys = list(op[node_name][tech].keys())
+                family = classify_capture_family(design_keys, op_keys)
                 if family is None:
                     continue
 
-                captured_key = captured_co2_operation_key(op[node_name][tech].keys())
+                captured_key = captured_co2_operation_key(op_keys)
                 if captured_key is None:
                     continue
 
@@ -417,20 +482,21 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
     classify_capture_family): for the generic bolt-on MEA retrofit, only the
     CCS component's own capex_ccs/opex_*_ccs count -- the host emitter's own
     production cost is out of scope for a "cost of the CCS chain" breakdown.
-    For the self-contained CementHybridCCS/WasteCaL_CCS technologies, capture
-    is inseparable from production (one technology block, no retrofit split
-    available), so their full capex_tot/opex_fixed/opex_variable is the
+    For the self-contained CementHybridCCS/WasteCaL_CCS technologies AND for
+    FertilizerSMREmitter ("direct_capture" -- see classify_capture_family),
+    capture is inseparable from production (one technology block, no retrofit
+    split available), so their full capex_tot/opex_fixed/opex_variable is the
     capture-chain cost -- the same convention already used below for the
     storage technology.
 
     Electricity/heat import cost is not in technology opex (technology
     opex_variable is 0 for both the emitter and the MEA CCS component; energy
     is priced at the node's carrier balance instead -- see construct_balances.py
-    :func:`construct_import_costs`). It is attributed to whichever node
-    consumes it: the storage node's own electricity draw counts as "storage",
-    everything else counts as "capture" (and, within that, its node's capture
-    family) -- EXCEPT for the portion of a node's electricity/heat import that
-    is drawn by a network passing through it (pipeline compression/pumping
+    :func:`construct_import_costs`). The AGGREGATE 'capture'/'storage' totals
+    are attributed to whichever node consumes it: the storage node's own
+    electricity draw counts as "storage", everything else counts as "capture"
+    -- EXCEPT for the portion of a node's electricity/heat import that is
+    drawn by a network passing through it (pipeline compression/pumping
     power, stored per node/carrier as operation/energy_balance's
     "network_consumption" and, if the pressure model is on, "compressor_input"
     -- see construct_balances.py's const_energybalance and
@@ -439,6 +505,27 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
     "transport" instead. Both draws are met out of the same node-level import
     and priced at the same import_price, so the split is exact, not an
     approximation.
+
+    The PER-FAMILY 'capture_by_family' breakdown is, separately, attributed
+    per TECHNOLOGY rather than per node: each capture-classified technology's
+    own electricity/heat draw is read from its own operation dataset (see
+    ELEC_INPUT_KEY_BY_FAMILY/HEAT_INPUT_KEY_BY_FAMILY), the same exact
+    per-technology mechanism ccs_chain_emitter_cost_ranking.py uses -- so a
+    node hosting more than one capture technology at once (e.g. "Ferrara"
+    running WasteToEnergyEmitter + FertilizerCombustionEmitter +
+    FertilizerSMREmitter, or "Piacenza" running CementEmitter +
+    WasteToEnergyEmitter) splits its electricity/heat correctly across each
+    technology's own family instead of dumping the whole node's draw onto
+    whichever technology happened to be iterated last. This does NOT feed
+    into the aggregate 'capture' total above (kept as the node-level
+    computation, deliberately independent of any technology's own reporting,
+    so the grand total stays exactly right regardless of any per-technology
+    edge case); by construction, in this case study only capture technologies
+    and networks draw electricity/heat (a plain host emitter with no CCS has
+    no input_carrier at all), so the two should reconcile to within
+    floating-point noise. plot_cost_breakdown's existing "Capture (Other)"
+    fallback bar (aggregate capture minus the per-family sum) is what would
+    surface a real discrepancy, should that assumption ever not hold.
 
     Carrier-balance arrays (operation/energy_balance) are stored at the
     design-days (clustered) resolution; they are expanded back to the full
@@ -478,20 +565,34 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
                     total += float((g[key][()][seq - 1] * price).sum())
             return total
 
+        def tech_carrier_cost(node_name, tech_name, op_keys, key, carrier):
+            """EUR/year this specific technology's own `carrier` consumption
+            cost, at the node's import price -- exact, not an approximation,
+            since op_tech[node][tech][key] is that technology's own operation
+            series (see ELEC_INPUT_KEY_BY_FAMILY/HEAT_INPUT_KEY_BY_FAMILY),
+            never another technology's or the network's. Same helper as
+            ccs_chain_emitter_cost_ranking.py's tech_carrier_cost."""
+            eb = f["operation"]["energy_balance"]["period1"]
+            if key is None or key not in op_keys or node_name not in eb or carrier not in eb[node_name]:
+                return 0.0
+            consumption = op_tech[node_name][tech_name][key][()]
+            price = eb[node_name][carrier]["import_price"][()]
+            return float((consumption * price)[seq - 1].sum())
+
         nodes = f["design"]["nodes"]["period1"]
+        op_tech = f["operation"]["technology_operation"]["period1"]
         capture = {k: 0.0 for k in COMPONENT_COLORS}
         capture_by_family = {}
         storage = {k: 0.0 for k in COMPONENT_COLORS}
         transport = {k: 0.0 for k in COMPONENT_COLORS}
 
         for node_name in nodes.keys():
-            node_family = None
             for tech in nodes[node_name].keys():
                 g = nodes[node_name][tech]
                 keys = list(g.keys())
-                family = classify_capture_family(keys)
+                op_keys = list(op_tech[node_name][tech].keys())
+                family = classify_capture_family(keys, op_keys)
                 if family is not None:
-                    node_family = family
                     if family == "mea_retrofit":
                         comp_capex = float(g["capex_ccs"][()][0])
                         comp_opex_fixed = float(g["opex_fixed_ccs"][()][0])
@@ -500,6 +601,14 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
                         comp_capex = float(g["capex_tot"][()][0])
                         comp_opex_fixed = float(g["opex_fixed"][()][0])
                         comp_opex_variable = float(g["opex_variable"][()][0])
+                    # This technology's OWN electricity/heat draw, not the
+                    # whole node's -- see docstring's "PER-FAMILY" paragraph.
+                    comp_elec = tech_carrier_cost(
+                        node_name, tech, op_keys, ELEC_INPUT_KEY_BY_FAMILY[family], "electricity"
+                    )
+                    comp_heat = tech_carrier_cost(
+                        node_name, tech, op_keys, HEAT_INPUT_KEY_BY_FAMILY[family], "heat"
+                    )
                     capture["Capex"] += comp_capex
                     capture["Opex (fixed)"] += comp_opex_fixed
                     capture["Opex (variable)"] += comp_opex_variable
@@ -507,6 +616,8 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
                     fam_costs["Capex"] += comp_capex
                     fam_costs["Opex (fixed)"] += comp_opex_fixed
                     fam_costs["Opex (variable)"] += comp_opex_variable
+                    fam_costs["Electricity"] += comp_elec
+                    fam_costs["Heat"] += comp_heat
                 elif tech == "PermanentStorage_CO2_simple":
                     storage["Capex"] += float(g["capex_tot"][()][0])
                     storage["Opex (fixed)"] += float(g["opex_fixed"][()][0])
@@ -524,11 +635,12 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
                 storage["Electricity"] += elec_cost
                 storage["Heat"] += heat_cost
             else:
+                # Aggregate total stays the robust node-level computation
+                # (independent of any per-technology reporting quirk) -- see
+                # docstring. The precise per-technology split above only
+                # feeds capture_by_family, not this total.
                 capture["Electricity"] += elec_cost
                 capture["Heat"] += heat_cost
-                if node_family is not None:
-                    capture_by_family[node_family]["Electricity"] += elec_cost
-                    capture_by_family[node_family]["Heat"] += heat_cost
 
         net = f["design"]["networks"]["period1"]
         for ntype in net.keys():
@@ -1099,13 +1211,13 @@ def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str 
 
         if tech_name is None:
             for candidate in design_node.keys():
-                if classify_capture_family(design_node[candidate].keys()) is not None:
+                if classify_capture_family(design_node[candidate].keys(), op_node[candidate].keys()) is not None:
                     tech_name = candidate
                     break
             if tech_name is None:
                 raise ValueError(f"No capture-capable technology found at node '{node_name}'")
 
-        family = classify_capture_family(design_node[tech_name].keys())
+        family = classify_capture_family(design_node[tech_name].keys(), op_node[tech_name].keys())
         op = op_node[tech_name]
         captured_key = captured_co2_operation_key(op.keys())
         captured = op[captured_key][()]

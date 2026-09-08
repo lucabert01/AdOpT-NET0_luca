@@ -33,14 +33,14 @@ path_cost_factor_table = Path(
 
 italy = gpd.read_file(path_files_gis / "italy_WGS1984.shp")
 nodes_selected = gpd.read_file(path_files_gis / "all_nodes_italy.shp")
-routes_pipeline = gpd.read_file(path_files_gis / "routes_distances_pipelines.shp")
+routes_pipeline = gpd.read_file(path_files_gis / "routes_distances_pipeline.shp")
 routes_railway = gpd.read_file(path_files_gis / "routes_distances_railway.shp")  # TODO: point to actual railway shapefile
 routes_truck = gpd.read_file(path_files_gis / "truck_italy_150.shp")
 
 # Load network matrices for transport directions
-network_pipeline = pd.read_excel(path_files_node_flux / "node_metrics.xlsx", index_col=0, sheet_name='pipeline')
-network_truck = pd.read_excel(path_files_node_flux / "node_metrics.xlsx", index_col=0, sheet_name='truck')
-network_railway = pd.read_excel(path_files_node_flux / "node_metrics.xlsx", index_col=0, sheet_name='railway')
+network_pipeline = pd.read_excel(path_files_node_flux / "node_metrics_paper.xlsx", index_col=0, sheet_name='pipeline')
+network_truck = pd.read_excel(path_files_node_flux / "node_metrics_paper.xlsx", index_col=0, sheet_name='truck')
+network_railway = pd.read_excel(path_files_node_flux / "node_metrics_paper.xlsx", index_col=0, sheet_name='railway')
 
 # --- Reproject route layers to match italy/nodes CRS ---
 target_crs = italy.crs

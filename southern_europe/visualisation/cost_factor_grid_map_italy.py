@@ -29,8 +29,8 @@ path_cost_factor_table = Path(
 
 italy = gpd.read_file(path_files_gis / "italy_WGS1984.shp")  # italy boundary
 nodes_selected = gpd.read_file(path_files_gis / "all_nodes_italy.shp")
-routes_pipeline = gpd.read_file(path_files_gis / "routes_distances_pipelines.shp")
-network_pipeline = pd.read_excel(path_files_grids / "node_metrics.xlsx", index_col=0, sheet_name='pipeline')
+routes_pipeline = gpd.read_file(path_files_gis / "routes_distances_pipeline.shp")
+network_pipeline = pd.read_excel(path_files_grids / "node_metrics_paper.xlsx", index_col=0, sheet_name='pipeline')
 fishnet = gpd.read_file(path_files_gis / "fishnet_italy_5km.shp").reset_index().rename(
     columns={"index": "GRID_OID"})
 soil_data = pd.read_csv(path_files_grids / "soil_type_grids_italy.csv")

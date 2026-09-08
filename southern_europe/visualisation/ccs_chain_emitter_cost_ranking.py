@@ -18,6 +18,18 @@ its own annual captured CO2. This deliberately excludes any electricity/heat
 also drawn at that node by a network passing through it (pipeline
 compression/pumping power) - that portion is transport cost, see below.
 
+FertilizerSMREmitter (FertilizersSMR sector, family "direct_capture" - see
+classify_capture_family in ccs_chain_plots.py) has no separate CCS retrofit
+component at all: it directly outputs CO2captured as one of its own base
+output carriers. Its capture cost is therefore its own capex_tot/opex_* (the
+whole technology, same convention as CementHybridCCS/WasteCaL_CCS) plus its
+own electricity input draw (its only input carrier - see
+ELEC_INPUT_KEY_BY_FAMILY) - both read via the same per-technology operation
+dataset as every other family, so pipeline compression power at its node is
+excluded exactly the same way (it is a separate node-level
+network_consumption/compressor_input entry, never part of any technology's
+own operation dataset).
+
 Storage cost is the single storage site's total annual cost (capex + opex +
 its own electricity/heat draw, net of any network-consumption draw at that
 node - see transport, below) divided by total annual tonnes stored - a flat
@@ -63,6 +75,8 @@ from ccs_chain_plots import (
     classify_capture_family,
     captured_co2_operation_key,
     FAMILY_LABELS,
+    ELEC_INPUT_KEY_BY_FAMILY,
+    HEAT_INPUT_KEY_BY_FAMILY,
     INK_PRIMARY,
     INK_SECONDARY,
     GRIDLINE,
@@ -87,36 +101,15 @@ STAGE_COLORS = {
     "Storage": STORAGE_COLOR,
 }
 
-SECTOR_ORDER = ["Cement", "Waste", "Refining", "Other"]
-_BATLOW = [cmc.batlow(x) for x in np.linspace(0, 1, 7)]
-SECTOR_COLORS = {
-    "Cement": _BATLOW[0],
-    "Waste": _BATLOW[2],
-    "Refining": _BATLOW[4],
-    "Other": _BATLOW[6],
-}
+SECTOR_ORDER = ["Cement", "Waste", "Refining", "Lime", "FertilizersCombustion", "FertilizersSMR", "Other"]
+_BATLOW = [cmc.batlow(x) for x in np.linspace(0, 1, len(SECTOR_ORDER))]
+SECTOR_COLORS = dict(zip(SECTOR_ORDER, _BATLOW))
 
 # Below this annual-tonnes / (peak-rate x 8760h) ratio, an emitter is flagged
 # on the MACC plot as running at a low load factor - it reserves pipeline
 # capacity sized for its peak rate but rarely uses all of it, so it pays a
 # capacity-share transport cost spread over comparatively few actual tonnes.
 LOW_CAPACITY_FACTOR_THRESHOLD = 0.75
-
-# Each capture technology family reports its own electricity/heat draw under
-# a different dataset name (see classify_capture_family in ccs_chain_plots.py
-# for why: generic bolt-on MEA retrofit vs. the two self-contained
-# technologies). WasteCaL_CCS has neither - the calcium-looping process is
-# self-sufficient (no purchased electricity/heat operation variable at all).
-ELEC_INPUT_KEY_BY_FAMILY = {
-    "mea_retrofit": "electricity_var_input_ccs",
-    "oxyfuel_hybrid": "electricity_input",
-    "calcium_looping": None,
-}
-HEAT_INPUT_KEY_BY_FAMILY = {
-    "mea_retrofit": "heat_var_input_ccs",
-    "oxyfuel_hybrid": None,
-    "calcium_looping": None,
-}
 
 
 def _sector_from_tech(tech_name: str) -> str:
@@ -127,6 +120,15 @@ def _sector_from_tech(tech_name: str) -> str:
         return "Waste"
     if "refin" in t:
         return "Refining"
+    if "lime" in t:
+        return "Lime"
+    # Check "smr" before the generic "fertilizer" substring -- both
+    # FertilizerCombustionEmitter and FertilizerSMREmitter contain
+    # "fertilizer", so SMR must be matched first to not fall through.
+    if "smr" in t:
+        return "FertilizersSMR"
+    if "fertilizer" in t:
+        return "FertilizersCombustion"
     return "Other"
 
 
@@ -224,10 +226,10 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
         for node_name in nodes.keys():
             for tech in nodes[node_name].keys():
                 g = nodes[node_name][tech]
-                family = classify_capture_family(list(g.keys()))
+                op_keys = list(op_tech[node_name][tech].keys())
+                family = classify_capture_family(list(g.keys()), op_keys)
                 if family is None:
                     continue
-                op_keys = list(op_tech[node_name][tech].keys())
                 captured_key = captured_co2_operation_key(op_keys)
                 if captured_key is None:
                     continue
