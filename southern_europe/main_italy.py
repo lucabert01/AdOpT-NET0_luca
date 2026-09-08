@@ -38,8 +38,8 @@ cop_hp = 2.6 # default
 levelized_capex_hp = 12.7 #computed from DanishEnergyAgency large HP excess heat
 electricity_import_limit = 1000 # default
 heat_import_limit = 3000 # default
-wasteIn_import_limit = 1000 # default -- must exceed WasteCaL_CCS.json's size_max (140 t/h per node) with headroom, otherwise infeasible
-max_transport_capacity = 3000  # default ceiling for truck/railway/generic networks (t/h)
+wasteIn_import_limit = 1000 # default
+max_transport_capacity = 2000  # default ceiling for truck/railway/generic networks (t/h)
 # Per-arc capacity ceiling for the pipeline size classes - MUST match each
 # class's calibrated kg/s range (converted to t/h, x3.6) in
 # data_process/updated_network/pipeline_capex_per_arc_calculator.py::
@@ -57,14 +57,21 @@ pipeline_size_class_max_capacity_t_h = {
 carbon_tax = 200  # euro per tonne CO2
 enable_carbon_pricing = True
 nr_DD_days = 15
-node_metrics_suffix = 150  # or "150", "200", "" for the base case. Refers to the cutoff size for truck connections
+node_metrics_suffix = "paper"  # base case with truck connections at the cutoff of 150kt/y
 node_metrics_file = f"node_metrics_{node_metrics_suffix}.xlsx"
 objective = "emissions_minC"
 
-# Refining/Other stay at their baseline technology in every scenario -- only
-# cement/waste vary (see SCENARIOS below).
+# Refining/Other/Lime/Fertilizers stay at their baseline technology in every
+# scenario -- only cement/waste vary (see SCENARIOS below). Lime and
+# FertilizersCombustion can only use the generic bolt-on MEA retrofit (no
+# CaL/Oxy variant exists for them), and FertilizersSMR needs no capture unit at
+# all -- FertilizerSMREmitter.json directly produces CO2captured as an output,
+# with no Performance.ccs block (see assign_mea_technology's skip for this sector).
 tech_for_refining = ["RefineryEmitter"]
 tech_for_other = ["UnspecifiedEmitter"]
+tech_for_lime = ["LimeEmitter"]
+tech_for_fertilizers_combustion = ["FertilizerCombustionEmitter"]
+tech_for_fertilizers_smr = ["FertilizerSMREmitter"]
 
 # If True, each sector's technology is modeled as "existing"(this requires
 # exactly one technology selected per sector). If False, ALL technologies selected for a sector are modeled
@@ -79,6 +86,9 @@ REFERENCE_EMITTER_TECHNOLOGIES = {
     "Waste": ["WasteToEnergyEmitter"],
     "Refining": ["RefineryEmitter"],
     "Other": ["UnspecifiedEmitter"],
+    "Lime": ["LimeEmitter"],
+    "FertilizersCombustion": ["FertilizerCombustionEmitter"],
+    "FertilizersSMR": ["FertilizerSMREmitter"],
 }
 
 #----- Multi-run scenario matrix -----#
@@ -124,6 +134,15 @@ print("\nLoading sector emission factors from emitter technology JSONs...")
 sector_emission_factor = load_sector_reference_values(
     path_files_technologies, REFERENCE_EMITTER_TECHNOLOGIES, ("Performance", "emission_factor")
 )
+# Fertilizers sectors: hardcode emission_factor = 1 (t CO2 == t product) rather than
+# auto-reading it from the source JSONs above. FertilizerCombustionEmitter.json's own
+# Performance.emission_factor happens to already be 1, but FertilizerSMREmitter.json's
+# is 0 -- that field there means something different (it's a CONV3 input-sized
+# conversion tech with no separate "process emissions" term, since all its CO2 is
+# already accounted for as its own CO2captured output), so it must not be auto-read as
+# this sector's t-CO2-per-t-product conversion factor.
+sector_emission_factor["FertilizersCombustion"] = 1.0
+sector_emission_factor["FertilizersSMR"] = 1.0
 
 #----- Flue-gas CO2 concentration per sector -----#
 # Used to size the generic MEA CCS size range (assign_mea_technology). Also computed
@@ -168,6 +187,9 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         "Waste": tech_for_waste,
         "Refining": tech_for_refining,
         "Other": tech_for_other,
+        "Lime": tech_for_lime,
+        "FertilizersCombustion": tech_for_fertilizers_combustion,
+        "FertilizersSMR": tech_for_fertilizers_smr,
     }
 
     if tech_as_existing:
@@ -200,6 +222,14 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
 
     network_location['node_type'] = network_location['node_type'].str.strip()
     network_emission_flux['node_type'] = network_emission_flux['node_type'].str.strip()
+    # Some node_metrics_paper.xlsx entries carry stray leading/trailing whitespace in
+    # node_name (e.g. "Unicalce Val Brembilla Lime " with a trailing space) -- strip it
+    # here too, otherwise it silently breaks the "{node_type} - {node_name}" lookup key
+    # used against emission_profile_emitters.xlsx (create_syntetic_profiles.py strips
+    # node_name before building that same key, so an unstripped name here would never
+    # match).
+    network_location['node_name'] = network_location['node_name'].str.strip()
+    network_emission_flux['node_name'] = network_emission_flux['node_name'].str.strip()
 
     node_names = network_location['node_name'].unique().tolist()
 

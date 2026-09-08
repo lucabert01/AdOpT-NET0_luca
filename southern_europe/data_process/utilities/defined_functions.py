@@ -261,7 +261,14 @@ def assign_carriers_to_nodes(input_data_path, network_location, network_emission
         'Cement': 'clinker',
         'Waste': 'waste',
         'Refining': 'refined_product',
-        'Other': 'industrial_product'
+        'Other': 'industrial_product',
+        'Lime': 'lime',
+        'FertilizersCombustion': 'fertilizerCombustion',
+        # FertilizerSMREmitter.json's own output_carrier -- distinct from the
+        # generic per-sector "product" carriers above, since this technology has no
+        # main_output_carrier concept (it's a CONV3 input-sized tech that outputs
+        # both hydrogenForFertilizers and CO2captured directly).
+        'FertilizersSMR': 'hydrogenForFertilizers',
     }
 
     # Collect all unique carriers needed
@@ -340,7 +347,8 @@ def assign_carriers_to_nodes(input_data_path, network_location, network_emission
 
         if 'Transport' in node_types:
             transport_nodes.append(node_name)
-        elif any(t in ['Cement', 'Waste', 'Refining', 'Other'] for t in node_types):
+        elif any(t in ['Cement', 'Waste', 'Refining', 'Other', 'Lime',
+                       'FertilizersCombustion', 'FertilizersSMR'] for t in node_types):
             emitter_nodes.append(node_name)
         elif 'Storage' in node_types:
             storage_nodes.append(node_name)
@@ -401,8 +409,11 @@ def assign_mea_technology(network_emission_flux, path_data_case_study, co2_conce
     for idx, row in network_emission_flux.iterrows():
         node_type = row['node_type']
 
-        # Skip non-emitter nodes (Storage and Transport)
-        if node_type in ["Storage", "Transport"]:
+        # Skip non-emitter nodes (Storage and Transport), and FertilizersSMR --
+        # FertilizerSMREmitter.json directly produces CO2captured as an output (no
+        # Performance.ccs block at all), so it has no generic bolt-on MEA retrofit to
+        # size in the first place.
+        if node_type in ["Storage", "Transport", "FertilizersSMR"]:
             continue
 
         # Get the node's CO2 emission rate (t CO2/h) -- NOT emitter_capacity, see docstring
@@ -508,7 +519,10 @@ def copy_technology_data_custom(input_data_path, path_files_technologies, networ
                     node_emission_rows = network_emission_flux[network_emission_flux['node_name'] == node]
 
                     for _, emission_row in node_emission_rows.iterrows():
-                        if emission_row['node_type'] in ['Waste', 'Cement', 'Refining', 'Other']:
+                        # FertilizersSMR excluded on purpose -- see assign_mea_technology's
+                        # skip for that sector (FertilizerSMREmitter has no CCS block).
+                        if emission_row['node_type'] in ['Waste', 'Cement', 'Refining', 'Other',
+                                                          'Lime', 'FertilizersCombustion']:
                             mea_tech = emission_row.get('mea_technology')
                             if pd.notna(mea_tech):
                                 mea_tech_name = Path(mea_tech).stem  # e.g., 'MEA_medium' or 'MEA_large'
@@ -1766,6 +1780,9 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
         'Cement':   ('Emitter/CementEmitter.json',        'clinker'),
         'Refining': ('Emitter/RefineryEmitter.json',      'refined_product'),
         'Other':    ('Emitter/UnspecifiedEmitter.json',   'industrial_product'),
+        'Lime':                  ('Emitter/LimeEmitter.json',               'lime'),
+        'FertilizersCombustion': ('Emitter/FertilizerCombustionEmitter.json', 'fertilizerCombustion'),
+        'FertilizersSMR':        ('Emitter/FertilizerSMREmitter.json',       'hydrogenForFertilizers'),
     }
 
     # --- Load hourly profiles (shared helper) ---

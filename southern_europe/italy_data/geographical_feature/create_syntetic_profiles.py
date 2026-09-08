@@ -10,6 +10,9 @@ Sectors handled:
                fixed 3-week full shutdown + a half-capacity stop of 1-5 weeks (not winter)
   - Refining → flat, single ~5.2-week stop to bring annual capacity factor to ~90%
   - Other    → same as Refining
+  - Lime                 → same shape as Cement (same kiln-type operating pattern)
+  - FertilizersCombustion → same shape as Refining
+  - FertilizersSMR        → same shape as Refining
   - Transport / Storage → skipped
 
 All profiles are scaled so that sum(hourly_profile) == annual_flux (tonnes/year).
@@ -29,7 +32,7 @@ import matplotlib.pyplot as plt
 # Paths
 # ---------------------------------------------------------------------------
 BASE          = Path(r"C:\Users\0954659\PycharmProjects\AdOpT-NET0_luca\southern_europe\italy_data\geographical_feature")
-NODES_FILE    = BASE / "node_metrics.xlsx"
+NODES_FILE    = BASE / "node_metrics_paper.xlsx"
 EMITTERS_FILE = BASE / "emission_profile_emitters.xlsx"
 
 HOURS = 8760
@@ -173,6 +176,11 @@ NORM_GENERATORS = {
     "Waste":    _norm_waste,
     "Refining": _norm_refining,
     "Other":    _norm_refining,
+    # Reuse the Cement/Refining shapes for the new sectors (see module docstring):
+    # Lime kilns run like cement kilns; the Fertilizers sectors run like refineries.
+    "Lime":                   _norm_cement,
+    "FertilizersCombustion":  _norm_refining,
+    "FertilizersSMR":         _norm_refining,
 }
 
 # ---------------------------------------------------------------------------
@@ -198,9 +206,10 @@ def plot_profiles(real_df: pd.DataFrame, synth_df: pd.DataFrame) -> None:
     """Generates three figures (Cement, Waste, Refining/Other), with a separate subplot for each emitter."""
 
     groups = {
-        "Cement": ["Cement"],
+        "Cement & Lime": ["Cement", "Lime"],
         "Waste": ["Waste"],
-        "Refining & Others": ["Refining", "Other"]
+        "Refining & Others": ["Refining", "Other"],
+        "Fertilizers": ["FertilizersCombustion", "FertilizersSMR"],
     }
 
     hours_axis = np.arange(HOURS)
@@ -332,7 +341,7 @@ def main() -> None:
 
     coverage = pd.DataFrame(records, columns=["node_name", "sector", "annual_flux_t", "source"])
     print(coverage.to_string(index=False))
-    print(f"\nAll {len(coverage)} relevant nodes covered ✓")
+    print(f"\nAll {len(coverage)} relevant nodes covered")
 
 
 if __name__ == "__main__":
