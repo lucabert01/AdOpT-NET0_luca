@@ -199,7 +199,10 @@ GIS_NODES = path_files_gis / "all_nodes_italy.shp"
 ITALY_SHP = path_files_gis / "italy_WGS1984.shp"
 ROUTES = {
     "CO2_Pipeline": path_files_gis / "routes_distances_pipeline.shp",
-    "CO2Truck": path_files_gis / "truck_italy_150.shp",
+    # Real road-network paths for all 30 directed arcs in node_metrics_paper.xlsx's
+    # 'truck' sheet (see italy_data/geographical_feature/update_truck_arcs_from_routes_gpkg.py)
+    # - supersedes the older, partial truck_italy_150.shp.
+    "CO2Truck": path_files_gis / "truck_routes.gpkg",
     "CO2Railway": path_files_gis / "routes_distances_railway.shp",
 }
 OUT_DIR = Path(__file__).resolve().parent
@@ -722,6 +725,14 @@ def attach_route_geometries(built_arcs: pd.DataFrame, nodes_gdf: gpd.GeoDataFram
     route_lookup = {}
     for ntype, route_path in ROUTES.items():
         route_gdf = gpd.read_file(route_path).to_crs(nodes_gdf.crs)
+        # truck_routes.gpkg carries from_id/to_id columns instead of a
+        # pre-built "from,to" Node string (which the pipeline/railway route
+        # shapefiles already have) - build it on the fly so the lookup below
+        # works the same way for every mode.
+        if "Node" not in route_gdf.columns and {"from_id", "to_id"}.issubset(route_gdf.columns):
+            route_gdf["Node"] = (
+                route_gdf["from_id"].astype(int).astype(str) + "," + route_gdf["to_id"].astype(int).astype(str)
+            )
         pair_to_geom = {}
         for _, row in route_gdf.iterrows():
             parts = str(row["Node"]).strip().split(",")

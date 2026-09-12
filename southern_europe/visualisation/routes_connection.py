@@ -35,7 +35,11 @@ italy = gpd.read_file(path_files_gis / "italy_WGS1984.shp")
 nodes_selected = gpd.read_file(path_files_gis / "all_nodes_italy.shp")
 routes_pipeline = gpd.read_file(path_files_gis / "routes_distances_pipeline.shp")
 routes_railway = gpd.read_file(path_files_gis / "routes_distances_railway.shp")  # TODO: point to actual railway shapefile
-routes_truck = gpd.read_file(path_files_gis / "truck_italy_150.shp")
+routes_truck_gpkg_path = path_files_gis / "truck_routes.gpkg"
+routes_truck = gpd.read_file(routes_truck_gpkg_path)
+routes_truck['Node'] = (
+    routes_truck['from_id'].astype(int).astype(str) + ',' + routes_truck['to_id'].astype(int).astype(str)
+)
 
 # Load network matrices for transport directions
 network_pipeline = pd.read_excel(path_files_node_flux / "node_metrics_paper.xlsx", index_col=0, sheet_name='pipeline')
@@ -48,15 +52,13 @@ routes_pipeline = routes_pipeline.to_crs(target_crs)
 routes_railway = routes_railway.to_crs(target_crs)
 routes_truck = routes_truck.to_crs(target_crs)
 
-# --- Merge in dashboard-computed truck routes (real OSM road-network paths,
-# not straight lines) on top of the colleague's ArcGIS-computed ones ---
+# --- Merge in any dashboard-computed truck routes on top of truck_routes.gpkg ---
 # italy_data/geographical_feature/network_connections_dashboard.py's "Compute
-# all via OSM routing" saves each arc's actual path here (same Length/Node/
-# geometry shape as truck_italy_150.shp) via
-# data_process/updated_network/truck_routing.py::save_route_geometry - this
-# covers both brand-new arcs the colleague never routed, and any of the
-# original 21 that got re-routed (e.g. a relocated node) since a dashboard
-# route always supersedes the older ArcGIS one for the same directed pair.
+# all via OSM routing" saves each arc's actual path here (same Node/geometry
+# shape, see data_process/updated_network/truck_routing.py::save_route_geometry)
+# - covers any arc added/re-routed via the dashboard AFTER truck_routes.gpkg
+# was generated, since a dashboard route always supersedes the gpkg one for
+# the same directed pair.
 truck_routes_dashboard_path = path_files_gis / "truck_italy_dashboard.shp"
 if truck_routes_dashboard_path.exists():
     routes_truck_dashboard = gpd.read_file(truck_routes_dashboard_path).to_crs(target_crs)
@@ -66,12 +68,11 @@ if truck_routes_dashboard_path.exists():
         ignore_index=True,
     )
     print(f"Merged in {len(routes_truck_dashboard)} dashboard-computed truck route(s) "
-          f"({int(superseded.sum())} superseded an original ArcGIS route for the same arc) "
+          f"({int(superseded.sum())} superseded a {routes_truck_gpkg_path.name} route for the same arc) "
           f"from {truck_routes_dashboard_path.name}")
 else:
-    print(f"No dashboard-computed truck routes yet ({truck_routes_dashboard_path.name} not found) - "
-          f"only the original {len(routes_truck)} ArcGIS routes will be plotted. Add/re-route arcs "
-          f"via network_connections_dashboard.py's Truck tab to populate this.")
+    print(f"No newer dashboard-computed truck routes ({truck_routes_dashboard_path.name} not found) - "
+          f"plotting all {len(routes_truck)} routes from {routes_truck_gpkg_path.name}.")
 
 print("Data loaded successfully!")
 print(f"Italy boundary: {italy.shape[0]} features")
