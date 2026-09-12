@@ -58,7 +58,7 @@ pipeline_size_class_max_capacity_t_h = {
 }
 carbon_tax = 200  # euro per tonne CO2
 enable_carbon_pricing = True
-nr_DD_days = 15
+nr_DD_days = 12
 node_metrics_suffix = "paper"  # base case with truck connections at the cutoff of 150kt/y
 node_metrics_file = f"node_metrics_{node_metrics_suffix}.xlsx"
 objective = "emissions_minC"
