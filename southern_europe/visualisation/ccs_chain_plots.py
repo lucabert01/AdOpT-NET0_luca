@@ -135,6 +135,20 @@ FAMILY_MARKER_SCALE = {
     "mea_retrofit": 1.0, "oxyfuel_hybrid": 1.35, "calcium_looping": 1.2, "direct_capture": 1.3,
 }
 
+# In the technology-selection scenarios, main_italy.py wires up EVERY capture
+# family a sector could use as a candidate technology at each node (e.g. a
+# waste-to-energy node gets both the MEA-retrofit path and a WasteCaL_CCS
+# candidate) -- so load_ccs_status's HDF5 scan finds a design/operation group
+# for a technology the optimizer priced out entirely (size > 0 as a leftover
+# free variable, but essentially zero throughput -- see load_ccs_status
+# docstring on why "size" alone can't tell real from candidate). Observed
+# gap in this case study's results: every genuinely-operating technology
+# clears ~47,000 t/yr of total_emissions; every never-really-used candidate
+# sits below ~10 t/yr (see _run_ccs_chain_technology_selection.py's node
+# dump) -- three orders of magnitude of headroom, so 1,000 t/yr is a safe,
+# generously-clear cutoff rather than a tight one.
+EMITTER_MATERIALITY_THRESHOLD_T = 1000.0
+
 # Each capture technology family reports its own electricity/heat draw under a
 # different operation dataset name -- canonical home for this mapping (shared
 # with ccs_chain_emitter_cost_ranking.py, which imports it from here rather
@@ -195,6 +209,7 @@ path_cost_factor_table = Path(
     "../../adopt_net0/database/data/networks/enhanced_co2_transport_cost_model/cost_factor_table.xlsx"
 )
 
+NODE_METRICS_PAPER = path_files_grids / "node_metrics_paper.xlsx"
 GIS_NODES = path_files_gis / "all_nodes_italy.shp"
 ITALY_SHP = path_files_gis / "italy_WGS1984.shp"
 ROUTES = {
@@ -373,16 +388,217 @@ def _capture_legend_handles(ccs_df: pd.DataFrame) -> list:
     return handles
 
 
+def _node_marker_positions(point, n: int, radius: float = 0.055):
+    """Coordinates for `n` emitter markers to be drawn at a shared node
+    location. n<=1 sits exactly on the node; n>1 spreads them evenly on a
+    small ring around it (radius in degrees -- every map in this file uses
+    ax.set_aspect("equal") on raw lon/lat, so the same radius reads as the
+    same on-screen distance in both directions)."""
+    if n <= 1:
+        return [(point.x, point.y)]
+    angles = np.linspace(0, 2 * np.pi, n, endpoint=False) + np.pi / 2
+    return [(point.x + radius * np.cos(a), point.y + radius * np.sin(a)) for a in angles]
+
+
+def _node_rows_or_default(ccs_df: pd.DataFrame, node_name: str) -> pd.DataFrame:
+    """ccs_df rows for one node, or a synthetic single 'no capture tech at
+    all' row -- the fallback the old ccs_map.get(name, False) / family_map.get
+    dicts used to give any node with zero capture-classified technologies."""
+    rows = ccs_df[ccs_df["node"] == node_name]
+    if rows.empty:
+        rows = pd.DataFrame([{"family": None, "ccs_installed": False, "total_emissions": 0.0}])
+    return rows
+
+
+_NODE_SECTOR_CACHE: dict | None = None
+
+
+def _load_node_sectors() -> dict:
+    """
+    Per-node set of genuinely distinct real-world emitter sectors, from
+    node_metrics_paper.xlsx's 'nodes' sheet -- the authoritative source for
+    how many physically separate plants share one optimization node.
+
+    Almost every node lists exactly one sector here even when ccs_df lists
+    more than one CANDIDATE technology for it -- e.g. every cement node's
+    CementEmitter_existing + CementHybridCCS pair are two alternative
+    capture routes the optimizer can pick between for the SAME plant, not
+    two plants. Only a couple of nodes genuinely aggregate more than one
+    co-located plant and appear as multiple rows here, one per sector:
+    Ferrara (Waste + FertilizersCombustion + FertilizersSMR) and Piacenza
+    (Cement + Waste). See _real_emitter_rows, which uses this to decide how
+    many markers a node actually needs.
+    """
+    global _NODE_SECTOR_CACHE
+    if _NODE_SECTOR_CACHE is None:
+        nodes_sheet = pd.read_excel(NODE_METRICS_PAPER, sheet_name="nodes")
+        non_emitter_types = {"Transport", "Storage", "Other"}
+        _NODE_SECTOR_CACHE = {
+            node_name: set(group["node_type"]) - non_emitter_types
+            for node_name, group in nodes_sheet.groupby("node_name")
+        }
+        _NODE_SECTOR_CACHE = {k: v for k, v in _NODE_SECTOR_CACHE.items() if v}
+    return _NODE_SECTOR_CACHE
+
+
+def _tech_sector(tech_name: str) -> str:
+    """Maps a technology name to the sector label node_metrics_paper.xlsx
+    uses in its 'nodes' sheet, so alternative capture-technology candidates
+    for the same physical plant (e.g. CementEmitter_existing and
+    CementHybridCCS -- both just different capture routes for one cement
+    plant) tag as the same sector and collapse to one emitter -- see
+    _real_emitter_rows. Order matters: the Fertilizer checks must precede
+    any generic check, since both fertilizer technology names could
+    otherwise collide with a broader substring."""
+    if "FertilizerCombustion" in tech_name:
+        return "FertilizersCombustion"
+    if "FertilizerSMR" in tech_name:
+        return "FertilizersSMR"
+    if "Cement" in tech_name:
+        return "Cement"
+    if "Waste" in tech_name:
+        return "Waste"
+    if "Lime" in tech_name:
+        return "Lime"
+    if "Refinery" in tech_name:
+        return "Refining"
+    return tech_name
+
+
+def _real_emitter_rows(ccs_df: pd.DataFrame, node_name: str) -> pd.DataFrame:
+    """
+    Collapses ccs_df's per-technology rows for one node down to one row per
+    genuinely distinct real-world emitter, so the map draws one marker per
+    physical plant rather than one per candidate technology.
+
+    Uses node_metrics_paper.xlsx as ground truth (_load_node_sectors): a
+    node it lists only one sector for (the common case) collapses
+    unconditionally to a single marker, keeping whichever technology has the
+    larger total_emissions as the displayed one (the dominant/real operating
+    choice -- e.g. FANNA cement plant genuinely runs both
+    CementEmitter_existing and CementHybridCCS at once, splitting production
+    across the old and new capacity, but node_metrics_paper says this is one
+    cement plant, so it draws as one marker for the dominant technology).
+    installed/captured_annual/total_emissions on the returned row are summed
+    across whatever collapsed into it, so KPI text built from these rows
+    still reflects the node's true total. Only a node node_metrics_paper
+    lists more than one sector for (Ferrara, Piacenza) keeps multiple rows,
+    grouped by sector via _tech_sector -- see _draw_node_emitters for how
+    those are then rendered as a linked cluster.
+    """
+    rows = _node_rows_or_default(ccs_df, node_name)
+    if len(rows) <= 1:
+        return rows
+
+    def _collapse(group: pd.DataFrame) -> pd.DataFrame:
+        winner = group.loc[[group["total_emissions"].idxmax()]].copy()
+        winner["ccs_installed"] = bool(group["ccs_installed"].any())
+        winner["captured_annual"] = group["captured_annual"].sum()
+        winner["total_emissions"] = group["total_emissions"].sum()
+        return winner
+
+    sectors = _load_node_sectors().get(node_name)
+    if not sectors or len(sectors) <= 1:
+        return _collapse(rows).reset_index(drop=True)
+
+    tagged = rows.copy()
+    tagged["_sector"] = tagged["tech"].map(_tech_sector)
+    return pd.concat(
+        [_collapse(group) for _, group in tagged.groupby("_sector")], ignore_index=True
+    )
+
+
+def real_emitters_df(ccs_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    ccs_df collapsed to one row per genuinely distinct real-world emitter
+    (see _real_emitter_rows) -- the correct basis for any "how many
+    emitters" count: KPI text, the capture-family legend, and the
+    adoption-by-technology dashboard panel. Raw ccs_df has one row per
+    CANDIDATE capture technology and would otherwise double-count every
+    node offering more than one route to the same physical plant (e.g.
+    every cement node's MEA-retrofit + CementHybridCCS pair). Per-technology
+    cost accounting (compute_cost_breakdown) is unaffected by this and
+    intentionally keeps counting each technology separately -- both routes'
+    capex/opex are real money spent even when only one is the "dominant"
+    one shown on the map.
+    """
+    if ccs_df.empty:
+        return ccs_df
+    return pd.concat(
+        [_real_emitter_rows(ccs_df, node) for node in ccs_df["node"].unique()],
+        ignore_index=True,
+    )
+
+
+def _draw_node_emitters(ax, point, node_rows: pd.DataFrame, style_fn, area_scale=True,
+                         crowd_scale=True, link_zorder=15):
+    """
+    Draws one marker per capture-classified technology present at a shared
+    node location (node_rows = ccs_df filtered to this node -- see
+    load_ccs_status). A handful of nodes host more than one distinct emitter
+    at the same physical site -- e.g. Ferrara (WasteToEnergyEmitter +
+    FertilizerCombustionEmitter + FertilizerSMREmitter) or Piacenza
+    (CementEmitter + WasteToEnergyEmitter), see compute_cost_breakdown's
+    docstring -- which a plain node -> value dict (the old ccs_map/family_map
+    built with dict(zip(...))) silently collapses to whichever technology
+    HDF5 happened to be iterated last, dropping the rest from every map.
+
+    Instead, co-located emitters are spread evenly on a small ring around
+    the true node coordinate and linked back to it with a thin spoke + a
+    small center dot, so the cluster reads as "one place, several plants"
+    rather than either losing information or looking like several unrelated
+    nearby nodes.
+
+    style_fn(row) -> dict of kwargs forwarded to _scatter_emitter (s,
+    zorder, and optionally edgecolor/linewidth/alpha), so each caller keeps
+    its own per-marker logic (e.g. trunk highlight's on_trunk styling).
+    crowd_scale shrinks markers slightly at multi-emitter nodes so the ring
+    doesn't overwhelm neighboring nodes; set False where `s` is itself a
+    proportional data encoding (plot_map_sized_by_capacity) that must not be
+    rescaled per node.
+    """
+    n = len(node_rows)
+    positions = _node_marker_positions(point, n)
+    scale = 0.82 if (n > 1 and crowd_scale) else 1.0
+    if n > 1:
+        for x, y in positions:
+            ax.plot([point.x, x], [point.y, y], color=STATUS_MUTED,
+                    linewidth=0.6, alpha=0.55, zorder=link_zorder)
+        ax.scatter(point.x, point.y, marker="o", s=9, color=INK_SECONDARY,
+                   edgecolor="white", linewidth=0.4, zorder=link_zorder)
+    for (x, y), (_, row) in zip(positions, node_rows.iterrows()):
+        kwargs = style_fn(row)
+        kwargs["s"] = kwargs.get("s", 90) * scale
+        _scatter_emitter(ax, x, y, row.get("family"), bool(row.get("ccs_installed", False)),
+                          area_scale=area_scale, **kwargs)
+
+
 # ============================================================
 # Data loading
 # ============================================================
 def load_built_arcs(h5_path: Path) -> pd.DataFrame:
+    """
+    One row per built network arc (pipeline/truck/railway segment).
+
+    "total_flow" is the true annual flow (t/yr), NOT design/networks/.../
+    total_flow -- that field is the raw unweighted sum over the ~240-360
+    clustered representative hours (same pitfall as design/nodes/.../
+    emissions_pos, see load_ccs_status's docstring), off by roughly
+    8760/n_representative_hours (~20-35x in this case study) from the real
+    annual figure, while "size" (design capacity, t/h) is unaffected by
+    clustering. Comparing the two without expanding total_flow via
+    k_means_specs/sequence first makes a fully-utilized arc look like it is
+    carrying a tiny fraction of a node's real output.
+    """
     rows = []
     with h5py.File(h5_path, "r") as f:
+        seq = f["k_means_specs"]["period1"]["sequence"][()]
         net = f["design"]["networks"]["period1"]
+        op_net = f["operation"]["networks"]["period1"]
         for ntype in net.keys():
             for arc_name in net[ntype].keys():
                 g = net[ntype][arc_name]
+                flow_clustered = op_net[ntype][arc_name]["flow"][()]
                 rows.append(
                     {
                         "network": ntype,
@@ -390,12 +606,42 @@ def load_built_arcs(h5_path: Path) -> pd.DataFrame:
                         "from": g["fromNode"][()].decode(),
                         "to": g["toNode"][()].decode(),
                         "size": float(g["size"][()]),
-                        "total_flow": float(g["total_flow"][()]),
+                        "total_flow": float(flow_clustered[seq - 1].sum()),
                         "capex": float(g["capex"][()]),
                     }
                 )
     df = pd.DataFrame(rows)
-    return df[df["size"] > 0].reset_index(drop=True)
+    df = df[df["size"] > 1].reset_index(drop=True)
+    return _merge_parallel_pipeline_segments(df)
+
+
+def _merge_parallel_pipeline_segments(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    main_italy.py builds three separate pipeline network technologies --
+    CO2_Pipeline_{small,medium,large} -- sharing the same physical corridors
+    (see NETWORK_TYPE_TO_MODE above), and the optimizer routinely lays more
+    than one of them in parallel on the same corridor+direction to reach a
+    capacity no single discrete size class covers alone -- seen on every
+    scenario's storage-bound trunk (e.g. Ravenna -> Eni S.p.A Casalborsetti
+    combines the large + small classes). Drawing each such technology as its
+    own overlapping line with its own arrowhead reads as accidental
+    duplication rather than what it physically is: one wider corridor.
+    Merges same-mode segments sharing a corridor+direction into a single row
+    (summed size/flow/capex) so every consumer of load_built_arcs -- the
+    maps and the transport-mode-split panel alike -- sees one row per real
+    built corridor. Different modes on the same corridor (e.g. a truck route
+    riding alongside a pipeline) are a separate phenomenon and are not
+    merged here -- each is its own physically distinct built asset.
+    """
+    if df.empty:
+        return df
+    merged = df.groupby(["mode", "from", "to"], as_index=False).agg(
+        network=("network", lambda s: "+".join(sorted(set(s)))),
+        size=("size", "sum"),
+        total_flow=("total_flow", "sum"),
+        capex=("capex", "sum"),
+    )
+    return merged[["network", "mode", "from", "to", "size", "total_flow", "capex"]]
 
 
 def load_ccs_status(h5_path: Path) -> pd.DataFrame:
@@ -425,6 +671,12 @@ def load_ccs_status(h5_path: Path) -> pd.DataFrame:
     per-timestep series) and expanded back to the full 8760-hour year via
     k_means_specs/sequence before summing -- same treatment for both, or the
     two terms end up on inconsistent scales.
+
+    Rows with total_emissions below EMITTER_MATERIALITY_THRESHOLD_T are
+    dropped -- in the technology-selection scenarios, a sector's non-chosen
+    candidate capture technology still has its own design/operation group
+    (just essentially zero throughput), and would otherwise show up
+    everywhere as a phantom "emitter" that never actually ran.
     """
     rows = []
     with h5py.File(h5_path, "r") as f:
@@ -449,6 +701,9 @@ def load_ccs_status(h5_path: Path) -> pd.DataFrame:
                 emitted_annual = float(emitted_clustered[seq - 1].sum())
                 captured_clustered = op[node_name][tech][captured_key][()]
                 captured_annual = float(captured_clustered[seq - 1].sum())
+
+                if captured_annual + emitted_annual < EMITTER_MATERIALITY_THRESHOLD_T:
+                    continue
 
                 rows.append(
                     {
@@ -490,7 +745,11 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
     capture is inseparable from production (one technology block, no retrofit
     split available), so their full capex_tot/opex_fixed/opex_variable is the
     capture-chain cost -- the same convention already used below for the
-    storage technology.
+    storage technology. EXCEPTION: WasteCaL_CCS's "size" is the host
+    waste-to-energy plant's own capacity, not the capture add-on ("size_cal"
+    is) -- when size_cal is 0, no calcium-looping capture equipment was
+    actually built, so capex_tot/opex_* there is host-plant cost, not
+    capture-chain cost, and is zeroed out.
 
     Electricity/heat import cost is not in technology opex (technology
     opex_variable is 0 for both the emitter and the MEA CCS component; energy
@@ -600,6 +859,16 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
                         comp_capex = float(g["capex_ccs"][()][0])
                         comp_opex_fixed = float(g["opex_fixed_ccs"][()][0])
                         comp_opex_variable = float(g["opex_variable_ccs"][()][0])
+                    elif family == "calcium_looping" and float(g["size_cal"][()][0]) <= 0:
+                        # WasteCaL_CCS's "size" is the host waste-to-energy
+                        # plant's own throughput capacity, separate from
+                        # "size_cal" (the calcium-looping capture add-on
+                        # itself) -- unlike CementHybridCCS, whose oxyfuel
+                        # front-end captures unconditionally, no capture
+                        # equipment exists here at all when size_cal is 0, so
+                        # capex_tot/opex_* (sized off the host plant, not the
+                        # capture add-on) is not a capture-chain cost.
+                        comp_capex = comp_opex_fixed = comp_opex_variable = 0.0
                     else:
                         comp_capex = float(g["capex_tot"][()][0])
                         comp_opex_fixed = float(g["opex_fixed"][()][0])
@@ -768,8 +1037,7 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
     italy = gpd.read_file(ITALY_SHP)
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
     name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
-    ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
-    family_map = dict(zip(ccs_df["node"], ccs_df["family"]))
+    real_df = real_emitters_df(ccs_df)
 
     fig, ax = plt.subplots(figsize=(12.5, 12))
     fig.patch.set_facecolor(SURFACE)
@@ -817,15 +1085,18 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
             ax.scatter(point.x, point.y, marker="s", s=100, color=TRANSPORT_COLOR,
                        edgecolor="white", linewidth=1.2, zorder=20)
         else:
-            installed = ccs_map.get(name, False)
-            _scatter_emitter(ax, point.x, point.y, family_map.get(name), installed,
-                              s=100 if installed else 90, zorder=22 if installed else 21)
+            node_rows = _real_emitter_rows(ccs_df, name)
+            _draw_node_emitters(
+                ax, point, node_rows,
+                style_fn=lambda row: dict(s=100 if row["ccs_installed"] else 90,
+                                           zorder=22 if row["ccs_installed"] else 21),
+            )
 
     legend_handles = [
         Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
         Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
         Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
-        *_capture_legend_handles(ccs_df),
+        *_capture_legend_handles(real_df),
         Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
                markersize=10, label="Transport hub", linestyle="None"),
         Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
@@ -836,9 +1107,9 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
         ncol=4, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
     )
 
-    n_installed = int(ccs_df["ccs_installed"].sum())
-    n_total = len(ccs_df)
-    total_capture = ccs_df["captured_annual"].sum()
+    n_installed = int(real_df["ccs_installed"].sum())
+    n_total = len(real_df)
+    total_capture = real_df["captured_annual"].sum()
     kpi_text = (
         f"{n_installed}/{n_total} emitters equipped with CCS\n"
         f"{total_capture:,.0f} t/yr captured CO$_2$\n"
@@ -870,12 +1141,10 @@ def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
     italy = gpd.read_file(ITALY_SHP)
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
     name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
-    ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
-    family_map = dict(zip(ccs_df["node"], ccs_df["family"]))
-    size_map = dict(zip(ccs_df["node"], ccs_df["total_emissions"]))
+    real_df = real_emitters_df(ccs_df)
 
     s_min, s_max = size_range
-    max_capacity = ccs_df["total_emissions"].max() if len(ccs_df) else 1
+    max_capacity = real_df["total_emissions"].max() if len(real_df) else 1
     max_capacity = max_capacity if max_capacity > 0 else 1
 
     def marker_area(capacity):
@@ -915,17 +1184,21 @@ def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
             ax.scatter(point.x, point.y, marker="s", s=100, color=TRANSPORT_COLOR,
                        edgecolor="white", linewidth=1.2, zorder=20)
         else:
-            area = marker_area(size_map.get(name, 0))
-            installed = ccs_map.get(name, False)
-            _scatter_emitter(ax, point.x, point.y, family_map.get(name), installed, s=area,
-                              zorder=22 if installed else 21, alpha=0.85 if installed else None,
-                              area_scale=False)
+            node_rows = _real_emitter_rows(ccs_df, name)
+            _draw_node_emitters(
+                ax, point, node_rows, area_scale=False, crowd_scale=False,
+                style_fn=lambda row: dict(
+                    s=marker_area(row["total_emissions"]),
+                    zorder=22 if row["ccs_installed"] else 21,
+                    alpha=0.85 if row["ccs_installed"] else None,
+                ),
+            )
 
     legend_handles = [
         Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
         Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
         Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
-        *_capture_legend_handles(ccs_df),
+        *_capture_legend_handles(real_df),
         Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
                markersize=10, label="Transport hub", linestyle="None"),
         Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
@@ -953,8 +1226,8 @@ def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
         title="Total annual emissions", title_fontsize=11, labelspacing=1.6, borderpad=1.1,
     )
 
-    n_installed = int(ccs_df["ccs_installed"].sum())
-    n_total = len(ccs_df)
+    n_installed = int(real_df["ccs_installed"].sum())
+    n_total = len(real_df)
     kpi_text = (
         f"{n_installed}/{n_total} emitters equipped with CCS\n"
         f"Network capex: €{summary['cost_capex_netws'] / 1e6:,.0f}M"
@@ -983,8 +1256,7 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
     fishnet_clipped = compute_cost_factor_grid(italy)
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
     name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
-    ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
-    family_map = dict(zip(ccs_df["node"], ccs_df["family"]))
+    real_df = real_emitters_df(ccs_df)
 
     fig, ax = plt.subplots(figsize=(12.5, 12))
     fig.patch.set_facecolor(SURFACE)
@@ -1031,15 +1303,18 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
             ax.scatter(point.x, point.y, marker="s", s=100, color=TRANSPORT_COLOR,
                        edgecolor="white", linewidth=1.2, zorder=20)
         else:
-            installed = ccs_map.get(name, False)
-            _scatter_emitter(ax, point.x, point.y, family_map.get(name), installed,
-                              s=100 if installed else 90, zorder=22 if installed else 21)
+            node_rows = _real_emitter_rows(ccs_df, name)
+            _draw_node_emitters(
+                ax, point, node_rows,
+                style_fn=lambda row: dict(s=100 if row["ccs_installed"] else 90,
+                                           zorder=22 if row["ccs_installed"] else 21),
+            )
 
     legend_handles = [
         Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
         Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
         Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
-        *_capture_legend_handles(ccs_df),
+        *_capture_legend_handles(real_df),
         Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
                markersize=10, label="Transport hub", linestyle="None"),
         Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
@@ -1057,9 +1332,9 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
     cbar = fig.colorbar(sm, ax=ax, fraction=0.04, pad=0.02)
     cbar.set_label("Cost Factor Value", fontsize=11)
 
-    n_installed = int(ccs_df["ccs_installed"].sum())
-    n_total = len(ccs_df)
-    total_capture = ccs_df["captured_annual"].sum()
+    n_installed = int(real_df["ccs_installed"].sum())
+    n_total = len(real_df)
+    total_capture = real_df["captured_annual"].sum()
     kpi_text = (
         f"{n_installed}/{n_total} emitters equipped with CCS\n"
         f"{total_capture:,.0f} t/yr captured CO$_2$\n"
@@ -1102,8 +1377,7 @@ def plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary, trunk_path: lis
     italy = gpd.read_file(ITALY_SHP)
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
     name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
-    ccs_map = dict(zip(ccs_df["node"], ccs_df["ccs_installed"]))
-    family_map = dict(zip(ccs_df["node"], ccs_df["family"]))
+    real_df = real_emitters_df(ccs_df)
 
     fig, ax = plt.subplots(figsize=(12.5, 12))
     fig.patch.set_facecolor(SURFACE)
@@ -1157,19 +1431,23 @@ def plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary, trunk_path: lis
                        edgecolor=(TRUNK_COLOR if on_trunk else "white"), linewidth=(2.5 if on_trunk else 1.2),
                        alpha=(1.0 if on_trunk else 0.5), zorder=20)
         else:
-            installed = ccs_map.get(name, False)
             edge = TRUNK_COLOR if on_trunk else None
-            _scatter_emitter(ax, point.x, point.y, family_map.get(name), installed,
-                              s=130 if on_trunk else 80, zorder=22 if on_trunk else 18,
-                              edgecolor=edge, linewidth=2.8 if on_trunk else None,
-                              alpha=1.0 if on_trunk else 0.55)
+            node_rows = _real_emitter_rows(ccs_df, name)
+            _draw_node_emitters(
+                ax, point, node_rows,
+                style_fn=lambda row: dict(
+                    s=130 if on_trunk else 80, zorder=22 if on_trunk else 18,
+                    edgecolor=edge, linewidth=2.8 if on_trunk else None,
+                    alpha=1.0 if on_trunk else 0.55,
+                ),
+            )
 
     legend_handles = [
         Line2D([0], [0], color=TRUNK_COLOR, lw=4.5, label="Trunk line"),
         Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=2, label="Pipeline"),
         Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=2, label="Truck"),
         Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=2, label="Railway"),
-        *_capture_legend_handles(ccs_df),
+        *_capture_legend_handles(real_df),
         Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
                markersize=10, label="Transport hub", linestyle="None"),
         Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
@@ -1412,12 +1690,17 @@ def plot_summary_dashboard(built_arcs: pd.DataFrame, ccs_df: pd.DataFrame, cost_
     fig, axes = plt.subplots(1, 3, figsize=(16.5, 4.8))
     fig.patch.set_facecolor(SURFACE)
 
-    # Panel A: CCS adoption by capture technology
+    # Panel A: CCS adoption by capture technology -- counted per genuine
+    # real-world emitter (real_emitters_df), not per candidate technology
+    # row, so a node offering two alternative routes to the same physical
+    # plant (e.g. every cement node's MEA-retrofit + CementHybridCCS pair)
+    # is counted once, under whichever route is actually dominant there.
+    real_df = real_emitters_df(ccs_df)
     ax = axes[0]
     ax.set_facecolor(SURFACE)
-    installed_df = ccs_df[ccs_df["ccs_installed"]]
+    installed_df = real_df[real_df["ccs_installed"]]
     family_counts = installed_df["family"].value_counts()
-    n_not = int((~ccs_df["ccs_installed"]).sum())
+    n_not = int((~real_df["ccs_installed"]).sum())
     present_families = [f for f in FAMILY_ORDER if family_counts.get(f, 0) > 0]
     labels = [FAMILY_LABELS[f].replace(" ", "\n", 1) for f in present_families]
     counts = [int(family_counts[f]) for f in present_families]
