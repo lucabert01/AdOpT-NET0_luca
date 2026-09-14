@@ -54,7 +54,7 @@ max_transport_capacity = 2000  # default ceiling for truck/railway/generic netwo
 pipeline_size_class_max_capacity_t_h = {
     "CO2_Pipeline_small": 104.4,
     "CO2_Pipeline_medium": 478.8,
-    "CO2_Pipeline_large": 1692.0,
+    "CO2_Pipeline_large": 2000.0,
 }
 carbon_tax = 200  # euro per tonne CO2
 enable_carbon_pricing = True
