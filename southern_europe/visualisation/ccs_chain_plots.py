@@ -406,7 +406,8 @@ def _node_rows_or_default(ccs_df: pd.DataFrame, node_name: str) -> pd.DataFrame:
     dicts used to give any node with zero capture-classified technologies."""
     rows = ccs_df[ccs_df["node"] == node_name]
     if rows.empty:
-        rows = pd.DataFrame([{"family": None, "ccs_installed": False, "total_emissions": 0.0}])
+        rows = pd.DataFrame([{"family": None, "ccs_installed": False, "total_emissions": 0.0,
+                              "capture_capacity_t_h": 0.0}])
     return rows
 
 
@@ -474,14 +475,23 @@ def _real_emitter_rows(ccs_df: pd.DataFrame, node_name: str) -> pd.DataFrame:
     Uses node_metrics_paper.xlsx as ground truth (_load_node_sectors): a
     node it lists only one sector for (the common case) collapses
     unconditionally to a single marker, keeping whichever technology has the
-    larger total_emissions as the displayed one (the dominant/real operating
-    choice -- e.g. FANNA cement plant genuinely runs both
-    CementEmitter_existing and CementHybridCCS at once, splitting production
-    across the old and new capacity, but node_metrics_paper says this is one
-    cement plant, so it draws as one marker for the dominant technology).
-    installed/captured_annual/total_emissions on the returned row are summed
-    across whatever collapsed into it, so KPI text built from these rows
-    still reflects the node's true total. Only a node node_metrics_paper
+    larger total_emissions as the DISPLAYED one (shape/family/tech label),
+    while installed/captured_annual/total_emissions on the returned row are
+    SUMMED across every candidate that collapsed into it.
+
+    IMPORTANT: do not change this to keep only the dominant candidate's own
+    numbers -- that was tried (on the theory that a cement node's non-chosen
+    CementHybridCCS candidate running with non-negligible captured_annual is
+    just a main_italy.py formulation bug, piecewise capex nonzero at size=0,
+    and should be zeroed out) and it silently undercounted total system
+    capture: summing EVERY technology row's captured_annual across the whole
+    scenario reconciles exactly against the model's own summary/emissions_pos
+    (total_emissions_sum - captured_sum == emissions_pos, to rounding), while
+    keeping only the dominant row per node does not -- it was found to
+    undercount by ~2.4 Mt/yr on the 2026-09-14 technology_selection rerun.
+    So regardless of whether the dual-technology split is itself a
+    modeling bug, the tonnes each candidate reports captured are real in the
+    solved instance and must be counted. Only a node node_metrics_paper
     lists more than one sector for (Ferrara, Piacenza) keeps multiple rows,
     grouped by sector via _tech_sector -- see _draw_node_emitters for how
     those are then rendered as a linked cluster.
@@ -495,6 +505,7 @@ def _real_emitter_rows(ccs_df: pd.DataFrame, node_name: str) -> pd.DataFrame:
         winner["ccs_installed"] = bool(group["ccs_installed"].any())
         winner["captured_annual"] = group["captured_annual"].sum()
         winner["total_emissions"] = group["total_emissions"].sum()
+        winner["capture_capacity_t_h"] = group["capture_capacity_t_h"].sum()
         return winner
 
     sectors = _load_node_sectors().get(node_name)
@@ -663,6 +674,26 @@ def load_ccs_status(h5_path: Path) -> pd.DataFrame:
     design "size" field (a free technology-capacity decision variable that,
     for "existing=0" generic techs, is NOT tied to real historical output).
 
+    "capture_capacity_t_h" -- NOT the design "size" field -- is the right
+    number to compare against a downstream pipeline's built size (t/h) or to
+    call this technology's "CO2 capture capacity." "size" means a different
+    thing per family and is frequently NOT the capture rate: for
+    mea_retrofit, "size" is the HOST emitter's own production capacity
+    (t/h of throughput, e.g. waste incinerated) while "size_ccs" is the
+    retrofit's own capture capacity (e.g. one real run: host size 98.45 t/h,
+    size_ccs/built pipeline both 72.53 t/h -- the retrofit only ever
+    captures a fraction of the host's throughput, by design, so the smaller
+    pipeline is correct, not a sign of stranded capacity); for
+    calcium_looping (WasteCaL_CCS), "size" is likewise the host plant's
+    capacity while "size_cal" is the capture reactor's own -- see
+    compute_cost_breakdown's docstring for the same distinction on the cost
+    side. capture_capacity_t_h sidesteps needing a per-family lookup for
+    this by reading it directly off what actually matters: the technology's
+    own peak captured-CO2 operating rate (max of the clustered captured
+    series -- taking the max of the clustered representative hours instead
+    of the full 8760h expansion is equivalent here since expansion only
+    repeats existing hourly values, never creates a new peak).
+
     IMPORTANT: design/nodes/.../emissions_pos is NOT an annual total -- it's
     the raw unweighted sum over the 360 clustered representative hours (confirmed
     by comparing it directly to the node's carrier "demand", which sums to the
@@ -701,6 +732,7 @@ def load_ccs_status(h5_path: Path) -> pd.DataFrame:
                 emitted_annual = float(emitted_clustered[seq - 1].sum())
                 captured_clustered = op[node_name][tech][captured_key][()]
                 captured_annual = float(captured_clustered[seq - 1].sum())
+                capture_capacity_t_h = float(np.max(captured_clustered))
 
                 if captured_annual + emitted_annual < EMITTER_MATERIALITY_THRESHOLD_T:
                     continue
@@ -711,6 +743,7 @@ def load_ccs_status(h5_path: Path) -> pd.DataFrame:
                         "tech": tech,
                         "family": family,
                         "size": size,
+                        "capture_capacity_t_h": capture_capacity_t_h,
                         "captured_annual": captured_annual,
                         "ccs_installed": captured_annual > 1e-6,
                         "total_emissions": captured_annual + emitted_annual,

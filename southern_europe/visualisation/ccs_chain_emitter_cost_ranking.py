@@ -4,11 +4,16 @@ main_italy.py case study by its total levelized cost per tonne of CO2
 (capture + transport + storage), and plots it as a horizontal ranking bar
 chart.
 
-One row per (node, technology), not per node - a node can host more than one
-emitter technology at once (e.g. "Piacenza" runs both a CementEmitter and a
-WasteToEnergyEmitter with their own separate CCS retrofits), and each is its
-own cost/capture accounting unit. Rows are labelled "<node> (<sector>)" when
-a node has more than one.
+One row per genuinely distinct real-world emitter, not per (node, technology)
+row main_italy.py's design exposes - a node can host more than one real
+emitter (e.g. "Piacenza" genuinely runs both a CementEmitter and a
+WasteToEnergyEmitter, confirmed against node_metrics_paper.xlsx's per-node
+sector list), but a node offering more than one CANDIDATE capture technology
+for the SAME plant (e.g. every cement node's MEA-retrofit vs CementHybridCCS
+choice) is one emitter, not two - see _keep_real_emitters, which MERGES
+(sums captured tonnes and cost, never drops either candidate's numbers) the
+candidates per real sector into one bar. Rows are labelled "<node> (<sector>)"
+when a node has more than one real emitter.
 
 Capture cost is each technology's own capture cost (capex + opex + its own
 electricity/heat draw, attributed via that technology's own consumption
@@ -83,6 +88,7 @@ from ccs_chain_plots import (
     SURFACE,
     MODE_COLORS,
     STORAGE_COLOR,
+    _load_node_sectors,
 )
 
 # ============================================================
@@ -102,8 +108,27 @@ STAGE_COLORS = {
 }
 
 SECTOR_ORDER = ["Cement", "Waste", "Refining", "Lime", "FertilizersCombustion", "FertilizersSMR", "Other"]
-_BATLOW = [cmc.batlow(x) for x in np.linspace(0, 1, len(SECTOR_ORDER))]
-SECTOR_COLORS = dict(zip(SECTOR_ORDER, _BATLOW))
+# FertilizersCombustion and FertilizersSMR are two technologies at the SAME
+# physical fertilizer complex (see Ferrara in ccs_chain_plots.py's
+# _load_node_sectors) -- one color group ("Fertilizers"), not two, so the
+# MACC/ranking charts read them as one sector at a glance; per-bar
+# annotations (see FERTILIZER_BAR_NOTE / plot_macc) carry the SMR-vs-not
+# distinction instead of color.
+_COLOR_GROUPS = ["Cement", "Waste", "Refining", "Lime", "Fertilizers", "Other"]
+_BATLOW = dict(zip(_COLOR_GROUPS, [cmc.batlow(x) for x in np.linspace(0, 1, len(_COLOR_GROUPS))]))
+_SECTOR_TO_COLOR_GROUP = {
+    "FertilizersCombustion": "Fertilizers", "FertilizersSMR": "Fertilizers",
+}
+SECTOR_COLORS = {s: _BATLOW[_SECTOR_TO_COLOR_GROUP.get(s, s)] for s in SECTOR_ORDER}
+# Legend label for a sector -- collapses the two fertilizer sectors to one
+# shared "Fertilizers" legend entry, since they now share a color.
+SECTOR_LEGEND_LABEL = {s: _SECTOR_TO_COLOR_GROUP.get(s, s) for s in SECTOR_ORDER}
+# Per-bar annotation clarifying WHICH fertilizer technology a bar is, since
+# color no longer does (see above) -- keyed by the `sector` column value.
+FERTILIZER_BAR_NOTE = {
+    "FertilizersSMR": "SMR only",
+    "FertilizersCombustion": "Non-SMR emissions",
+}
 
 # Below this annual-tonnes / (peak-rate x 8760h) ratio, an emitter is flagged
 # on the MACC plot as running at a low load factor - it reserves pipeline
@@ -130,6 +155,82 @@ def _sector_from_tech(tech_name: str) -> str:
     if "fertilizer" in t:
         return "FertilizersCombustion"
     return "Other"
+
+
+def _merge_candidate_group(group: list[tuple[str, dict]]) -> tuple[str, dict]:
+    """
+    Merges one real emitter's candidate-technology entries (see
+    _keep_real_emitters) into a single MACC bar: captured_annual_t and
+    max_captured_t_h are SUMMED (every candidate's reported tonnes are real
+    in the solved instance -- see _keep_real_emitters), capture_eur_per_t is
+    re-derived as the tonnage-weighted average (total capture cost / total
+    captured tonnes), and family/sector/tech are taken from whichever
+    candidate captured the most (the dominant one, for labeling/coloring).
+    Summing max_captured_t_h is an upper-bound approximation when a plant's
+    two technologies don't peak in the same hour (they still draw on the
+    same outgoing pipeline, so a shared, conservative capacity-share number
+    is preferable to picking just one candidate's peak) -- consistent with
+    the rest of this module's transport allocation already being a
+    capacity-share approximation, not an exact hourly one.
+    """
+    tech, info = max(group, key=lambda ti: ti[1]["captured_annual_t"])
+    if len(group) == 1:
+        return tech, info
+    total_captured = sum(i["captured_annual_t"] for _, i in group)
+    total_cost = sum(i["capture_eur_per_t"] * i["captured_annual_t"] for _, i in group)
+    merged = dict(info)
+    merged["captured_annual_t"] = total_captured
+    merged["max_captured_t_h"] = sum(i["max_captured_t_h"] for _, i in group)
+    merged["capture_eur_per_t"] = total_cost / total_captured if total_captured > 0 else 0.0
+    return tech, merged
+
+
+def _keep_real_emitters(capture_rows: dict) -> dict:
+    """
+    Collapses capture_rows (keyed by (node, tech), one entry per candidate
+    capture technology) down to one entry per genuinely distinct real-world
+    emitter, using node_metrics_paper.xlsx as ground truth for how many
+    physically separate plants share a node -- the same rule
+    ccs_chain_plots.py's _real_emitter_rows applies to the network map.
+
+    main_italy.py wires up EVERY capture technology a sector COULD use as a
+    candidate at each node (e.g. a cement plant gets both the MEA-retrofit
+    path and CementHybridCCS) so the optimizer can pick between them -- they
+    are not two separate plants, just two capture routes for the one plant,
+    and only node_metrics_paper.xlsx's per-node sector count tells you which
+    nodes (Ferrara, Piacenza) genuinely DO host more than one plant.
+
+    IMPORTANT: candidates are MERGED (see _merge_candidate_group), never
+    dropped. Dropping the non-dominant candidate's numbers was tried (on the
+    theory that its non-negligible captured_annual_t is just a main_italy.py
+    formulation bug, piecewise capex nonzero at size=0) and it silently
+    undercounted total system capture: summing every technology's own
+    captured_annual across the whole scenario reconciles exactly against the
+    model's own summary/emissions_pos (total_emissions - captured ==
+    emissions_pos, to rounding); keeping only the dominant candidate did not
+    -- it undercounted by ~2.4 Mt/yr on the 2026-09-14 technology_selection
+    rerun. So regardless of whether the dual-technology split is itself a
+    modeling bug, the tonnes each candidate reports captured are real in the
+    solved instance and this MACC's total captured tonnage must match them.
+    """
+    node_sectors = _load_node_sectors()
+    by_node: dict[str, list[tuple[str, dict]]] = {}
+    for (node, tech), info in capture_rows.items():
+        by_node.setdefault(node, []).append((tech, info))
+
+    kept = {}
+    for node, techs in by_node.items():
+        sectors = node_sectors.get(node)
+        if not sectors or len(sectors) <= 1:
+            groups = {"_single_": techs}
+        else:
+            groups = {}
+            for tech, info in techs:
+                groups.setdefault(info["sector"], []).append((tech, info))
+        for group in groups.values():
+            tech, info = _merge_candidate_group(group)
+            kept[(node, tech)] = info
+    return kept
 
 
 # ============================================================
@@ -263,6 +364,8 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
                     "max_captured_t_h": max_captured_t_h,
                     "capture_eur_per_t": capture_cost / captured_annual,
                 }
+
+        capture_rows = _keep_real_emitters(capture_rows)
 
         # ---- storage cost: one flat €/t added to every emitter ----
         # node_carrier_cost is storage_node's FULL electricity/heat import,
@@ -419,7 +522,11 @@ def plot_emitter_cost_ranking(df: pd.DataFrame, storage_node: str):
     def make_label(row):
         parts = []
         if node_counts[row["node"]] > 1:
-            parts.append(row["sector"])
+            # FertilizersCombustion/FertilizersSMR share a sector color on
+            # the MACC chart (see SECTOR_COLORS) - use the same clarifying
+            # note here instead of the raw sector name, so a node's two
+            # rows read as distinguishable without re-deriving it.
+            parts.append(FERTILIZER_BAR_NOTE.get(row["sector"], row["sector"]))
         if show_family:
             parts.append(row["family"])
         return f"{row['node']} ({', '.join(parts)})" if parts else row["node"]
@@ -510,6 +617,7 @@ def plot_macc(df: pd.DataFrame, storage_node: str):
     an oversized capture unit would.
     """
     plot_df = df.sort_values("total_eur_per_t").reset_index(drop=True)
+    n = len(plot_df)
     captured_mt = (plot_df["captured_annual_t"] / 1e6).to_numpy()
     left = np.concatenate([[0.0], np.cumsum(captured_mt)[:-1]])
     heights = plot_df["total_eur_per_t"].to_numpy()
@@ -518,39 +626,74 @@ def plot_macc(df: pd.DataFrame, storage_node: str):
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
 
+    # Low-capacity-factor bars get a hatch instead of a text callout -- with
+    # dozens of technologies in the technology-selection scenarios (vs. a
+    # handful in the single-family runs this was designed for), one arrow
+    # per flagged bar stops being readable (arrows/labels for 20-30 bars
+    # overlap into an unreadable tangle). A hatch scales to any count and
+    # keeps the exact number available in the CSV / row-count callouts for
+    # anyone who needs it.
+    low_cf_mask = (plot_df["capacity_factor"] < LOW_CAPACITY_FACTOR_THRESHOLD).to_numpy()
     for i, row in plot_df.iterrows():
         ax.bar(
             left[i], heights[i], width=captured_mt[i], align="edge",
             color=SECTOR_COLORS[row["sector"]], edgecolor="white", linewidth=0.5, zorder=3,
+            hatch="////" if low_cf_mask[i] else None,
         )
 
-    sectors_present = [s for s in SECTOR_ORDER if s in set(plot_df["sector"])]
-    legend_handles = [Patch(facecolor=SECTOR_COLORS[s], edgecolor="white", label=s) for s in sectors_present]
+    # De-duplicated by legend label, not sector, so FertilizersCombustion and
+    # FertilizersSMR (same color, see SECTOR_COLORS) collapse to one
+    # "Fertilizers" swatch instead of two identical-looking entries.
+    seen_labels = set()
+    legend_handles = []
+    for s in SECTOR_ORDER:
+        label = SECTOR_LEGEND_LABEL[s]
+        if s not in set(plot_df["sector"]) or label in seen_labels:
+            continue
+        seen_labels.add(label)
+        legend_handles.append(Patch(facecolor=SECTOR_COLORS[s], edgecolor="white", label=label))
+    if low_cf_mask.any():
+        legend_handles.append(Patch(
+            facecolor="none", edgecolor=INK_SECONDARY, hatch="////",
+            label=f"Capacity factor < {LOW_CAPACITY_FACTOR_THRESHOLD:.0%} ({int(low_cf_mask.sum())} of {n})",
+        ))
+    # upper right, not left -- the cheapest (leftmost, shortest) bars are
+    # exactly where the fertilizer callouts below sit, and MACC bars rise
+    # left-to-right, so the top-right corner is the one reliably empty
+    # region regardless of how many bars this run has.
     ax.legend(
-        handles=legend_handles, loc="upper left", frameon=True, fontsize=10.5,
+        handles=legend_handles, loc="upper right", frameon=True, fontsize=10.5,
         framealpha=0.95, edgecolor=GRIDLINE, title="Sector", title_fontsize=10.5,
     )
 
-    # --- flag low-load-factor emitters with an arrow, ordered left-to-right
-    # and stacked upward so nearby bars' callouts don't collide ---
-    low_cf_idx = [i for i in plot_df.index if plot_df.loc[i, "capacity_factor"] < LOW_CAPACITY_FACTOR_THRESHOLD]
-    low_cf_idx.sort(key=lambda i: left[i])
+    # --- per-bar callouts: which fertilizer technology a bar is, since
+    # color alone no longer distinguishes FertilizersCombustion from
+    # FertilizersSMR (see SECTOR_COLORS) -- ordered left-to-right and
+    # stacked upward so nearby bars' callouts don't collide.
+    notes = {
+        i: [FERTILIZER_BAR_NOTE[plot_df.loc[i, "sector"]]]
+        for i in plot_df.index if plot_df.loc[i, "sector"] in FERTILIZER_BAR_NOTE
+    }
+    note_idx = sorted(notes, key=lambda i: left[i])
 
     y_top = heights.max()
-    for rank, i in enumerate(low_cf_idx):
+    x_total = left[-1] + captured_mt[-1]
+    # Text anchored a little right of the y-axis (these are always the
+    # cheapest/leftmost bars) so it doesn't sit on top of the tick labels.
+    text_x = max(x_total * 0.035, captured_mt[note_idx].max() / 2 if len(note_idx) else 0)
+    for rank, i in enumerate(note_idx):
         cx = left[i] + captured_mt[i] / 2
         cy = heights[i]
-        cf_pct = plot_df.loc[i, "capacity_factor"] * 100
         ax.annotate(
-            f"Low capacity factor ({cf_pct:.0f}%)",
+            "\n".join(notes[i]),
             xy=(cx, cy), xycoords="data",
-            xytext=(cx, y_top * 1.10 + rank * y_top * 0.09), textcoords="data",
-            ha="center", va="bottom", fontsize=9.5, color=INK_PRIMARY,
+            xytext=(text_x, y_top * 1.10 + rank * y_top * 0.09), textcoords="data",
+            ha="left", va="bottom", fontsize=9.5, color=INK_PRIMARY,
             arrowprops=dict(arrowstyle="-|>", color=INK_SECONDARY, lw=1.3, connectionstyle="arc3,rad=0.15"),
             zorder=6,
         )
 
-    ax.set_ylim(0, y_top * (1.16 + max(0, len(low_cf_idx) - 1) * 0.09))
+    ax.set_ylim(0, y_top * (1.16 + max(0, len(note_idx) - 1) * 0.09))
     ax.set_xlim(0, left[-1] + captured_mt[-1])
 
     ax.set_xlabel("Cumulative CO$_2$ captured (Mt/yr)", fontsize=11)
