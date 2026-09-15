@@ -57,12 +57,12 @@ pipeline_size_class_max_capacity_t_h = {
     "CO2_Pipeline_medium": 478.8,
     "CO2_Pipeline_large": 2000.0,
 }
-carbon_tax = 200  # euro per tonne CO2
+carbon_tax = 250  # euro per tonne CO2
 enable_carbon_pricing = True
 nr_DD_days = 10
 node_metrics_suffix = "paper"  # base case with truck connections at the cutoff of 150kt/y
 node_metrics_file = f"node_metrics_{node_metrics_suffix}.xlsx"
-objective = "emissions_minC"
+objective = "costs"
 
 # Refining/Other/Lime/Fertilizers stay at their baseline technology in every
 # scenario -- only cement/waste vary (see SCENARIOS below). Lime and
