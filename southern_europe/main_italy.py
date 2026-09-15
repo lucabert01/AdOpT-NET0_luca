@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import pandas as pd
 import numpy as np
+import pyomo.environ as pyo
 from data_process.utilities.defined_functions import (
     calculate_annual_emission_values,
     calculate_emitter_capacities,
@@ -163,6 +164,77 @@ print("Loading sector CO2 concentrations from emitter technology JSONs...")
 co2_concentration_by_type = load_sector_reference_values(
     path_files_technologies, REFERENCE_EMITTER_TECHNOLOGIES, ("Performance", "ccs", "co2_concentration")
 )
+
+
+def enforce_single_cement_technology(m: "adopt.ModelHub", period: str = "period1") -> list:
+    """
+    Forces mutual exclusivity, per node, between the two cement capture
+    routes the "technology_selection" scenarios offer as candidates:
+    CementEmitter_existing's MEA retrofit (var_size_ccs) and a newly-built
+    CementHybridCCS plant (var_size).
+
+    Without this, the optimizer routinely splits one node's clinker demand
+    across BOTH simultaneously -- e.g. 40% via the existing plant with its
+    own MEA retrofit installed and independently capturing ~90% of that
+    share, 60% via a separately-built oxyfuel-hybrid plant capturing ~90% of
+    its own share -- i.e. two fully capitalized, independently operating CCS
+    systems at one physical site. That was confirmed present at every single
+    cement node in the 2026-09-14 technology_selection rerun (see session
+    notes), not a rounding artifact: shares ranged 20/80 to 68/32, and each
+    side's own capture ratio matched MEA/oxyfuel's normal design rate.
+
+    Deliberately does NOT force CementEmitter_existing's own clinker output
+    to zero under the hybrid route -- var_size_ccs is the MEA retrofit's own
+    capture capacity, a variable distinct from the host plant's base clinker
+    capacity (which is a fixed existing-asset parameter, not a decision
+    variable here -- see technology.py's _define_size: existing=1 and
+    decommission="impossible" together fix it). So the existing plant may
+    still produce clinker without capturing it under y=0; only having a
+    SEPARATE, simultaneously-active CCS installation on top of the new
+    hybrid plant is what this rules out.
+
+    Implemented as an external, standard-Pyomo big-M exclusivity constraint
+    added directly to the live model (ModelHub.model is a plain dict of
+    pyomo.ConcreteModel objects) between construct_balances() and solve() --
+    no changes to adopt_net0 itself. Auto-detects which nodes actually offer
+    both technologies (only "technology_selection"/"technology_selection_
+    wasteCaL" do), so it is a no-op (returns []) for every other scenario in
+    SCENARIOS and is safe to call unconditionally.
+
+    :param m: a ModelHub with construct_model() and construct_balances()
+        already called (but not yet solve()).
+    :param period: investment period name to apply this to.
+    :return: list of node names the constraint was actually applied to.
+    """
+    model = m.model[m.info_solving_algorithms["aggregation_model"]]
+    b_period = model.periods[period]
+
+    dual_nodes = [
+        node for node in b_period.node_blocks
+        if "CementEmitter_existing" in b_period.node_blocks[node].tech_blocks_active
+        and "CementHybridCCS" in b_period.node_blocks[node].tech_blocks_active
+    ]
+    if not dual_nodes:
+        return []
+
+    model.set_cement_dual_nodes = pyo.Set(initialize=dual_nodes)
+    model.var_cement_route = pyo.Var(model.set_cement_dual_nodes, domain=pyo.Binary)
+
+    def _mea_limit(m_, node):
+        b_tec = b_period.node_blocks[node].tech_blocks_active["CementEmitter_existing"]
+        return b_tec.var_size_ccs <= b_tec.para_size_max_ccs * m_.var_cement_route[node]
+
+    def _hybrid_limit(m_, node):
+        b_tec = b_period.node_blocks[node].tech_blocks_active["CementHybridCCS"]
+        return b_tec.var_size <= b_tec.para_size_max * (1 - m_.var_cement_route[node])
+
+    model.const_cement_mea_exclusive = pyo.Constraint(
+        model.set_cement_dual_nodes, rule=_mea_limit
+    )
+    model.const_cement_hybrid_exclusive = pyo.Constraint(
+        model.set_cement_dual_nodes, rule=_hybrid_limit
+    )
+    return dual_nodes
 
 
 def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list,
@@ -621,7 +693,15 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
 
     m = adopt.ModelHub()
     m.read_data(input_data_path, start_period=0, end_period=8759)
-    m.quick_solve()
+    m.construct_model()
+    m.construct_balances()
+    dual_cement_nodes = enforce_single_cement_technology(m)
+    if dual_cement_nodes:
+        print(
+            f"  Enforced cement MEA-retrofit / oxyfuel-hybrid exclusivity at "
+            f"{len(dual_cement_nodes)} node(s): {dual_cement_nodes}"
+        )
+    m.solve()
 
 
 if __name__ == "__main__":
