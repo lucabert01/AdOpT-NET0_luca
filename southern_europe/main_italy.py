@@ -62,7 +62,6 @@ enable_carbon_pricing = True
 nr_DD_days = 10
 node_metrics_suffix = "paper"  # base case with truck connections at the cutoff of 150kt/y
 node_metrics_file = f"node_metrics_{node_metrics_suffix}.xlsx"
-objective = "costs"
 
 # Refining/Other/Lime/Fertilizers stay at their baseline technology in every
 # scenario -- only cement/waste vary (see SCENARIOS below). Lime and
@@ -118,16 +117,27 @@ SCENARIOS = [
     # Baseline choice: cement picks between the existing MEA-retrofit route and a
     # new oxyfuel-hybrid plant; waste picks between the existing MEA-retrofit route
     # and a new calcium-looping unit. All other sectors stay at their fixed baseline
-    # (MEA retrofit where applicable).
+    # (MEA retrofit where applicable). Run once minimizing cost (carbon_tax priced
+    # in) and once minimizing emissions directly, for comparison.
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
-     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"]},
+     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
+     "objective": "costs"},
+    {"name": "technology_selection",
+     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
+     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
+     "objective": "emissions_minC"},
     # Same cement choice, but waste is forced to calcium looping only (no MEA-retrofit
     # alternative) -- isolates the effect of removing waste's own technology choice
-    # while keeping cement's choice active.
+    # while keeping cement's choice active. Same costs/emissions_minC pair.
     {"name": "technology_selection_wasteCaL",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
-     "tech_for_waste": ["WasteCaL_CCS"]},
+     "tech_for_waste": ["WasteCaL_CCS"],
+     "objective": "costs"},
+    {"name": "technology_selection_wasteCaL",
+     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
+     "tech_for_waste": ["WasteCaL_CCS"],
+     "objective": "emissions_minC"},
 ]
 
 #----- Import data-----#
@@ -238,14 +248,18 @@ def enforce_single_cement_technology(m: "adopt.ModelHub", period: str = "period1
 
 
 def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list,
-                  flatten_profiles: bool = False, nr_dd_days: int = None):
+                  objective: str = "costs", flatten_profiles: bool = False, nr_dd_days: int = None):
     """
     Runs the full CCS-chain data-preparation + optimization pipeline for one
     emitter-technology scenario (a choice of cement and waste technology).
 
     Writes its case-study input data to Italy_CaseStudy/<scenario_name>/ and its
     results to Results_CCSchainOptimization/<scenario_name>/, so multiple scenarios
-    can be run back to back without overwriting each other.
+    can be run back to back without overwriting each other. Two scenarios may share
+    the same scenario_name but differ in objective (see SCENARIOS) -- their results
+    still land in the same Results_CCSchainOptimization/<scenario_name>/ folder but
+    stay distinguishable since case_name embeds the objective in every result
+    sub-folder's timestamp prefix.
 
     :param str scenario_name: folder-safe name identifying this scenario
     :param list tech_for_cement: technology name(s) to use for the Cement sector
@@ -255,6 +269,8 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         own "tec_type" (e.g. ["WasteToEnergyEmitter"] or ["WasteCaL_CCS"] -- the
         latter's tec_type is "WasteToEnergyCaLCCS", a different string from its
         filename)
+    :param str objective: AdOpT-NET0 optimization objective, "costs" or
+        "emissions_minC".
     :param bool flatten_profiles: if True, replace every hourly demand and
         electricity/heat price profile with its own annual average (see
         update_carrier_data's docstring) to remove hourly variance while preserving
@@ -263,7 +279,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         number of typical/design days, if given.
     """
     print("\n" + "=" * 80)
-    print(f"SCENARIO: {scenario_name}  (cement={tech_for_cement}, waste={tech_for_waste})")
+    print(f"SCENARIO: {scenario_name}  (cement={tech_for_cement}, waste={tech_for_waste}, objective={objective})")
     print("=" * 80)
 
     technology_selection = {
@@ -724,6 +740,7 @@ if __name__ == "__main__":
             scenario["name"],
             scenario["tech_for_cement"],
             scenario["tech_for_waste"],
+            objective=scenario.get("objective", "costs"),
             flatten_profiles=scenario.get("flatten_profiles", False),
             nr_dd_days=scenario.get("nr_dd_days"),
         )
