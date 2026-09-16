@@ -34,7 +34,7 @@
       },
       "electricity": {
         "cons_model": 1,
-        "k_flow": 0.0436,
+        "k_flow": 0,
         "k_flowDistance": 0
       }
     }
