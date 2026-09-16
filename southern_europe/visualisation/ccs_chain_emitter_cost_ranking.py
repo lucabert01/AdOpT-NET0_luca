@@ -134,7 +134,7 @@ FERTILIZER_BAR_NOTE = {
 # on the MACC plot as running at a low load factor - it reserves pipeline
 # capacity sized for its peak rate but rarely uses all of it, so it pays a
 # capacity-share transport cost spread over comparatively few actual tonnes.
-LOW_CAPACITY_FACTOR_THRESHOLD = 0.75
+LOW_CAPACITY_FACTOR_THRESHOLD = 0.65
 
 
 def _sector_from_tech(tech_name: str) -> str:

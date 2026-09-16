@@ -15,8 +15,8 @@ from pathlib import Path
 import ccs_chain_plots as m
 
 RUNS = {
-    "technology_selection": "../Results_CCSchainOptimization/technology_selection/20260914153327_emissions_minC_technology_selection-1/optimization_results.h5",
-    "technology_selection_wasteCaL": "../Results_CCSchainOptimization/technology_selection_wasteCaL/20260913002012_emissions_minC_technology_selection_wasteCaL-1/optimization_results.h5",
+    "technology_selection": "../Results_CCSchainOptimization/technology_selection/20260915182519_costs_technology_selection-1/optimization_results.h5",
+    "technology_selection_wasteCaL": "../Results_CCSchainOptimization/technology_selection_wasteCaL/20260916043843_costs_technology_selection_wasteCaL-1/optimization_results.h5",
 }
 
 for scenario, h5_rel in RUNS.items():

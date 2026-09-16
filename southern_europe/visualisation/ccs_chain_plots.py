@@ -15,7 +15,7 @@ Produces five figures from a solved optimization_results.h5:
                                         grid (as in cost_factor_grid_map_italy.py).
   1d. ccs_chain_network_map_trunk_highlight.png - one specific chain of built
                                         arcs (default: the Piacenza -> Modena-H ->
-                                        HERAMBIENTE Spa -> Ravenna -> Casalborsetti
+                                        Ferrara -> Ravenna -> Casalborsetti
                                         -> Porto Corsini trunk) highlighted in bold
                                         against the rest of the network, muted.
 
@@ -1392,7 +1392,7 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
 TRUNK_PATH_DEFAULT = [
     "Piacenza",
     "Modena-H",
-    "HERAMBIENTE Spa -Termovalorizzatore",
+    "Ferrara",
     "Ravenna",
     "Eni S.p.A Casalborsetti",
     "Porto Corsini",
