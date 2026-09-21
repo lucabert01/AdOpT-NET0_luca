@@ -24,7 +24,11 @@ Produces five figures from a solved optimization_results.h5:
   2. ccs_chain_emitter_zoom_<node>.png - captured vs. emitted CO2 for one
                                         CCS-equipped waste-to-energy plant.
   2b. ccs_chain_inflow_<node>.png     - hourly CO2 received at a node (e.g. a
-                                        transport hub just upstream of storage).
+                                        transport hub just upstream of storage),
+                                        with the built inbound pipeline capacity
+                                        as a reference line and the most
+                                        significant sustained low-load period (if
+                                        any) annotated -- see plot_node_inflow.
   3. ccs_chain_cost_breakdown_per_tonne.png / _per_year.png
                                       - levelized cost of capture/transport/storage,
                                         each split into capex, opex (fixed/variable),
@@ -41,6 +45,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from shapely.geometry import LineString
 from pathlib import Path
+from datetime import datetime, timedelta
 import cmcrameri.cm as cmc
 
 # ============================================================
@@ -201,6 +206,103 @@ STAGE_LABELS = ["Capture", "Transport", "Storage"]
 # Paths
 # ============================================================
 RESULTS_H5 = Path("../Results_CCSchainOptimization/20260710184058_emissions_minC-1/optimization_results.h5")
+RESULTS_ROOT = Path("../Results_CCSchainOptimization")
+
+
+# Folders from the SAME modelhub.solve() call that land within this long of
+# each other are treated as one run's internal stages (see find_run_h5) --
+# comfortably longer than the ~40-90s gap observed between a run's own
+# stages, comfortably shorter than the hours/days between separate reruns.
+_SAME_RUN_GAP = timedelta(minutes=10)
+
+
+def find_run_h5(scenario_name: str, objective: str) -> Path:
+    """
+    Resolves scenario_name + objective (see main_italy.py's SCENARIOS, where
+    each entry is now one (name, objective) pair -- e.g. "technology_selection"
+    is run once with objective="costs" and once with objective="emissions_minC")
+    to that run's optimization_results.h5, instead of hand-editing a timestamp
+    string here every time main_italy.py is re-run.
+
+    Globs Results_CCSchainOptimization/<scenario_name>/ for every folder
+    matching *_<objective>_<scenario_name>-* (main_italy.py's case_name
+    convention). A single main_italy.py run can call modelhub's
+    _call_solver() -- which writes a fresh timestamped results folder every
+    time it's invoked -- more than once, e.g.:
+      - objective="emissions_minC" runs modelhub._optimize_costs_minE(),
+        which ALWAYS solves twice: first a pure emissions-net minimization
+        (cost is irrelevant to that stage -- it can and does build a wildly
+        more expensive, cost-blind network), then a second solve minimizing
+        cost subject to emissions <= 1.001x the first stage's result. Both
+        solves get their own results folder, timestamped ~40-90s apart.
+      - main_italy.py can also leave behind a design-days/clustering
+        pre-solve in a separate, nearly-identically-timestamped folder ahead
+        of the real full-resolution solve (see the 2026-09-14
+        technology_selection case this was first spotted in).
+    In both cases the LAST folder written is the one that actually reflects
+    the requested objective (the final cost-minimizing solve; the real
+    full-resolution solve) -- so candidates are first clustered by timestamp
+    proximity (gaps <= _SAME_RUN_GAP = same modelhub.solve() call) and only
+    the latest-timestamped folder per cluster is kept. This matters a lot for
+    emissions_minC specifically: picking by total_cost alone (the previous
+    approach) picks the WRONG stage there, since the cost-blind first-stage
+    solve's total_cost is reliably the larger of the two (confirmed via
+    cost_netws: e.g. 4.7e9 for stage 1 vs 0.26e9 for stage 2 on the
+    2026-09-17 technology_selection/emissions_minC run) -- exactly backwards
+    from the design-days-pre-solve case total_cost was originally meant to
+    filter for.
+
+    Finally, across distinct runs (genuinely separate main_italy.py
+    executions, not just internal stages of one), the MOST RECENT one is
+    kept (previously: the one with the largest total_cost - but reruns exist
+    to pick up code/data fixes, and fixes generally REDUCE cost, e.g. the
+    2026-09-16 pipeline-electricity-consumption fix dropped
+    technology_selection/costs's total_cost from 3.29e9 (2026-09-15 run) to
+    2.87e9 (2026-09-16 run); picking by cost there silently preferred the
+    stale pre-fix run over the corrected one every time).
+    """
+    scenario_dir = RESULTS_ROOT / scenario_name
+    candidates = sorted(scenario_dir.glob(f"*_{objective}_{scenario_name}-*"))
+
+    timestamped = []
+    for cand in candidates:
+        h5_path = cand / "optimization_results.h5"
+        if not h5_path.exists():
+            continue
+        try:
+            ts = datetime.strptime(cand.name.split("_", 1)[0], "%Y%m%d%H%M%S")
+        except ValueError:
+            continue
+        timestamped.append((ts, h5_path))
+    timestamped.sort(key=lambda x: x[0])
+
+    run_finalists = []
+    cluster = []
+    for ts, h5_path in timestamped:
+        if cluster and ts - cluster[-1][0] > _SAME_RUN_GAP:
+            run_finalists.append(cluster[-1])
+            cluster = []
+        cluster.append((ts, h5_path))
+    if cluster:
+        run_finalists.append(cluster[-1])
+
+    best_path = None
+    for _, h5_path in reversed(run_finalists):
+        try:
+            with h5py.File(h5_path, "r") as f:
+                float(f["summary"]["total_cost"][()])  # sanity check: file is readable
+        except (OSError, KeyError):
+            continue
+        best_path = h5_path
+        break
+    if best_path is None:
+        raise FileNotFoundError(
+            f"No usable optimization_results.h5 found for scenario_name="
+            f"'{scenario_name}', objective='{objective}' under {scenario_dir} "
+            f"(looked for *_{objective}_{scenario_name}-*)."
+        )
+    return best_path
+
 
 path_data_case_study = Path("../italy_data")
 path_files_gis = path_data_case_study / "raw_data/gis_data"
@@ -1519,12 +1621,19 @@ def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str 
     """
     Captured vs. emitted CO2 for one node's capture technology.
 
-    tech_name can be left unset -- the node's capture-capable technology
-    (and its family, for the title) is auto-detected the same way
-    load_ccs_status does, so this works for any of the three capture
-    families without hardcoding a variable name (see classify_capture_family
-    / captured_co2_operation_key docstrings for why the underlying HDF5
-    dataset names differ by technology).
+    tech_name can be left unset -- the node's DOMINANT capture-capable
+    technology (largest captured+emitted, i.e. total_emissions -- same
+    "winner" convention as _real_emitter_rows._collapse, so this always
+    matches whichever candidate the rest of the figures/dashboard treat as
+    the real emitter) is auto-detected, so this works for any of the three
+    capture families without hardcoding a variable name (see
+    classify_capture_family / captured_co2_operation_key docstrings for why
+    the underlying HDF5 dataset names differ by technology). Picking merely
+    the FIRST capture-capable candidate (in HDF5 key order) instead of the
+    dominant one would silently show an uninstalled, near-zero-throughput
+    alternative technology at any node offering more than one route (e.g.
+    SILLA 2 in a technology_selection run also lists WasteCaL_CCS, which
+    HDF5 happens to iterate before the actually-installed MEA retrofit).
     """
     with h5py.File(h5_path, "r") as f:
         seq = f["k_means_specs"]["period1"]["sequence"][()]
@@ -1532,10 +1641,17 @@ def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str 
         op_node = f["operation"]["technology_operation"]["period1"][node_name]
 
         if tech_name is None:
+            best_total = -1.0
             for candidate in design_node.keys():
-                if classify_capture_family(design_node[candidate].keys(), op_node[candidate].keys()) is not None:
-                    tech_name = candidate
-                    break
+                if classify_capture_family(design_node[candidate].keys(), op_node[candidate].keys()) is None:
+                    continue
+                cand_op = op_node[candidate]
+                cand_captured_key = captured_co2_operation_key(cand_op.keys())
+                total = float(cand_op[cand_captured_key][()][seq - 1].sum()) + float(
+                    cand_op["emissions_pos"][()][seq - 1].sum()
+                )
+                if total > best_total:
+                    best_total, tech_name = total, candidate
             if tech_name is None:
                 raise ValueError(f"No capture-capable technology found at node '{node_name}'")
 
@@ -1585,9 +1701,80 @@ def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str 
 # ============================================================
 # PLOT 2b - CO2 received at a node (hourly)
 # ============================================================
+# Below this fraction of the feeding pipeline's built capacity, an hour counts
+# as "reduced load" for the purposes of flagging a sustained drop.
+INFLOW_LOW_LOAD_THRESHOLD = 0.85
+# Minimum length of a below-threshold stretch to bother annotating (avoids
+# flagging single clustered-day artifacts or short dips as if they mattered).
+INFLOW_MIN_DROP_HOURS = 24 * 10
+# Below-threshold runs separated by a gap no longer than this are merged into
+# one drop before measuring duration -- k-means expansion (see
+# load_built_arcs' docstring) can otherwise chop one real seasonal dip into a
+# sawtooth of short runs.
+INFLOW_MERGE_GAP_HOURS = 48
+
+
+def _find_significant_load_drop(
+    load_factor: np.ndarray, threshold: float = INFLOW_LOW_LOAD_THRESHOLD,
+    min_hours: int = INFLOW_MIN_DROP_HOURS, merge_gap_hours: int = INFLOW_MERGE_GAP_HOURS,
+) -> dict | None:
+    """
+    Finds the most severe sustained below-threshold stretch in an hourly
+    load-factor series, if any qualifies.
+
+    Adjacent below-threshold runs separated by a short above-threshold gap are
+    merged first (see INFLOW_MERGE_GAP_HOURS), then every merged run shorter
+    than min_hours is discarded. Among what's left, "most severe" = lowest
+    mean load factor during the run (not longest), since a longer-but-milder
+    dip is less worth calling out than a shorter-but-deeper one.
+
+    :return: None if nothing qualifies, else {"start", "end" (hour indices,
+        end exclusive), "mean_load", "n_hours"}.
+    """
+    is_low = load_factor < threshold
+    if not is_low.any():
+        return None
+
+    # Contiguous below-threshold runs as (start, end) half-open hour ranges.
+    edges = np.flatnonzero(np.diff(np.concatenate(([0], is_low.astype(int), [0]))))
+    runs = list(zip(edges[0::2], edges[1::2]))
+
+    # Merge runs separated by a short above-threshold gap.
+    merged = []
+    for start, end in runs:
+        if merged and start - merged[-1][1] <= merge_gap_hours:
+            merged[-1] = (merged[-1][0], end)
+        else:
+            merged.append((start, end))
+
+    candidates = [(s, e) for s, e in merged if (e - s) >= min_hours]
+    if not candidates:
+        return None
+
+    best_start, best_end = min(candidates, key=lambda se: load_factor[se[0]:se[1]].mean())
+    return {
+        "start": best_start,
+        "end": best_end,
+        "mean_load": float(load_factor[best_start:best_end].mean()),
+        "n_hours": best_end - best_start,
+    }
+
+
 def plot_node_inflow(h5_path: Path, node_name: str = "Eni S.p.A Casalborsetti"):
-    """CO2 arriving at a node via the network (network_inflow on the
-    CO2captured carrier balance), as an hourly profile."""
+    """
+    CO2 arriving at a node via the network (network_inflow on the
+    CO2captured carrier balance), as an hourly profile, with the built
+    inbound pipeline capacity drawn as a reference line and the most
+    significant sustained low-load period (if any) annotated -- e.g. "~70%
+    load for ~5 weeks (Jul 22 - Aug 26)".
+
+    Pipeline capacity is the sum of every built CO2_Pipeline arc's own size
+    (t/h) feeding INTO this node (load_built_arcs' "to" column) -- trucks/rail
+    are excluded since the ask is specifically about pipeline load factor.
+    If no inbound pipeline arc is found (e.g. this node is itself only a
+    pipeline origin), the reference line/annotation are skipped and only the
+    raw inflow trace is drawn.
+    """
     with h5py.File(h5_path, "r") as f:
         seq = f["k_means_specs"]["period1"]["sequence"][()]
         inflow_clustered = f["operation"]["energy_balance"]["period1"][node_name][
@@ -1597,13 +1784,66 @@ def plot_node_inflow(h5_path: Path, node_name: str = "Eni S.p.A Casalborsetti"):
     inflow_full = inflow_clustered[seq - 1]
     hours = np.arange(len(inflow_full))
 
-    fig, ax = plt.subplots(figsize=(7, 4))
+    built_arcs = load_built_arcs(h5_path)
+    inbound_pipeline = built_arcs[
+        (built_arcs["to"] == node_name) & (built_arcs["mode"] == "CO2_Pipeline")
+    ]
+    pipeline_capacity = float(inbound_pipeline["size"].sum()) if len(inbound_pipeline) else 0.0
+
+    fig, ax = plt.subplots(figsize=(8.5, 4.5))
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
 
-    ax.plot(hours, inflow_full, color=BATLOW[0], linewidth=0.6)
+    ax.plot(hours, inflow_full, color=BATLOW[0], linewidth=0.6, zorder=3)
+
+    drop = None
+    if pipeline_capacity > 0:
+        ax.axhline(pipeline_capacity, color=STATUS_CRITICAL, linewidth=1.2, linestyle="--",
+                   alpha=0.85, zorder=2, label=f"Built pipeline capacity ({pipeline_capacity:,.0f} t/h)")
+        load_factor = inflow_full / pipeline_capacity
+        drop = _find_significant_load_drop(load_factor)
+        if drop is not None:
+            # A flagged window covering nearly the whole year isn't a
+            # seasonal dip to call out with a month/date range -- it means
+            # the pipe runs chronically under-loaded, a sizing observation,
+            # not a "when does it drop" one. Phrase (and draw) those two
+            # cases differently rather than printing a nonsensical
+            # "around July (Jan 01-Dec 30)".
+            frac_of_year = drop["n_hours"] / len(inflow_full)
+            if frac_of_year >= 0.85:
+                annotation = (
+                    f"~{drop['mean_load']:.0%} average load across the year\n"
+                    f"(chronically under {INFLOW_LOW_LOAD_THRESHOLD:.0%} of built capacity, not a seasonal dip)"
+                )
+                ax.text(
+                    0.5, 0.5, annotation, transform=ax.transAxes,
+                    ha="center", va="center", fontsize=10, color=INK_PRIMARY,
+                    bbox=dict(boxstyle="round,pad=0.4", facecolor=SURFACE, edgecolor=STATUS_CRITICAL, alpha=0.95),
+                    zorder=4,
+                )
+            else:
+                dates = pd.date_range("2024-01-01", periods=len(inflow_full), freq="h")
+                start_date, end_date = dates[drop["start"]], dates[min(drop["end"], len(dates) - 1)]
+                mid_month = dates[(drop["start"] + drop["end"]) // 2].strftime("%B")
+                weeks = drop["n_hours"] / (24 * 7)
+                ax.axvspan(drop["start"], drop["end"], color=STATUS_CRITICAL, alpha=0.12, zorder=1)
+                annotation = (
+                    f"~{drop['mean_load']:.0%} load for ~{weeks:.0f} week{'s' if round(weeks) != 1 else ''}\n"
+                    f"around {mid_month} ({start_date.strftime('%b %d')}–{end_date.strftime('%b %d')})"
+                )
+                ax.annotate(
+                    annotation,
+                    xy=((drop["start"] + drop["end"]) / 2, load_factor[drop["start"]:drop["end"]].mean() * pipeline_capacity),
+                    xytext=(0.5, 0.22), textcoords="axes fraction",
+                    ha="center", va="center", fontsize=10, color=INK_PRIMARY,
+                    bbox=dict(boxstyle="round,pad=0.4", facecolor=SURFACE, edgecolor=STATUS_CRITICAL, alpha=0.95),
+                    arrowprops=dict(arrowstyle="-|>", color=STATUS_CRITICAL, lw=1.4,
+                                    connectionstyle="arc3,rad=0.15"),
+                    zorder=4,
+                )
+
     ax.set_xlim(0, hours[-1])
-    ax.set_ylim(0, inflow_full.max() * 1.1)
+    ax.set_ylim(0, max(inflow_full.max(), pipeline_capacity) * 1.1)
     ax.set_xlabel("Hours [h]", fontsize=11)
     ax.set_ylabel("CO$_2$ received (t/h)", fontsize=11)
     ax.set_title(f"CO$_2$ received at {node_name}", fontsize=14, weight="bold", color=INK_PRIMARY)
@@ -1614,12 +1854,15 @@ def plot_node_inflow(h5_path: Path, node_name: str = "Eni S.p.A Casalborsetti"):
     ax.spines["left"].set_color(GRIDLINE)
     ax.spines["bottom"].set_color(GRIDLINE)
     ax.tick_params(colors=INK_SECONDARY)
+    if pipeline_capacity > 0:
+        ax.legend(loc="upper right", fontsize=9.5, frameon=True, edgecolor=GRIDLINE)
 
     fig.tight_layout()
     out_file = OUT_DIR / f"ccs_chain_inflow_{node_name.replace(' ', '_').replace('.', '')}.png"
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
-    print(f"Saved: {out_file}")
+    print(f"Saved: {out_file}"
+          + (f"  [flagged drop: ~{drop['mean_load']:.0%} load, {drop['n_hours']/24:.0f} days]" if drop else ""))
 
 
 # ============================================================

@@ -62,6 +62,20 @@ the pipeline cost, spread over fewer actual tonnes) - which is the point: a
 poorly-utilized reservation costs more per tonne, same as an oversized
 capture unit does.
 
+Every arc's raw shares (across all the emitters that cross it) are then
+renormalized to sum to at most 100% - see the "renormalized per arc" block in
+build_emitter_cost_table. Raw min(1, own_peak/arc_size) shares are each
+emitter's claim in isolation; on a trunk arc built smaller than the SUM of
+its users' peaks (the normal case, since real peaks rarely coincide and
+that's exactly why sharing a pipeline is worthwhile), those raw claims sum
+to well over 100% of the arc's actual cost - e.g. the final trunk into the
+storage node is typically shared by dozens of emitters whose raw claims can
+sum to 150-180%. Left unnormalized, every emitter on such an arc is charged
+as if it had that arc mostly to itself, and the arc's cost gets collected
+more than once over across its users. Arcs used by only one emitter, or
+whose raw claims already sum under 100%, are unaffected (normalization
+factor is 1).
+
 Output:
   - ccs_chain_emitter_cost_ranking.png  (ranked stacked-bar chart)
   - ccs_chain_emitter_cost_ranking.csv  (per-emitter table backing the chart)
@@ -451,41 +465,110 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
         path_cache: dict[str, list[tuple[str, str, float, float]] | None] = {}
 
         def path_to_storage(start_node):
+            """
+            Walks the dominant (highest-flow) outgoing arc from node to node
+            until reaching storage_node, backtracking to the next-best arc
+            whenever the dominant choice would revisit an ancestor.
+
+            A plain greedy walk (always take the single dominant arc, raise
+            if that ever revisits a node) works for the sparse,
+            near-tree-shaped networks the cost-minimizing scenarios build,
+            but the emissions_minC scenarios build a much denser network
+            (~4x the arcs) where two adjacent nodes can each have the OTHER
+            as their own dominant destination (e.g. Cementirossi <-> Ponte
+            della Priula, each sending its own larger share to the other) --
+            a genuine 2-cycle in the "always follow the biggest arc" graph,
+            even though the underlying built network as a whole is still
+            acyclic overall (CO2 does reach storage somewhere). Backtracking
+            to the next-largest arc at the point of a would-be cycle finds
+            that real route instead of just giving up.
+            """
             if start_node in path_cache:
                 return path_cache[start_node]
-            path, current, visited = [], start_node, set()
-            while current != storage_node:
-                if current in visited:
-                    raise RuntimeError(f"Cycle detected in built network reaching '{current}'")
-                visited.add(current)
-                edges_out = out_edges.get(current)
+
+            def dfs(node, visited):
+                if node == storage_node:
+                    return []
+                if node in path_cache:
+                    return path_cache[node]
+                if node in visited:
+                    return None
+                edges_out = out_edges.get(node)
                 if not edges_out:
-                    path_cache[start_node] = None
                     return None
                 edges_out = sorted(edges_out, key=lambda e: e[2], reverse=True)
-                to_node, cost, flow, size = edges_out[0]
+                flow = edges_out[0][2]
                 if len(edges_out) > 1 and edges_out[1][2] > 0.01 * flow:
                     print(
-                        f"Warning: '{current}' splits flow across multiple built arcs "
-                        f"(dominant {flow:,.0f} t/yr -> '{to_node}', secondary "
+                        f"Warning: '{node}' splits flow across multiple built arcs "
+                        f"(dominant {flow:,.0f} t/yr -> '{edges_out[0][0]}', secondary "
                         f"{edges_out[1][2]:,.0f} t/yr -> '{edges_out[1][0]}'); only the "
                         f"dominant arc is used for capacity-share allocation downstream."
                     )
-                path.append((current, to_node, cost, size))
-                current = to_node
+                next_visited = visited | {node}
+                for i, (to_node, cost, flow, size) in enumerate(edges_out):
+                    sub = dfs(to_node, next_visited)
+                    if sub is None:
+                        continue
+                    if i > 0:
+                        print(
+                            f"Note: '{node}'’s dominant arc (-> '{edges_out[0][0]}') "
+                            f"leads into a cycle; using its next-best built arc "
+                            f"(-> '{to_node}') for the path to storage instead."
+                        )
+                    return [(node, to_node, cost, size)] + sub
+                return None
+
+            path = dfs(start_node, set())
             path_cache[start_node] = path
             return path
 
-        rows = []
-        for (node_name, tech), cap in capture_rows.items():
+        # ---- capacity-share allocation, renormalized per arc ----
+        # min(1, own_peak / arc_size) is each emitter's *raw* claim on an arc
+        # it shares with every other emitter whose path also crosses it. On a
+        # trunk arc built smaller than the SUM of its users' individual peaks
+        # (the normal case -- that's the whole point of sharing a pipeline:
+        # peaks rarely coincide, so the arc doesn't need to be sized for all
+        # of them at once), those raw claims sum to well over 100% of the
+        # arc's actual annual cost - e.g. the final trunk into the storage
+        # node here is shared by 44 emitters whose raw claims sum to ~159% of
+        # its cost. Without renormalizing, every emitter on an oversubscribed
+        # arc is charged as if it had that arc mostly to itself, and the
+        # arc's cost gets collected more than once over across its users.
+        # Fix: scale every arc's raw claims down by whatever factor brings
+        # their sum back to <=100% (arcs used by only one emitter, or whose
+        # raw claims already sum under 100%, are untouched - factor is 1).
+        paths_by_node: dict[str, list[tuple[str, str, float, float]]] = {}
+        skipped_nodes: set[str] = set()
+        for node_name, tech in capture_rows.keys():
             path = [] if node_name == storage_node else path_to_storage(node_name)
             if path is None:
+                skipped_nodes.add(node_name)
+                continue
+            paths_by_node[node_name] = path
+
+        arc_raw_share_sum: dict[tuple[str, str], float] = {}
+        for (node_name, tech), cap in capture_rows.items():
+            path = paths_by_node.get(node_name)
+            if path is None:
+                continue
+            for from_node, to_node, _, arc_size_t_h in path:
+                raw_share = min(1.0, cap["max_captured_t_h"] / arc_size_t_h) if arc_size_t_h > 0 else 0.0
+                key = (from_node, to_node)
+                arc_raw_share_sum[key] = arc_raw_share_sum.get(key, 0.0) + raw_share
+        arc_norm_factor = {arc: 1.0 / total if total > 1.0 else 1.0 for arc, total in arc_raw_share_sum.items()}
+
+        rows = []
+        for (node_name, tech), cap in capture_rows.items():
+            if node_name in skipped_nodes:
                 print(f"Warning: '{node_name}' ({tech}) captures CO2 but has no built path to '{storage_node}' - excluded")
                 continue
+            path = paths_by_node[node_name]
 
             transport_cost_eur = 0.0
-            for _, _, arc_cost, arc_size_t_h in path:
+            for from_node, to_node, arc_cost, arc_size_t_h in path:
                 share = min(1.0, cap["max_captured_t_h"] / arc_size_t_h) if arc_size_t_h > 0 else 0.0
+                share *= arc_norm_factor[(from_node, to_node)]
                 transport_cost_eur += arc_cost * share
             transport_eur_per_t = transport_cost_eur / cap["captured_annual_t"]
 

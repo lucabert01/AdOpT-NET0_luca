@@ -3,8 +3,10 @@ Exports everything the interactive technology-selection dashboard (an HTML
 artifact) needs as one JSON file: Italy basemap polygons, node positions,
 built transport corridors (with annualized flow + load factor), and capture
 units (one row per genuine real-world emitter, plus its underlying candidate
-technologies) for both the technology_selection and
-technology_selection_wasteCaL scenarios.
+technologies) for all four (scenario_name, objective) combinations in
+main_italy.py's SCENARIOS: technology_selection and
+technology_selection_wasteCaL, each run once minimizing "costs" and once
+minimizing "emissions_minC".
 
 Reuses ccs_chain_plots.py's loaders so the dashboard's numbers are exactly
 the ones already validated in the static PNG figures (same materiality
@@ -17,14 +19,18 @@ import numpy as np
 
 import ccs_chain_plots as m
 
-RUNS = {
-    "technology_selection": "../Results_CCSchainOptimization/technology_selection/20260915182519_costs_technology_selection-1/optimization_results.h5",
-    "technology_selection_wasteCaL": "../Results_CCSchainOptimization/technology_selection_wasteCaL/20260916043843_costs_technology_selection_wasteCaL-1/optimization_results.h5",
-}
+SCENARIOS = [
+    ("technology_selection", "costs"),
+    ("technology_selection", "emissions_minC"),
+    ("technology_selection_wasteCaL", "costs"),
+    ("technology_selection_wasteCaL", "emissions_minC"),
+]
 
 SCENARIO_LABELS = {
-    "technology_selection": "Technology selection",
-    "technology_selection_wasteCaL": "Technology selection + calcium looping",
+    "technology_selection_costs": "Technology selection (cost-minimizing)",
+    "technology_selection_emissions_minC": "Technology selection (emissions-minimizing)",
+    "technology_selection_wasteCaL_costs": "Technology selection + calcium looping (cost-minimizing)",
+    "technology_selection_wasteCaL_emissions_minC": "Technology selection + calcium looping (emissions-minimizing)",
 }
 
 HOURS_PER_YEAR = 8760
@@ -54,8 +60,7 @@ def polygon_to_paths(geom, tolerance=0.01):
     ]
 
 
-def build_scenario(h5_rel: str) -> dict:
-    h5_path = Path(h5_rel)
+def build_scenario(h5_path: Path) -> dict:
     nodes_gdf = m.gpd.read_file(m.GIS_NODES)
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
 
@@ -191,16 +196,24 @@ def build_scenario(h5_rel: str) -> dict:
 
 def main():
     italy = m.gpd.read_file(m.ITALY_SHP)
+    generated_from = {}
     data = {
-        "generated_from": RUNS,
+        "generated_from": generated_from,
         "scenario_labels": SCENARIO_LABELS,
         "italy_boundary": polygon_to_paths(italy.geometry.iloc[0]),
         "map_bounds": m.MAP_BOUNDS,
         "scenarios": {},
     }
-    for scenario, h5_rel in RUNS.items():
-        print(f"Building {scenario}...")
-        data["scenarios"][scenario] = build_scenario(h5_rel)
+    for scenario_name, objective in SCENARIOS:
+        run_key = f"{scenario_name}_{objective}"
+        try:
+            h5_path = m.find_run_h5(scenario_name, objective)
+        except FileNotFoundError as e:
+            print(f"Building {run_key}... SKIPPED - {e}")
+            continue
+        print(f"Building {run_key} ({h5_path})...")
+        generated_from[run_key] = str(h5_path)
+        data["scenarios"][run_key] = build_scenario(h5_path)
 
     out_path = Path("dashboard_data.json")
     with open(out_path, "w", encoding="utf-8") as f:
