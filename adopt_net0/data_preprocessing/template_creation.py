@@ -359,7 +359,7 @@ def initialize_configuration_templates() -> dict:
             "mipgap": {"description": "Value to define MIP gap.", "value": 0.001},
             "timelim": {
                 "description": "Value to define time limit in hours.",
-                "value": 10,
+                "value": 18,
             },
             "threads": {
                 "description": "Value to define number of threads (default is maximum available).",

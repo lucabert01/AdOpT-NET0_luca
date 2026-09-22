@@ -3,10 +3,10 @@ Exports everything the interactive technology-selection dashboard (an HTML
 artifact) needs as one JSON file: Italy basemap polygons, node positions,
 built transport corridors (with annualized flow + load factor), and capture
 units (one row per genuine real-world emitter, plus its underlying candidate
-technologies) for all four (scenario_name, objective) combinations in
-main_italy.py's SCENARIOS: technology_selection and
-technology_selection_wasteCaL, each run once minimizing "costs" and once
-minimizing "emissions_minC".
+technologies) for all five (scenario_name, objective, carbon_tax) combinations
+in main_italy.py's SCENARIOS: technology_selection cost-minimizing at three
+carbon_tax levels (150/200/250 EUR/tonne), technology_selection
+emissions-minimizing, and technology_selection_wasteCaL emissions-minimizing.
 
 Reuses ccs_chain_plots.py's loaders so the dashboard's numbers are exactly
 the ones already validated in the static PNG figures (same materiality
@@ -19,17 +19,21 @@ import numpy as np
 
 import ccs_chain_plots as m
 
+# carbon_tax disambiguates the three same-name/same-objective "costs" runs
+# (main_italy.py's tax sweep); leave None for scenarios that don't vary it.
 SCENARIOS = [
-    ("technology_selection", "costs"),
-    ("technology_selection", "emissions_minC"),
-    ("technology_selection_wasteCaL", "costs"),
-    ("technology_selection_wasteCaL", "emissions_minC"),
+    ("technology_selection", "costs", 150),
+    ("technology_selection", "costs", 200),
+    ("technology_selection", "costs", 250),
+    ("technology_selection", "emissions_minC", None),
+    ("technology_selection_wasteCaL", "emissions_minC", None),
 ]
 
 SCENARIO_LABELS = {
-    "technology_selection_costs": "Technology selection (cost-minimizing)",
+    "technology_selection_costs_tax150": "Technology selection (cost-minimizing, CO2 tax 150 EUR/t)",
+    "technology_selection_costs_tax200": "Technology selection (cost-minimizing, CO2 tax 200 EUR/t)",
+    "technology_selection_costs_tax250": "Technology selection (cost-minimizing, CO2 tax 250 EUR/t)",
     "technology_selection_emissions_minC": "Technology selection (emissions-minimizing)",
-    "technology_selection_wasteCaL_costs": "Technology selection + calcium looping (cost-minimizing)",
     "technology_selection_wasteCaL_emissions_minC": "Technology selection + calcium looping (emissions-minimizing)",
 }
 
@@ -204,10 +208,10 @@ def main():
         "map_bounds": m.MAP_BOUNDS,
         "scenarios": {},
     }
-    for scenario_name, objective in SCENARIOS:
-        run_key = f"{scenario_name}_{objective}"
+    for scenario_name, objective, carbon_tax in SCENARIOS:
+        run_key = f"{scenario_name}_{objective}" + (f"_tax{carbon_tax}" if carbon_tax is not None else "")
         try:
-            h5_path = m.find_run_h5(scenario_name, objective)
+            h5_path = m.find_run_h5(scenario_name, objective, carbon_tax=carbon_tax)
         except FileNotFoundError as e:
             print(f"Building {run_key}... SKIPPED - {e}")
             continue

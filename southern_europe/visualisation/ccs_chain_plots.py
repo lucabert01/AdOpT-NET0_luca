@@ -216,17 +216,30 @@ RESULTS_ROOT = Path("../Results_CCSchainOptimization")
 _SAME_RUN_GAP = timedelta(minutes=10)
 
 
-def find_run_h5(scenario_name: str, objective: str) -> Path:
+def find_run_h5(scenario_name: str, objective: str, carbon_tax: int | None = None) -> Path:
     """
     Resolves scenario_name + objective (see main_italy.py's SCENARIOS, where
-    each entry is now one (name, objective) pair -- e.g. "technology_selection"
-    is run once with objective="costs" and once with objective="emissions_minC")
+    each entry is now one (name, objective, carbon_tax) combination -- e.g.
+    "technology_selection" is run with objective="costs" at three different
+    carbon_tax levels (150/200/250) and once with objective="emissions_minC")
     to that run's optimization_results.h5, instead of hand-editing a timestamp
     string here every time main_italy.py is re-run.
 
+    :param carbon_tax: disambiguates between multiple runs that share the same
+        scenario_name AND objective but differ in carbon_tax (main_italy.py's
+        cost-minimizing tax sweep at 150/200/250 EUR/tonne all land in
+        Results_CCSchainOptimization/<scenario_name>/ with objective="costs").
+        When given, only that exact tax level's folder
+        (tax<carbon_tax>_<objective>_<scenario_name>-*) is matched. When
+        omitted (the default), ANY tax level matches -- correct for scenarios
+        that don't vary carbon_tax (e.g. emissions_minC runs), but ambiguous
+        for a tax sweep, where it silently falls back to "most recently run"
+        (see below) rather than picking a specific level.
+
     Globs Results_CCSchainOptimization/<scenario_name>/ for every folder
-    matching *_<objective>_<scenario_name>-* (main_italy.py's case_name
-    convention). A single main_italy.py run can call modelhub's
+    matching *_<objective>_<scenario_name>-* (or, with carbon_tax given,
+    tax<carbon_tax>_<objective>_<scenario_name>-*) -- main_italy.py's
+    case_name convention. A single main_italy.py run can call modelhub's
     _call_solver() -- which writes a fresh timestamped results folder every
     time it's invoked -- more than once, e.g.:
       - objective="emissions_minC" runs modelhub._optimize_costs_minE(),
@@ -262,7 +275,11 @@ def find_run_h5(scenario_name: str, objective: str) -> Path:
     stale pre-fix run over the corrected one every time).
     """
     scenario_dir = RESULTS_ROOT / scenario_name
-    candidates = sorted(scenario_dir.glob(f"*_{objective}_{scenario_name}-*"))
+    if carbon_tax is not None:
+        glob_pattern = f"tax{carbon_tax}_{objective}_{scenario_name}-*"
+    else:
+        glob_pattern = f"*_{objective}_{scenario_name}-*"
+    candidates = sorted(scenario_dir.glob(glob_pattern))
 
     timestamped = []
     for cand in candidates:
@@ -298,8 +315,8 @@ def find_run_h5(scenario_name: str, objective: str) -> Path:
     if best_path is None:
         raise FileNotFoundError(
             f"No usable optimization_results.h5 found for scenario_name="
-            f"'{scenario_name}', objective='{objective}' under {scenario_dir} "
-            f"(looked for *_{objective}_{scenario_name}-*)."
+            f"'{scenario_name}', objective='{objective}', carbon_tax={carbon_tax} "
+            f"under {scenario_dir} (looked for {glob_pattern})."
         )
     return best_path
 

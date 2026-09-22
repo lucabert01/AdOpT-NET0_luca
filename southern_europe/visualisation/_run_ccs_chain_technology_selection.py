@@ -1,27 +1,34 @@
 """
 Ad-hoc driver: runs ccs_chain_plots.py's figure set for every (scenario_name,
-objective) combination in main_italy.py's SCENARIOS (each sector can pick its
-own capture technology, so nodes like Ferrara/Piacenza host more than one
-distinct emitter -- see ccs_chain_plots.py's _draw_node_emitters). Same
-monkeypatch pattern as _run_ccs_chain_multi.py.
+objective, carbon_tax) combination in main_italy.py's SCENARIOS (each sector
+can pick its own capture technology, so nodes like Ferrara/Piacenza host more
+than one distinct emitter -- see ccs_chain_plots.py's _draw_node_emitters).
+Same monkeypatch pattern as _run_ccs_chain_multi.py.
 
-main_italy.py now runs each scenario name (technology_selection,
-technology_selection_wasteCaL) once per objective ("costs" and
-"emissions_minC") -- see main_italy.py's SCENARIOS list -- so this iterates
-all four combinations instead of hardcoding one h5 path per scenario name.
-ccs_chain_plots.find_run_h5 resolves each (name, objective) pair to its
-result folder and picks the real multi-period solve over any leftover
-design-days/clustering pre-solve (see that function's docstring).
+main_italy.py runs "technology_selection" cost-minimizing at three carbon_tax
+levels (150/200/250 EUR/tonne) plus once emissions-minimizing, and
+"technology_selection_wasteCaL" once emissions-minimizing -- see
+main_italy.py's SCENARIOS list -- so this iterates all five combinations
+instead of hardcoding one h5 path per scenario name.
+ccs_chain_plots.find_run_h5 resolves each (name, objective, carbon_tax)
+combination to its result folder and picks the real multi-period solve over
+any leftover design-days/clustering pre-solve (see that function's
+docstring); carbon_tax disambiguates the three same-name/same-objective cost
+runs from each other.
 """
 from pathlib import Path
 
 import ccs_chain_plots as m
 
+# carbon_tax is only needed to disambiguate multiple runs sharing the same
+# (scenario_name, objective) -- e.g. the "costs" tax sweep below. Leave it
+# None for scenarios that don't vary carbon_tax (emissions_minC runs).
 SCENARIOS = [
-    ("technology_selection", "costs"),
-    ("technology_selection", "emissions_minC"),
-    ("technology_selection_wasteCaL", "costs"),
-    ("technology_selection_wasteCaL", "emissions_minC"),
+    ("technology_selection", "costs", 150),
+    ("technology_selection", "costs", 200),
+    ("technology_selection", "costs", 250),
+    ("technology_selection", "emissions_minC", None),
+    ("technology_selection_wasteCaL", "emissions_minC", None),
 ]
 
 # Node used for the per-emitter zoom-in and the downstream-of-storage inflow
@@ -30,14 +37,14 @@ SCENARIOS = [
 EMITTER_ZOOM_NODE = "SILLA 2"
 INFLOW_NODE = "Eni S.p.A Casalborsetti"
 
-for scenario_name, objective in SCENARIOS:
-    run_key = f"{scenario_name}_{objective}"
+for scenario_name, objective, carbon_tax in SCENARIOS:
+    run_key = f"{scenario_name}_{objective}" + (f"_tax{carbon_tax}" if carbon_tax is not None else "")
     print("\n" + "=" * 80)
     print(f"SCENARIO: {run_key}")
     print("=" * 80)
 
     try:
-        h5_path = m.find_run_h5(scenario_name, objective)
+        h5_path = m.find_run_h5(scenario_name, objective, carbon_tax=carbon_tax)
     except FileNotFoundError as e:
         print(f"  SKIPPED - {e}")
         continue
