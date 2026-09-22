@@ -57,7 +57,8 @@ pipeline_size_class_max_capacity_t_h = {
     "CO2_Pipeline_medium": 478.8,
     "CO2_Pipeline_large": 2000.0,
 }
-carbon_tax = 250  # euro per tonne CO2
+default_carbon_tax = 250  # euro per tonne CO2 -- used by any scenario in SCENARIOS
+                           # that doesn't set its own "carbon_tax" (see run_scenario)
 enable_carbon_pricing = True
 nr_DD_days = 10
 node_metrics_suffix = "paper"  # base case with truck connections at the cutoff of 150kt/y
@@ -117,23 +118,36 @@ SCENARIOS = [
     # Baseline choice: cement picks between the existing MEA-retrofit route and a
     # new oxyfuel-hybrid plant; waste picks between the existing MEA-retrofit route
     # and a new calcium-looping unit. All other sectors stay at their fixed baseline
-    # (MEA retrofit where applicable). Run once minimizing cost (carbon_tax priced
-    # in) and once minimizing emissions directly, for comparison.
+    # (MEA retrofit where applicable). Cost-minimizing, run at three increasing
+    # CO2 tax levels to trace how the cement/waste technology split shifts as
+    # carbon pricing tightens.
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
-     "objective": "costs"},
+     "objective": "costs",
+     "carbon_tax": 150},
+    {"name": "technology_selection",
+     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
+     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
+     "objective": "costs",
+     "carbon_tax": 200},
+    {"name": "technology_selection",
+     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
+     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
+     "objective": "costs",
+     "carbon_tax": 250},
+    # Same choice set, minimizing emissions directly -- the upper bound the cost
+    # sweep above approaches as carbon_tax rises. carbon_tax doesn't affect an
+    # emissions-only objective, so this one run at the default level stands in
+    # for the whole sweep (no need to repeat it per tax level).
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "emissions_minC"},
     # Same cement choice, but waste is forced to calcium looping only (no MEA-retrofit
     # alternative) -- isolates the effect of removing waste's own technology choice
-    # while keeping cement's choice active. Same costs/emissions_minC pair.
-    {"name": "technology_selection_wasteCaL",
-     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
-     "tech_for_waste": ["WasteCaL_CCS"],
-     "objective": "costs"},
+    # while keeping cement's choice active. Emissions-minimizing only (no cost/tax
+    # sweep requested for this variant).
     {"name": "technology_selection_wasteCaL",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteCaL_CCS"],
@@ -248,18 +262,20 @@ def enforce_single_cement_technology(m: "adopt.ModelHub", period: str = "period1
 
 
 def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list,
-                  objective: str = "costs", flatten_profiles: bool = False, nr_dd_days: int = None):
+                  objective: str = "costs", carbon_tax: int = None,
+                  flatten_profiles: bool = False, nr_dd_days: int = None):
     """
     Runs the full CCS-chain data-preparation + optimization pipeline for one
     emitter-technology scenario (a choice of cement and waste technology).
 
     Writes its case-study input data to Italy_CaseStudy/<scenario_name>/ and its
     results to Results_CCSchainOptimization/<scenario_name>/, so multiple scenarios
-    can be run back to back without overwriting each other. Two scenarios may share
-    the same scenario_name but differ in objective (see SCENARIOS) -- their results
-    still land in the same Results_CCSchainOptimization/<scenario_name>/ folder but
-    stay distinguishable since case_name embeds the objective in every result
-    sub-folder's timestamp prefix.
+    can be run back to back without overwriting each other. Several scenarios may
+    share the same scenario_name but differ in objective and/or carbon_tax (see
+    SCENARIOS) -- their results still land in the same
+    Results_CCSchainOptimization/<scenario_name>/ folder but stay distinguishable
+    since case_name embeds both the objective and the carbon_tax level in every
+    result sub-folder's timestamp prefix.
 
     :param str scenario_name: folder-safe name identifying this scenario
     :param list tech_for_cement: technology name(s) to use for the Cement sector
@@ -271,6 +287,8 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         filename)
     :param str objective: AdOpT-NET0 optimization objective, "costs" or
         "emissions_minC".
+    :param int carbon_tax: euro per tonne CO2 to apply to this scenario. Defaults
+        to the module-level default_carbon_tax if not given.
     :param bool flatten_profiles: if True, replace every hourly demand and
         electricity/heat price profile with its own annual average (see
         update_carrier_data's docstring) to remove hourly variance while preserving
@@ -278,8 +296,12 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     :param int nr_dd_days: overrides the module-level nr_DD_days for this scenario's
         number of typical/design days, if given.
     """
+    if carbon_tax is None:
+        carbon_tax = default_carbon_tax
+
     print("\n" + "=" * 80)
-    print(f"SCENARIO: {scenario_name}  (cement={tech_for_cement}, waste={tech_for_waste}, objective={objective})")
+    print(f"SCENARIO: {scenario_name}  (cement={tech_for_cement}, waste={tech_for_waste}, "
+          f"objective={objective}, carbon_tax={carbon_tax})")
     print("=" * 80)
 
     technology_selection = {
@@ -368,11 +390,16 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         configuration = json.load(json_file)
     configuration["optimization"]["objective"]["value"] = objective # set optimization objective
     configuration["solveroptions"]["mipgap"]["value"] = 0.01 # set MILP gap
+    configuration["solveroptions"]["timelim"]["value"] = 18 # set solver time limit (hours)
     configuration['optimization']['typicaldays']['N']['value'] = nr_dd_days if nr_dd_days is not None else nr_DD_days
     configuration['optimization']['typicaldays']['method']['value'] = 1  # cluster demand/balances too (see IIS diagnosis: method 2 forced identical clinker output across hours mapped to the same typical day despite differing demand)
     configuration['reporting']['save_summary_path']['value'] = result_path
     configuration['reporting']['save_path']['value'] = result_path
-    configuration['reporting']['case_name']['value'] = f"{objective}_{scenario_name}"
+    # tax{carbon_tax} prefixed BEFORE "{objective}_{scenario_name}" (rather than
+    # appended after) so existing glob patterns like ccs_chain_plots.find_run_h5's
+    # "*_{objective}_{scenario_name}-*" still match -- they only require that
+    # suffix to appear somewhere in the folder name, not that it start there.
+    configuration['reporting']['case_name']['value'] = f"tax{carbon_tax}_{objective}_{scenario_name}"
 
     with open(input_data_path / "ConfigModel.json", "w") as json_file:
         json.dump(configuration, json_file, indent=4)
@@ -741,6 +768,7 @@ if __name__ == "__main__":
             scenario["tech_for_cement"],
             scenario["tech_for_waste"],
             objective=scenario.get("objective", "costs"),
+            carbon_tax=scenario.get("carbon_tax"),
             flatten_profiles=scenario.get("flatten_profiles", False),
             nr_dd_days=scenario.get("nr_dd_days"),
         )
