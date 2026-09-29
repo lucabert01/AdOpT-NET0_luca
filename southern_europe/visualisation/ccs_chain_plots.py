@@ -13,6 +13,14 @@ Produces five figures from a solved optimization_results.h5:
   1c. ccs_chain_network_map_cost_factor.png - same built network + CCS status,
                                         on the grayscale integrated cost-factor
                                         grid (as in cost_factor_grid_map_italy.py).
+  1e. italy_cost_factor_emitters_storage.png/.pdf - input-data map: the same
+                                        cost-factor grid with every emitter
+                                        marked by sector, transport hubs and
+                                        the storage site (no results needed).
+  1f. italy_{pipeline_network_<small|medium|large>,truck_network,
+      railway_network}.png/.pdf - input-data maps of the candidate arcs
+                                        per transport mode / pipeline size
+                                        class, same node styling as 1e.
   1d. ccs_chain_network_map_trunk_highlight.png - one specific chain of built
                                         arcs (default: the Piacenza -> Modena-H ->
                                         Ferrara -> Ravenna -> Casalborsetti
@@ -43,7 +51,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from shapely.geometry import LineString
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from shapely.geometry import LineString, Point
 from pathlib import Path
 from datetime import datetime, timedelta
 import cmcrameri.cm as cmc
@@ -64,7 +73,9 @@ BATLOW = [cmc.batlow(x) for x in np.linspace(0, 1, 7)]
 MODE_COLORS = {
     "CO2_Pipeline": BATLOW[0],  # dark blue
     "CO2Truck": BATLOW[2],      # green
-    "CO2Railway": BATLOW[4],    # yellow
+    # purple, not batlow's ochre BATLOW[4]: that read as the same hue as the
+    # Waste sector marker (#E69F00) on the input-data maps
+    "CO2Railway": "#7B3294",
 }
 MODE_LABELS = {"CO2_Pipeline": "Pipeline", "CO2Truck": "Truck", "CO2Railway": "Railway"}
 
@@ -91,6 +102,39 @@ STATUS_CRITICAL = BATLOW[5]
 
 TRANSPORT_COLOR = BATLOW[1]  # transport hub marker
 STORAGE_COLOR = BATLOW[6]    # storage marker
+
+# User-facing name for a node_metrics_paper.xlsx node_type / sector, used by
+# every map/legend that shows sectors -- the only "Other" node is Ravenna's
+# industrial cluster, so say so instead of a generic "Other".
+SECTOR_DISPLAY_LABELS = {
+    "Other": "Industrial cluster of Ravenna",
+    "Fertilizers": "Fertilizers",
+}
+
+
+def sector_display_label(sector: str) -> str:
+    return SECTOR_DISPLAY_LABELS.get(sector, sector)
+
+
+# Sector encoding for the input-data map (plot_cost_factor_input_map): color
+# AND marker shape, so identity survives CVD/grayscale print. Okabe-Ito hues
+# rather than batlow -- batlow's light end (#faccfa) is STORAGE_COLOR itself
+# and its dark end disappears on the dark cells of the grayscale cost-factor
+# grid. Validated with the dataviz validator (all pairs: normal-vision
+# dE >= 15.6, CVD dE >= 7.6 -- legal with the shape as secondary encoding).
+# Star (storage) and square (transport hub) are reserved and not used here.
+# FertilizersCombustion/FertilizersSMR are one physical complex (Ferrara) ->
+# one "Fertilizers" group, as in ccs_chain_emitter_cost_ranking.py.
+SECTOR_MAP_ORDER = ["Cement", "Waste", "Refining", "Lime", "Fertilizers", "Other"]
+SECTOR_MAP_STYLE = {
+    "Cement":      {"color": "#0072B2", "marker": "o", "scale": 1.0},
+    "Waste":       {"color": "#E69F00", "marker": "^", "scale": 1.35},
+    "Refining":    {"color": "#009E73", "marker": "D", "scale": 1.0},
+    "Lime":        {"color": "#CC79A7", "marker": "v", "scale": 1.35},
+    "Fertilizers": {"color": "#56B4E9", "marker": "h", "scale": 1.2},
+    "Other":       {"color": "#D55E00", "marker": "p", "scale": 1.3},
+}
+SECTOR_TO_MAP_GROUP = {"FertilizersCombustion": "Fertilizers", "FertilizersSMR": "Fertilizers"}
 
 # ------------------------------------------------------------------
 # Capture technology families
@@ -238,8 +282,10 @@ def find_run_h5(scenario_name: str, objective: str, carbon_tax: int | None = Non
 
     Globs Results_CCSchainOptimization/<scenario_name>/ for every folder
     matching *_<objective>_<scenario_name>-* (or, with carbon_tax given,
-    tax<carbon_tax>_<objective>_<scenario_name>-*) -- main_italy.py's
-    case_name convention. A single main_italy.py run can call modelhub's
+    *_tax<carbon_tax>_<objective>_<scenario_name>-*) -- main_italy.py's
+    case_name convention (case_name itself is always further prefixed with a
+    run timestamp by the reporting layer, hence the leading "*" in both
+    patterns). A single main_italy.py run can call modelhub's
     _call_solver() -- which writes a fresh timestamped results folder every
     time it's invoked -- more than once, e.g.:
       - objective="emissions_minC" runs modelhub._optimize_costs_minE(),
@@ -276,7 +322,7 @@ def find_run_h5(scenario_name: str, objective: str, carbon_tax: int | None = Non
     """
     scenario_dir = RESULTS_ROOT / scenario_name
     if carbon_tax is not None:
-        glob_pattern = f"tax{carbon_tax}_{objective}_{scenario_name}-*"
+        glob_pattern = f"*_tax{carbon_tax}_{objective}_{scenario_name}-*"
     else:
         glob_pattern = f"*_{objective}_{scenario_name}-*"
     candidates = sorted(scenario_dir.glob(glob_pattern))
@@ -1185,17 +1231,21 @@ def attach_route_geometries(built_arcs: pd.DataFrame, nodes_gdf: gpd.GeoDataFram
 # ============================================================
 # PLOT 1 - Main network map
 # ============================================================
-def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
-    italy = gpd.read_file(ITALY_SHP)
+def _draw_ccs_network_on_ax(ax, built_arcs, nodes_gdf, ccs_df):
+    """
+    Draws the built CO2 transport network (routes colored/sized by mode and
+    built capacity, nodes colored by CCS status) onto an existing ax -- the
+    shared core of plot_main_map, factored out so a multi-panel figure (see
+    plot_technology_selection_tax_sweep_maps) can reuse the exact same
+    drawing logic per subplot instead of each panel creating its own figure,
+    legend and KPI box.
+
+    Returns real_emitters_df(ccs_df) so the caller can build a legend/KPI
+    text from it.
+    """
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
     name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
     real_df = real_emitters_df(ccs_df)
-
-    fig, ax = plt.subplots(figsize=(12.5, 12))
-    fig.patch.set_facecolor(SURFACE)
-    ax.set_facecolor(SURFACE)
-
-    setup_base_map(ax, italy, "Optimized CO$_2$ Capture, Transport & Storage Network — Northern Italy")
 
     # --- routes, drawn truck/rail first so pipeline (usually dominant) sits on top ---
     draw_order = ["CO2Truck", "CO2Railway", "CO2_Pipeline"]
@@ -1243,6 +1293,20 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
                 style_fn=lambda row: dict(s=100 if row["ccs_installed"] else 90,
                                            zorder=22 if row["ccs_installed"] else 21),
             )
+
+    return real_df
+
+
+def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
+    italy = gpd.read_file(ITALY_SHP)
+
+    fig, ax = plt.subplots(figsize=(12.5, 12))
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+
+    setup_base_map(ax, italy, "Optimized CO$_2$ Capture, Transport & Storage Network — Northern Italy")
+
+    real_df = _draw_ccs_network_on_ax(ax, built_arcs, nodes_gdf, ccs_df)
 
     legend_handles = [
         Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
@@ -1503,6 +1567,233 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")
+
+
+# ============================================================
+# PLOT 1e - Input data: cost-factor grid + emitters by sector + storage
+# ============================================================
+def _load_input_nodes() -> pd.DataFrame:
+    """node_metrics_paper.xlsx 'nodes' sheet with a map-group column
+    (fertilizer sectors collapsed, see SECTOR_TO_MAP_GROUP)."""
+    nodes = pd.read_excel(NODE_METRICS_PAPER, sheet_name="nodes")
+    nodes["group"] = nodes["node_type"].map(lambda t: SECTOR_TO_MAP_GROUP.get(t, t))
+    return nodes
+
+
+def _draw_input_nodes(ax, nodes: pd.DataFrame) -> list:
+    """Draws every case-study node for the input-data maps: emitters by
+    sector (SECTOR_MAP_STYLE), transport hubs as squares, the storage site
+    as a star. Nodes hosting more than one sector (Ferrara, Piacenza) are
+    drawn as a small linked ring around the true node location. Returns the
+    node legend handles (only for sectors actually present)."""
+    present_groups = set()
+    for name, g in nodes.groupby("node_name", sort=False):
+        point = Point(g["longitude"].iloc[0], g["latitude"].iloc[0])
+        groups = list(dict.fromkeys(g["group"]))
+        if "Storage" in groups:
+            ax.scatter(point.x, point.y, marker="*", s=480, color=STORAGE_COLOR,
+                       edgecolor=INK_PRIMARY, linewidth=1.0, zorder=25)
+            continue
+        if "Transport" in groups:
+            ax.scatter(point.x, point.y, marker="s", s=100, color=TRANSPORT_COLOR,
+                       edgecolor="white", linewidth=1.2, zorder=20)
+            continue
+        positions = _node_marker_positions(point, len(groups), radius=0.09)
+        if len(groups) > 1:
+            for x, y in positions:
+                ax.plot([point.x, x], [point.y, y], color=INK_SECONDARY, linewidth=0.8, zorder=15)
+            ax.scatter(point.x, point.y, marker="o", s=12, color=INK_SECONDARY,
+                       edgecolor="white", linewidth=0.4, zorder=16)
+        for (x, y), grp in zip(positions, groups):
+            style = SECTOR_MAP_STYLE[grp]
+            present_groups.add(grp)
+            ax.scatter(x, y, marker=style["marker"], s=110 * style["scale"] * (0.85 if len(groups) > 1 else 1.0),
+                       color=style["color"], edgecolor=INK_PRIMARY, linewidth=0.8, zorder=22)
+
+    return [
+        Line2D([0], [0], marker=SECTOR_MAP_STYLE[grp]["marker"], color="w",
+               markerfacecolor=SECTOR_MAP_STYLE[grp]["color"], markeredgecolor=INK_PRIMARY,
+               markersize=11, linestyle="None", label=sector_display_label(grp))
+        for grp in SECTOR_MAP_ORDER if grp in present_groups
+    ] + [
+        Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
+               markersize=10, label="Transport hub", linestyle="None"),
+        Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor=INK_PRIMARY,
+               markersize=17, label="CO$_2$ storage", linestyle="None"),
+    ]
+
+
+def plot_cost_factor_input_map(out_name: str = "italy_cost_factor_emitters_storage"):
+    """Case-study input map (no optimization results needed): the integrated
+    pipeline cost-factor grid (grayscale, same as plot_network_map_cost_factor)
+    with every emitter marked by sector, the transport hubs, and the CO2
+    storage site as a star (same style as the ccs_chain network maps) -- see
+    _draw_input_nodes."""
+    italy = gpd.read_file(ITALY_SHP)
+    fishnet_clipped = compute_cost_factor_grid(italy)
+
+    fig, ax = plt.subplots(figsize=(12.5, 12))
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+
+    fishnet_clipped.plot(column="COST_FACTOR", ax=ax, cmap=BW_CMAP, legend=False, zorder=0)
+    fishnet_clipped.boundary.plot(ax=ax, color="gray", linewidth=0.3, alpha=0.5, zorder=1)
+    setup_base_map(ax, italy, "")  # no title -- the paper caption covers it
+
+    legend_handles = _draw_input_nodes(ax, _load_input_nodes())
+    ax.legend(
+        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.08),
+        ncol=4, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
+    )
+
+    sm = plt.cm.ScalarMappable(
+        cmap=BW_CMAP,
+        norm=plt.Normalize(fishnet_clipped["COST_FACTOR"].min(), fishnet_clipped["COST_FACTOR"].max()),
+    )
+    # Colorbar axis matched to the map's own height (the equal-aspect map is
+    # much wider than tall, so a plain fig.colorbar(ax=ax) overshoots it).
+    cax = make_axes_locatable(ax).append_axes("right", size="2.5%", pad=0.15)
+    cbar = fig.colorbar(sm, cax=cax)
+    cbar.set_label("Cost Factor Value", fontsize=11)
+
+    fig.tight_layout(rect=[0, 0.06, 1, 1])
+    for ext in ("png", "pdf"):
+        out_file = OUT_DIR / f"{out_name}.{ext}"
+        fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
+        print(f"Saved: {out_file}")
+    plt.close(fig)
+
+
+# ============================================================
+# PLOT 1f - Input data: candidate connections per transport mode
+# ============================================================
+NODE_METRICS_SHEET_BY_MODE = {"CO2_Pipeline": "pipeline", "CO2Truck": "truck", "CO2Railway": "railway"}
+PIPELINE_CLASS_CONNECTIONS = path_data_case_study / "network_capex_metrics/pipeline_size_class_connections.xlsx"
+
+
+def _candidate_connection_matrix(mode: str, size_class: str | None = None) -> pd.DataFrame:
+    """node_id x node_id matrix of the arcs the optimizer may build for one
+    transport mode (>0 = allowed, directed), exactly as main_italy.py reads
+    it: node_metrics_paper.xlsx's per-mode sheet, and for a pipeline size
+    class additionally masked by pipeline_size_class_connections.xlsx via
+    the same load_pipeline_class_connection_matrix main_italy.py uses."""
+    matrix = pd.read_excel(NODE_METRICS_PAPER, index_col=0, sheet_name=NODE_METRICS_SHEET_BY_MODE[mode])
+    if size_class is None:
+        return matrix
+    import contextlib, io, sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from data_process.utilities.defined_functions import load_pipeline_class_connection_matrix
+    # silence its emoji progress print (crashes a cp1252 Windows console)
+    with contextlib.redirect_stdout(io.StringIO()):
+        return load_pipeline_class_connection_matrix(PIPELINE_CLASS_CONNECTIONS, size_class, matrix)
+
+
+def _route_geometries_by_pair(mode: str) -> dict:
+    """{frozenset((id_a, id_b)): geometry} for one mode's route file -- same
+    lookup as attach_route_geometries."""
+    route_gdf = gpd.read_file(ROUTES[mode]).to_crs("EPSG:4326")
+    if "Node" not in route_gdf.columns and {"from_id", "to_id"}.issubset(route_gdf.columns):
+        route_gdf["Node"] = route_gdf["from_id"].astype(int).astype(str) + "," + route_gdf["to_id"].astype(int).astype(str)
+    pair_to_geom = {}
+    for _, row in route_gdf.iterrows():
+        parts = str(row["Node"]).strip().split(",")
+        if len(parts) == 2:
+            try:
+                pair_to_geom[frozenset((int(parts[0]), int(parts[1])))] = row.geometry
+            except ValueError:
+                continue
+    return pair_to_geom
+
+
+def _draw_arrow(ax, coords, color, fraction, reverse=False):
+    point, (dx, dy) = _point_and_tangent_at_fraction(coords, fraction)
+    norm = (dx ** 2 + dy ** 2) ** 0.5
+    if norm == 0:
+        return
+    ux, uy = dx / norm, dy / norm
+    if reverse:
+        ux, uy = -ux, -uy
+    arrow_len = 0.10
+    start = (point[0] - ux * arrow_len / 2, point[1] - uy * arrow_len / 2)
+    end = (point[0] + ux * arrow_len / 2, point[1] + uy * arrow_len / 2)
+    ax.annotate("", xy=end, xytext=start,
+                arrowprops=dict(arrowstyle="-|>", color=color, lw=1.3, mutation_scale=12), zorder=6)
+
+
+def plot_candidate_network_map(mode: str, size_class: str | None = None, out_name: str | None = None):
+    """Case-study input map of the candidate arcs for one transport mode
+    (pipeline per size class, truck, railway) on the same base map and node
+    styling as plot_cost_factor_input_map (without the cost-factor grid).
+    Each corridor is drawn once along its real route geometry (straight line
+    if none), with one arrow per allowed direction (two for a
+    bidirectional arc). No title -- the paper caption covers it."""
+    italy = gpd.read_file(ITALY_SHP)
+    nodes = _load_input_nodes()
+    id_to_point = {
+        int(r["node_id"]): Point(r["longitude"], r["latitude"])
+        for _, r in nodes.drop_duplicates("node_id").iterrows()
+    }
+    matrix = _candidate_connection_matrix(mode, size_class)
+    matrix.index = matrix.index.astype(int)
+    matrix.columns = matrix.columns.astype(int)
+    pair_to_geom = _route_geometries_by_pair(mode)
+    color = MODE_COLORS[mode]
+
+    fig, ax = plt.subplots(figsize=(12.5, 12))
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+    setup_base_map(ax, italy, "")
+
+    n_arcs, drawn_pairs = 0, set()
+    for a in matrix.index:
+        for b in matrix.columns:
+            if a == b or not matrix.loc[a, b] > 0:
+                continue
+            n_arcs += 1
+            pair = frozenset((a, b))
+            if pair in drawn_pairs:
+                continue
+            drawn_pairs.add(pair)
+            forward = True
+            backward = b in matrix.index and a in matrix.columns and matrix.loc[b, a] > 0
+            p_a, p_b = id_to_point.get(a), id_to_point.get(b)
+            if p_a is None or p_b is None:
+                continue
+            geom = pair_to_geom.get(pair) or LineString([p_a, p_b])
+            coords = _oriented_coords(geom, p_a)  # oriented a -> b
+            gpd.GeoSeries([LineString(coords)]).plot(ax=ax, color=color, linewidth=1.6, alpha=0.9, zorder=5)
+            if forward and backward:
+                _draw_arrow(ax, coords, color, 0.4, reverse=True)
+                _draw_arrow(ax, coords, color, 0.6)
+            else:
+                _draw_arrow(ax, coords, color, 0.5)
+
+    mode_label = MODE_LABELS[mode] + (f" ({size_class})" if size_class else "")
+    legend_handles = [
+        Line2D([0], [0], color=color, lw=2.5, label=f"{mode_label} candidate arc ({n_arcs} directed)"),
+        *_draw_input_nodes(ax, nodes),
+    ]
+    ax.legend(
+        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.08),
+        ncol=4, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
+    )
+
+    fig.tight_layout(rect=[0, 0.06, 1, 1])
+    if out_name is None:
+        out_name = {"CO2_Pipeline": "italy_pipeline_network", "CO2Truck": "italy_truck_network",
+                    "CO2Railway": "italy_railway_network"}[mode] + (f"_{size_class}" if size_class else "")
+    for ext in ("png", "pdf"):
+        out_file = OUT_DIR / f"{out_name}.{ext}"
+        fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
+        print(f"Saved: {out_file}")
+    plt.close(fig)
+
+
+def plot_all_candidate_network_maps():
+    for size_class in ("small", "medium", "large"):
+        plot_candidate_network_map("CO2_Pipeline", size_class)
+    plot_candidate_network_map("CO2Truck")
+    plot_candidate_network_map("CO2Railway")
 
 
 # ============================================================
@@ -2079,6 +2370,8 @@ def main():
     plot_main_map(built_arcs, nodes_gdf, ccs_df, summary)
     plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary)
     plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary)
+    plot_cost_factor_input_map()
+    plot_all_candidate_network_maps()
     plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary)
     plot_emitter_zoom(RESULTS_H5, node_name="SILLA 2", tech_name="WasteToEnergyEmitter_existing")
     plot_node_inflow(RESULTS_H5, node_name="Eni S.p.A Casalborsetti")

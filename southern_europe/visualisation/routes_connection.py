@@ -535,40 +535,13 @@ fig1b.savefig("italy_overview_cost_factor.png", dpi=300, bbox_inches='tight', fa
 print("Saved: italy_overview_cost_factor.png")
 
 # ============================================================
-# PLOT 2 — Pipeline network (standalone)
+# PLOTS 2-4 — Candidate networks per mode (pipeline per size class, truck,
+# railway). Moved to ccs_chain_plots.plot_all_candidate_network_maps so they
+# share the paper figures' node/sector styling (italy_pipeline_network_
+# {small,medium,large}, italy_truck_network, italy_railway_network .png/.pdf).
 # ============================================================
-fig2, ax2 = plt.subplots(figsize=(9, 9))
-setup_base_map(ax2, f'Pipeline network, ({len(routes_pipeline)} arcs)')
-for idx, route in routes_pipeline.iterrows():
-    plot_route_simple_with_arrow(ax2, route, route_colors['pipeline'], pipeline_directions[idx], linewidth=1.2)
-draw_nodes_by_type(ax2, nodes_selected, markersize=60)
-fig2.tight_layout(rect=[0, 0.05, 1, 1])
-fig2.savefig("italy_pipeline_network.png", dpi=300, bbox_inches='tight', facecolor='white', pad_inches=0.2)
-print("Saved: italy_pipeline_network.png")
-
-# ============================================================
-# PLOT 3 — Truck network (standalone)
-# ============================================================
-fig3, ax3 = plt.subplots(figsize=(9, 9))
-setup_base_map(ax3, f'Truck network, ({len(routes_truck)} arcs)')
-for idx, route in routes_truck.iterrows():
-    plot_route_simple_with_arrow(ax3, route, route_colors['truck'], truck_directions[idx], linewidth=1.2)
-draw_nodes_by_type(ax3, nodes_selected, markersize=60)
-fig3.tight_layout(rect=[0, 0.05, 1, 1])
-fig3.savefig("italy_truck_network.png", dpi=300, bbox_inches='tight', facecolor='white', pad_inches=0.2)
-print("Saved: italy_truck_network.png")
-
-# ============================================================
-# PLOT 4 — Railway network (standalone)
-# ============================================================
-fig4, ax4 = plt.subplots(figsize=(9, 9))
-setup_base_map(ax4, f'Railway network, ({len(routes_railway)} arcs)')
-for idx, route in routes_railway.iterrows():
-    plot_route_simple_with_arrow(ax4, route, route_colors['railway'], railway_directions[idx], linewidth=1.2)
-draw_nodes_by_type(ax4, nodes_selected, markersize=60)
-fig4.tight_layout(rect=[0, 0.05, 1, 1])
-fig4.savefig("italy_railway_network.png", dpi=300, bbox_inches='tight', facecolor='white', pad_inches=0.2)
-print("Saved: italy_railway_network.png")
+from ccs_chain_plots import plot_all_candidate_network_maps
+plot_all_candidate_network_maps()
 
 # ============================================================
 # PLOT 5 — All nodes only, no connections, styled by node_type

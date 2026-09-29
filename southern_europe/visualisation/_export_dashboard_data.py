@@ -152,7 +152,7 @@ def build_scenario(h5_path: Path) -> dict:
                 "node": node_name,
                 "lon": round(x, 5),
                 "lat": round(y, 5),
-                "sector": sector,
+                "sector": m.sector_display_label(sector),
                 "family": real_row["family"],
                 "dominant_tech": real_row["tech"],
                 "installed": bool(real_row["ccs_installed"]),
