@@ -15,13 +15,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from adopt_net0.result_management.read_results import extract_datasets_from_h5group
 from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
 
-# Technology selection as a function of the capex of MEA (x-axis) and of the ratio between the capex of oxyfuel
-# and MEA (y-axis). Results of main_cement_capex_ratio.py
+# Technology selection as a function of the capex of MEA (x-axis) and of the capex of oxyfuel (y-axis).
+# Results of main_cement_capex_sensitivity.py
 
 batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8', '#012E4D']
 figures_path = "../figures"
 
-raw_results_path = Path("./raw_results/capex_ratio")
+raw_results_path = Path("./raw_results/capex_sensitivity")
 capex_matrix = pd.read_csv(raw_results_path / "capex_matrix.csv", sep=";")
 cost_extra_fuel = 15
 
@@ -106,8 +106,6 @@ for _, case in capex_matrix.iterrows():
     results_summary.append(
         {
             "mea_capex_multiplier": case["mea_capex_multiplier"],
-            "capex_ratio_change": case["capex_ratio_change"],
-            "capex_ratio": case["capex_ratio"],
             "oxy_capex_multiplier": case["oxy_capex_multiplier"],
             "type_installed": type_installed,
             "size_ccs": ccs_size,
@@ -131,12 +129,12 @@ results_summary = pd.DataFrame(results_summary)
 results_summary.to_csv(raw_results_path / "results_summary.csv", sep=";", index=False)
 print(results_summary.to_string())
 
-# Matrices: capex ratio on the rows (highest ratio on top), capex of MEA on the columns
+# Matrices: capex of oxyfuel on the rows (highest on top), capex of MEA on the columns
 type_matrix = results_summary.pivot(
-    index="capex_ratio_change", columns="mea_capex_multiplier", values="type_installed"
+    index="oxy_capex_multiplier", columns="mea_capex_multiplier", values="type_installed"
 ).sort_index(ascending=False).sort_index(axis=1)
 cost_matrix = results_summary.pivot(
-    index="capex_ratio_change", columns="mea_capex_multiplier", values="cost_of_avoided"
+    index="oxy_capex_multiplier", columns="mea_capex_multiplier", values="cost_of_avoided"
 ).sort_index(ascending=False).sort_index(axis=1)
 
 # ------------------------------------------------------------
@@ -152,10 +150,10 @@ fig, ax = plt.subplots()
 # ------------------------------------------------------------
 # GRID PLOT
 # ------------------------------------------------------------
-for i, ratio_change in enumerate(type_matrix.index):
+for i, oxy_multiplier in enumerate(type_matrix.index):
     for j, multiplier in enumerate(type_matrix.columns):
-        tech = type_matrix.loc[ratio_change, multiplier]
-        cost = cost_matrix.loc[ratio_change, multiplier]
+        tech = type_matrix.loc[oxy_multiplier, multiplier]
+        cost = cost_matrix.loc[oxy_multiplier, multiplier]
 
         # colored cell
         ax.add_patch(
@@ -186,13 +184,13 @@ ax.set_ylim(0, len(type_matrix.index))
 ax.set_xticks([x + 0.5 for x in range(len(type_matrix.columns))])
 ax.set_yticks([y + 0.5 for y in range(len(type_matrix.index))])
 
-ax.set_xticklabels([f"+{(m - 1) * 100:.0f}%" for m in type_matrix.columns])
-ax.set_yticklabels(["Baseline" if r == 1 else f"{(r - 1) * 100:+.0f}%" for r in type_matrix.index])
+ax.set_xticklabels([f"{(m - 1) * 100:+.0f}%" for m in type_matrix.columns])
+ax.set_yticklabels([f"{(m - 1) * 100:+.0f}%" for m in type_matrix.index])
 
 ax.invert_yaxis()
 
 ax.set_xlabel("CAPEX increase of MEA [-]")
-ax.set_ylabel("CAPEX ratio oxyfuel/MEA [-]")
+ax.set_ylabel("CAPEX increase of oxyfuel [-]")
 
 legend_patches = [
     mpatches.Patch(color=type_to_color[t], label=t) for t in types
@@ -207,6 +205,6 @@ ax.legend(
 )
 
 fig.tight_layout(pad=0.6)
-save_figure_for_paper(fig, "cement_tech_selection_capex_ratio", figures_path)
+save_figure_for_paper(fig, "cement_tech_selection_capex_sensitivity", figures_path)
 
 plt.show()
