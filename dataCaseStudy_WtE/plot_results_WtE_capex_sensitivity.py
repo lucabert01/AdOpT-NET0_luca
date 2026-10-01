@@ -15,8 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from adopt_net0.result_management.read_results import extract_datasets_from_h5group
 from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
 
-# Technology selection as a function of the capex of MEA (x-axis) and of the ratio between the capex of CaL and
-# MEA (y-axis). Results of main_WtE_capex_ratio.py
+# Technology selection as a function of the capex of MEA (x-axis) and of the capex of CaL (y-axis).
+# Results of main_WtE_capex_sensitivity.py
 
 batlow_colors = [
     "#222A6A",
@@ -29,7 +29,7 @@ batlow_colors = [
 ]
 figures_path = "../figures"
 
-raw_results_path = Path("./raw_results/capex_ratio")
+raw_results_path = Path("./raw_results/capex_sensitivity")
 capex_matrix = pd.read_csv(raw_results_path / "capex_matrix.csv", sep=";")
 capex_matrix_info = json.loads((raw_results_path / "capex_matrix_info.json").read_text())
 gas_price = 40
@@ -139,7 +139,6 @@ for _, case in capex_matrix.iterrows():
     results_summary.append(
         {
             "mea_capex_multiplier": case["mea_capex_multiplier"],
-            "capex_ratio": case["capex_ratio"],
             "cal_capex_multiplier": case["cal_capex_multiplier"],
             "type_installed": type_installed,
             "size_ccs": size_ccs,
@@ -163,12 +162,12 @@ results_summary = pd.DataFrame(results_summary)
 results_summary.to_csv(raw_results_path / "results_summary.csv", sep=";", index=False)
 print(results_summary.to_string())
 
-# Matrices: capex ratio on the rows (baseline ratio on top), capex of MEA on the columns
+# Matrices: capex of CaL on the rows (baseline on top), capex of MEA on the columns
 type_matrix = results_summary.pivot(
-    index="capex_ratio", columns="mea_capex_multiplier", values="type_installed"
+    index="cal_capex_multiplier", columns="mea_capex_multiplier", values="type_installed"
 ).sort_index(ascending=False).sort_index(axis=1)
 cost_matrix = results_summary.pivot(
-    index="capex_ratio", columns="mea_capex_multiplier", values="cost_of_avoided"
+    index="cal_capex_multiplier", columns="mea_capex_multiplier", values="cost_of_avoided"
 ).sort_index(ascending=False).sort_index(axis=1)
 
 types = ["none", "MEA", "CaL"]
@@ -178,10 +177,10 @@ type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 setup_matplotlib_for_paper("single")
 fig, ax = plt.subplots()
 
-for i, ratio in enumerate(type_matrix.index):
+for i, cal_multiplier in enumerate(type_matrix.index):
     for j, multiplier in enumerate(type_matrix.columns):
-        t = type_matrix.loc[ratio, multiplier]
-        c = cost_matrix.loc[ratio, multiplier]
+        t = type_matrix.loc[cal_multiplier, multiplier]
+        c = cost_matrix.loc[cal_multiplier, multiplier]
 
         ax.add_patch(
             plt.Rectangle(
@@ -211,16 +210,11 @@ ax.set_xlim(0, len(type_matrix.columns))
 ax.set_ylim(0, len(type_matrix.index))
 ax.set_xticks([x + 0.5 for x in range(len(type_matrix.columns))])
 ax.set_yticks([y + 0.5 for y in range(len(type_matrix.index))])
-ax.set_xticklabels([f"+{(m - 1) * 100:.0f}%" for m in type_matrix.columns])
-ax.set_yticklabels(
-    [
-        f"{r:.1f}*" if abs(r - capex_matrix_info["baseline_capex_ratio"]) < 1e-6 else f"{r:.1f}"
-        for r in type_matrix.index
-    ]
-)
+ax.set_xticklabels([f"{(m - 1) * 100:+.0f}%" for m in type_matrix.columns])
+ax.set_yticklabels([f"{(m - 1) * 100:+.0f}%" for m in type_matrix.index])
 ax.invert_yaxis()
 ax.set_xlabel("CAPEX increase of MEA [-]")
-ax.set_ylabel("CAPEX ratio CaL/MEA [-]\n(* baseline)")
+ax.set_ylabel("CAPEX change of CaL [-]")
 
 # LEGEND (TOP, HORIZONTAL, SCALED)
 patches = [mpatches.Patch(color=type_to_color[t], label=t) for t in types]
@@ -234,6 +228,6 @@ ax.legend(
 )
 
 fig.tight_layout(pad=0.6)
-save_figure_for_paper(fig, "wte_tech_selection_capex_ratio", figures_path)
+save_figure_for_paper(fig, "wte_tech_selection_capex_sensitivity", figures_path)
 
 plt.show()

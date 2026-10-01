@@ -4,14 +4,10 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 import os
-from scipy.interpolate import interp1d
 
 # Technology selection (MEA vs CaL) as a function of the capex of the two capture technologies.
 # x-axis: capex of MEA relative to its baseline (1 = baseline, 1.5 = +50%, ...)
-# y-axis: ratio between the capex of CaL and the capex of MEA
-# For each cell, the baseline capex of the two technologies is scaled as:
-#   capex_MEA = mea_multiplier * capex_MEA_baseline
-#   capex_CaL = cal_multiplier * capex_CaL_baseline, with cal_multiplier = mea_multiplier * ratio / baseline_ratio
+# y-axis: capex of CaL relative to its baseline (1 = baseline, 0.5 = -50%, ...)
 # The baseline data (json files in dataCaseStudy_WtE and wasteCaL_sheet.xlsx) are never modified: the multipliers
 # are only written in the json files copied to the case study folder.
 
@@ -19,11 +15,10 @@ from scipy.interpolate import interp1d
 os.chdir(Path(__file__).resolve().parent)
 
 # Specify the path to your input data
-casepath =Path("CaseStudies_WtE/capex_ratio")
+casepath = Path("CaseStudies_WtE/capex_sensitivity")
 json_files_path = Path("./dataCaseStudy_WtE/technologies_json")
 json_files_path_network = Path("./dataCaseStudy_WtE/network_json")
-result_path = Path("dataCaseStudy_WtE/raw_results/capex_ratio")
-capex_cal_path = Path("./adopt_net0/database/templates/technology_data/Industrial/WasteCaL_data/wasteCaL_sheet.xlsx")
+result_path = Path("dataCaseStudy_WtE/raw_results/capex_sensitivity")
 
 os.makedirs(casepath, exist_ok=True)
 adopt.create_optimization_templates(casepath)
@@ -32,7 +27,6 @@ adopt.create_optimization_templates(casepath)
 info_wasteCHP = json.loads((json_files_path / "WasteCHP.json").read_text())
 info_WasteCaL_CCS = json.loads((json_files_path / "WasteCaL_CCS.json").read_text())
 ccs_type = info_wasteCHP["Performance"]["ccs"]["ccs_type"]
-info_mea = json.loads((json_files_path / f"{ccs_type}.json").read_text())
 lhv = info_wasteCHP["Performance"]["LHV"]
 th_efficiency = info_wasteCHP["Performance"]["th_efficiency"]
 emission_factor = info_wasteCHP["Performance"]["emission_factor"]
@@ -43,12 +37,7 @@ data = pd.read_excel(path_processed_data)
 carbon_tax = 200
 dh_ratio = 0.5
 explored_mea_capex_multiplier = [1, 1.5, 2]
-explored_capex_ratio = [None, 4.5, 3, 1.5]  # CaL capex / MEA capex. None = baseline ratio
-# Sizes [tCO2 captured/h] at which the capex ratio is defined. The ratio depends on the size and, for the same
-# plant, CaL is larger than MEA because it also captures the CO2 from the RDF. The reference sizes are the ones
-# chosen by the optimization for this plant when the technology is installed (carbon tax 200, dh ratio 0.5)
-ref_size_mea = 24.7
-ref_size_cal = 49.6
+explored_cal_capex_multiplier = [1, 0.5, 0.25]
 skip_solved_cases = 1  # do not re-run cases that already have results in result_path
 plant_analyzed = "PAIP" # one between: "silla2", "gerbido", "PAIP", "piacenza"
 gas_price = 40
@@ -69,65 +58,25 @@ electricity_price = electricity_price_data["el_price_itNord"]
 av_el_price = electricity_price.mean()
 
 
-def baseline_capex_mea(size):
-    """Baseline upfront capex [EUR] of MEA for a size in tCO2 captured/h (see fit_ccs_coeff)"""
-    molar_mass_CO2 = 44.01
-    economics = info_mea["Economics"]
-    design_co2_concentration = max(co2_concentration)
-    unit_capex = (economics["capex_kappa"] / (design_co2_concentration * info_mea["Performance"]["capture_rate"])
-                  + economics["capex_lambda"]) / (molar_mass_CO2 * 3600 / 1000)
-    return unit_capex * size + economics["capex_zeta"]
-
-
-def baseline_capex_cal(size):
-    """Baseline upfront capex [EUR] of CaL for a size in tCO2 captured/h (see WasteToEnergyCaLCCS)"""
-    mm_co2 = 44.01
-    capex_data = pd.read_excel(capex_cal_path, sheet_name="capex_eur", index_col=0)
-    design_co2_concentration = co2_concentration.mean()
-    bp_y = [
-        float(interp1d(capex_data.columns.tolist(), capex_data.loc[s], kind="linear",
-                       fill_value="extrapolate")(design_co2_concentration))
-        for s in capex_data.index.tolist()
-    ]
-    convert_to_co2_out = (design_co2_concentration * mm_co2 / 1000
-                          / info_WasteCaL_CCS["Performance"]["fraction_emissions_wte"]
-                          * info_WasteCaL_CCS["Performance"]["capture_rate"])
-    bp_x = (capex_data.index * convert_to_co2_out).tolist()
-    return float(np.interp(size, bp_x, bp_y))
-
-
 # Matrix of the capex multipliers
-baseline_capex_ratio = baseline_capex_cal(ref_size_cal) / baseline_capex_mea(ref_size_mea)
 capex_matrix = []
-for capex_ratio in explored_capex_ratio:
-    is_baseline_ratio = capex_ratio is None
-    capex_ratio = baseline_capex_ratio if is_baseline_ratio else capex_ratio
+for cal_multiplier in explored_cal_capex_multiplier:
     for mea_multiplier in explored_mea_capex_multiplier:
         capex_matrix.append(
             {
-                "case_name": f"mea_{mea_multiplier:.2f}_ratio_{capex_ratio:.2f}",
+                "case_name": f"mea_{mea_multiplier:.2f}_cal_{cal_multiplier:.2f}",
                 "mea_capex_multiplier": mea_multiplier,
-                "capex_ratio": capex_ratio,
-                "is_baseline_ratio": int(is_baseline_ratio),
-                "cal_capex_multiplier": mea_multiplier * capex_ratio / baseline_capex_ratio,
+                "cal_capex_multiplier": cal_multiplier,
             }
         )
 capex_matrix = pd.DataFrame(capex_matrix)
-print(f"Baseline capex ratio CaL/MEA: {baseline_capex_ratio:.2f} "
-      f"(MEA {baseline_capex_mea(ref_size_mea)/1e6:.1f} MEUR at {ref_size_mea} t/h, "
-      f"CaL {baseline_capex_cal(ref_size_cal)/1e6:.1f} MEUR at {ref_size_cal} t/h)")
-print(capex_matrix)
+print(capex_matrix.to_string())
 
 os.makedirs(result_path, exist_ok=True)
 capex_matrix.to_csv(result_path / "capex_matrix.csv", sep=";", index=False)
 with open(result_path / "capex_matrix_info.json", "w") as json_file:
     json.dump(
         {
-            "baseline_capex_ratio": baseline_capex_ratio,
-            "ref_size_mea": ref_size_mea,
-            "ref_size_cal": ref_size_cal,
-            "baseline_capex_mea": baseline_capex_mea(ref_size_mea),
-            "baseline_capex_cal": baseline_capex_cal(ref_size_cal),
             "carbon_tax": carbon_tax,
             "av_el_price": av_el_price,
             "dh_ratio": dh_ratio,
