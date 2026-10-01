@@ -7,14 +7,9 @@ import os
 
 # Technology selection (MEA vs oxyfuel, with the option of a small MEA) as a function of the capex of the
 # capture technologies.
-# x-axis: capex of MEA relative to its baseline (1 = baseline, 1.5 = +50%, ...)
-# y-axis: ratio between the capex of oxyfuel and the capex of MEA, relative to the baseline ratio
-#         (1 = baseline, 1.5 = +50%, 0.5 = -50%)
-# For each cell, the baseline capex of the technologies is scaled as:
-#   capex_MEA = mea_multiplier * capex_MEA_baseline (MEA of CementEmitter and small MEA + compressor of
-#               CementHybridCCS)
-#   capex_oxy = oxy_multiplier * capex_oxy_baseline (oxyfuel + CPU of CementHybridCCS),
-#               with oxy_multiplier = mea_multiplier * ratio_change
+# x-axis: capex of MEA relative to its baseline (1 = baseline, 1.5 = +50%, ...). It is applied to the MEA of
+#         CementEmitter and to the small MEA + compressor of CementHybridCCS
+# y-axis: capex of oxyfuel relative to its baseline. It is applied to the oxyfuel + CPU of CementHybridCCS
 # The baseline data (json files in dataCaseStudy_Cement and cement_sheet.xlsx) are never modified: the multipliers
 # are only written in the json files copied to the case study folder.
 
@@ -22,27 +17,24 @@ import os
 os.chdir(Path(__file__).resolve().parent)
 
 # Specify the path to your input data
-casepath = Path("./CaseStudy_Cement_capex_ratio")
+casepath = Path("./CaseStudy_Cement_capex_sensitivity")
 json_files_path = Path("dataCaseStudy_Cement/technologies_json")
 json_files_path_network = Path("dataCaseStudy_Cement/network_json")
-result_path = Path("dataCaseStudy_Cement/raw_results/capex_ratio")
-capex_cpu_path = Path("./adopt_net0/database/templates/technology_data/Industrial/CementHybridCCS_data/cement_sheet.xlsx")
+result_path = Path("dataCaseStudy_Cement/raw_results/capex_sensitivity")
 
 os.makedirs(casepath, exist_ok=True)
 adopt.create_optimization_templates(casepath)
 
 # Import data from the json file
 info_cement = json.loads((json_files_path / "CementEmitter.json").read_text())
-info_oxy_ccs = json.loads((json_files_path / "CementHybridCCS.json").read_text())
 ccs_type = info_cement["Performance"]["ccs"]["ccs_type"]
-info_mea = json.loads((json_files_path / f"{ccs_type}.json").read_text())
 
 # General input data
 possible_plants = ["Vernasca", "Robilante", "Monselice", "Fanna"]
 plant_analyzed = "Vernasca"
 carbon_tax = 200
 explored_mea_capex_multiplier = [1, 1.5, 2]
-explored_capex_ratio_change = [0.5, 1, 1.5]  # oxyfuel capex / MEA capex, relative to the baseline ratio
+explored_oxy_capex_multiplier = [1, 1.5, 2]
 skip_solved_cases = 1  # do not re-run cases that already have results in result_path
 distance_to_stor = 100
 dymanics_on = 0
@@ -60,50 +52,18 @@ clinker_data = pd.read_excel(path_processed_data, sheet_name="clinker_production
 clinker_demand = clinker_data[f"clinker_{plant_analyzed}"]
 
 
-def baseline_capex_mea(size):
-    """Baseline upfront capex [EUR] of MEA for a size in tCO2 captured/h (see fit_ccs_coeff)"""
-    molar_mass_CO2 = 44.01
-    economics = info_mea["Economics"]
-    design_co2_concentration = info_cement["Performance"]["ccs"]["co2_concentration"]
-    unit_capex = (economics["capex_kappa"] / (design_co2_concentration * info_mea["Performance"]["capture_rate"])
-                  + economics["capex_lambda"]) / (molar_mass_CO2 * 3600 / 1000)
-    return unit_capex * size + economics["capex_zeta"]
-
-
-def baseline_capex_oxy(size):
-    """Baseline upfront capex [EUR] of oxyfuel + CPU for a size in tclinker/h (see CementHybridCCS)"""
-    piecewise_capex = info_oxy_ccs["Economics"]["piecewise_capex"]
-    bp_y = piecewise_capex["bp_y"]
-    if info_oxy_ccs["Performance"]["co2_out_is_compressed"]:
-        capex_cpu = pd.read_excel(capex_cpu_path, sheet_name="capex_cpu_oxyfuel", index_col=0)
-        bp_y = np.add(bp_y, capex_cpu[info_oxy_ccs["Performance"]["phase_of_co2_out"]].tolist())
-    return float(np.interp(size, piecewise_capex["bp_x"], bp_y))
-
-
-# Baseline capex ratio (only for information, it is not used to define the multipliers). Both technologies are
-# sized on the peak clinker production of the plant
-ref_size_oxy = max(clinker_demand)
-ref_size_mea = (ref_size_oxy * info_cement["Performance"]["emission_factor"]
-                * info_mea["Performance"]["capture_rate"])
-baseline_capex_ratio = baseline_capex_oxy(ref_size_oxy) / baseline_capex_mea(ref_size_mea)
-
 # Matrix of the capex multipliers
 capex_matrix = []
-for capex_ratio_change in explored_capex_ratio_change:
+for oxy_multiplier in explored_oxy_capex_multiplier:
     for mea_multiplier in explored_mea_capex_multiplier:
         capex_matrix.append(
             {
-                "case_name": f"mea_{mea_multiplier:.2f}_ratio_{capex_ratio_change:.2f}",
+                "case_name": f"mea_{mea_multiplier:.2f}_oxy_{oxy_multiplier:.2f}",
                 "mea_capex_multiplier": mea_multiplier,
-                "capex_ratio_change": capex_ratio_change,
-                "capex_ratio": capex_ratio_change * baseline_capex_ratio,
-                "oxy_capex_multiplier": mea_multiplier * capex_ratio_change,
+                "oxy_capex_multiplier": oxy_multiplier,
             }
         )
 capex_matrix = pd.DataFrame(capex_matrix)
-print(f"Baseline capex ratio oxyfuel/MEA: {baseline_capex_ratio:.2f} "
-      f"(MEA {baseline_capex_mea(ref_size_mea)/1e6:.1f} MEUR at {ref_size_mea:.1f} tCO2/h, "
-      f"oxyfuel {baseline_capex_oxy(ref_size_oxy)/1e6:.1f} MEUR at {ref_size_oxy:.1f} tclinker/h)")
 print(capex_matrix.to_string())
 
 os.makedirs(result_path, exist_ok=True)
@@ -111,11 +71,6 @@ capex_matrix.to_csv(result_path / "capex_matrix.csv", sep=";", index=False)
 with open(result_path / "capex_matrix_info.json", "w") as json_file:
     json.dump(
         {
-            "baseline_capex_ratio": baseline_capex_ratio,
-            "ref_size_mea": ref_size_mea,
-            "ref_size_oxy": ref_size_oxy,
-            "baseline_capex_mea": baseline_capex_mea(ref_size_mea),
-            "baseline_capex_oxy": baseline_capex_oxy(ref_size_oxy),
             "carbon_tax": carbon_tax,
             "av_el_price": av_el_price,
             "plant_analyzed": plant_analyzed,
