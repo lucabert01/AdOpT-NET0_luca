@@ -478,10 +478,12 @@ class WasteToEnergyCaLCCS(Technology):
 
         possible_concentrations = capex_data.columns.tolist()
         co2_concentration = self.processed_coeff.time_independent["design_co2_concentration"]
+        # optional scaling of the capex curve (sensitivity analyses), set in the json file of the technology
+        capex_multiplier = economics.get("capex_multiplier", 1)
         bp_y_capex_cal_adjusted = []
         for s in capex_data.index.tolist():
             capex_interpolated = interp1d(possible_concentrations, capex_data.loc[s], kind="linear", fill_value="extrapolate")
-            bp_y_capex_cal_adjusted.append(capex_interpolated(co2_concentration))
+            bp_y_capex_cal_adjusted.append(capex_interpolated(co2_concentration) * capex_multiplier)
 
         self.economics["bp_y_capex_cal"] = bp_y_capex_cal_adjusted
 
