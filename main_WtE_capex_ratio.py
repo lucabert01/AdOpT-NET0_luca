@@ -43,7 +43,7 @@ data = pd.read_excel(path_processed_data)
 carbon_tax = 200
 dh_ratio = 0.5
 explored_mea_capex_multiplier = [1, 1.5, 2]
-explored_capex_ratio = [None, 4.5, 3]  # CaL capex / MEA capex. None = baseline ratio
+explored_capex_ratio = [None, 4.5, 3, 1.5]  # CaL capex / MEA capex. None = baseline ratio
 # Sizes [tCO2 captured/h] at which the capex ratio is defined. The ratio depends on the size and, for the same
 # plant, CaL is larger than MEA because it also captures the CO2 from the RDF. The reference sizes are the ones
 # chosen by the optimization for this plant when the technology is installed (carbon tax 200, dh ratio 0.5)
