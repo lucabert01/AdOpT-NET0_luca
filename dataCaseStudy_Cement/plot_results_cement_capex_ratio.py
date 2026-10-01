@@ -1,0 +1,212 @@
+import h5py
+import json
+import os
+import sys
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from pathlib import Path
+from matplotlib import rcParams
+
+# All paths are relative to this folder, independently of where the script is launched from
+os.chdir(Path(__file__).resolve().parent)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from adopt_net0.result_management.read_results import extract_datasets_from_h5group
+from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
+
+# Technology selection as a function of the capex of MEA (x-axis) and of the ratio between the capex of oxyfuel
+# and MEA (y-axis). Results of main_cement_capex_ratio.py
+
+batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8', '#012E4D']
+figures_path = "../figures"
+
+raw_results_path = Path("./raw_results/capex_ratio")
+capex_matrix = pd.read_csv(raw_results_path / "capex_matrix.csv", sep=";")
+cost_extra_fuel = 15
+
+path_processed_data = Path("./dataSources/data_processed.xlsx")
+data = pd.read_excel(path_processed_data, sheet_name="electricity_prices")
+el_price = data["el_price_itNord"]
+info_cement = json.loads(Path("./technologies_json/CementEmitter.json").read_text())
+emission_factor_clinker_baseline = info_cement["Performance"]["emission_factor"]  # tCO2/tClinker, without oxyfuel calciner
+info_heat_pump = json.loads(Path("./technologies_json/HeatPump.json").read_text())
+cop_hp = info_heat_pump["Performance"]["performance"]["out"]["heat"][1]
+
+
+def read_results(case_name):
+    """Reads the most recent results of a case"""
+    case_dirs = sorted(
+        d for d in raw_results_path.glob(f"*_{case_name}") if (d / "optimization_results.h5").exists()
+    )
+    with h5py.File(case_dirs[-1] / "optimization_results.h5", "r") as hdf_file:
+        df_operation = pd.DataFrame(extract_datasets_from_h5group(hdf_file["operation"]))
+        df_design = pd.DataFrame(extract_datasets_from_h5group(hdf_file["design/nodes/period1"]))
+        df_design_network = pd.DataFrame(
+            extract_datasets_from_h5group(
+                hdf_file["design/networks/period1/CO2PipelineOnshore/industrial_clusterstorage"]
+            )
+        )
+    return df_operation, df_design, df_design_network
+
+
+results_summary = []
+for _, case in capex_matrix.iterrows():
+    df_operation, df_design, df_design_network = read_results(case["case_name"])
+
+    cement_mea_design = df_design.loc[:, ('industrial_cluster', 'CementEmitter')]
+    cement_mea_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'CementEmitter')]
+    heat_pump_design = df_design.loc[:, ('industrial_cluster', 'HeatPump')]
+    cement_oxy_design = df_design.loc[:, ('industrial_cluster', 'CementHybridCCS')]
+    cement_oxy_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'CementHybridCCS')]
+    co2_storage_design = df_design.loc[:, ('storage', 'PermanentStorage_CO2_simple')]
+
+    clinker_demand = df_operation.loc[:, ('energy_balance', 'period1', 'industrial_cluster', 'clinker', 'demand')]
+    emissions_cement_baseline = sum(clinker_demand * emission_factor_clinker_baseline)
+
+    # economics
+    transport_stor_cost = (
+        co2_storage_design['opex_variable'].iloc[0] + df_design_network['capex'].values.flatten()[0]
+    )
+
+    if cement_mea_design["size_ccs"].iloc[0] > 0:
+        type_installed = "MEA"
+        capex = cement_mea_design["capex_tot"].iloc[0] + heat_pump_design["capex_tot"].iloc[0]
+        opex_fixed = cement_mea_design["opex_fixed"].iloc[0] + heat_pump_design["opex_fixed"].iloc[0]
+        opex_variable = cement_mea_design["opex_variable"].iloc[0]
+        energy_cost = sum(cement_mea_operation["electricity_var_input_ccs"] * el_price) + sum(
+            cement_mea_operation["heat_var_input_ccs"] / cop_hp * el_price)
+        co2_captured = cement_mea_operation['CO2captured_var_output_ccs']
+        tot_co2_avoided = sum(cement_mea_operation["clinker_output"] * emission_factor_clinker_baseline) - sum(
+            cement_mea_operation["emissions_pos"])
+        ccs_size = cement_mea_design["size_ccs"].iloc[0]
+
+    elif cement_oxy_design["size"].iloc[0] > 0:
+        if cement_oxy_design["size_mea"].iloc[0] > 0:
+            type_installed = "Oxyfuel + PCC"
+        else:
+            type_installed = "Oxyfuel"
+
+        capex = cement_oxy_design["capex_tot"].iloc[0]
+        opex_fixed = cement_oxy_design["opex_fixed"].iloc[0]
+        opex_variable = cement_oxy_design["opex_variable"].iloc[0]
+        co2_captured = cement_oxy_operation['CO2captured_output']
+        energy_cost = sum(cement_oxy_operation["electricity_input"] * el_price) + sum(
+            cement_oxy_operation["extra_fuel_input"] * cost_extra_fuel)
+        tot_co2_avoided = sum(cement_oxy_operation["clinker_output"] * emission_factor_clinker_baseline) - sum(
+            cement_oxy_operation["emissions_pos"])
+        ccs_size = max(co2_captured)
+
+    else:
+        type_installed = "none"
+        capex = opex_fixed = opex_variable = energy_cost = tot_co2_avoided = ccs_size = 0
+        transport_stor_cost = 0
+        co2_captured = pd.Series([0])
+
+    results_summary.append(
+        {
+            "mea_capex_multiplier": case["mea_capex_multiplier"],
+            "capex_ratio_change": case["capex_ratio_change"],
+            "capex_ratio": case["capex_ratio"],
+            "oxy_capex_multiplier": case["oxy_capex_multiplier"],
+            "type_installed": type_installed,
+            "size_ccs": ccs_size,
+            "capex": capex,
+            "opex_fixed": opex_fixed,
+            "opex_variable": opex_variable,
+            "energy_cost": energy_cost,
+            "transport_stor_cost": transport_stor_cost,
+            "tot_co2_captured": sum(co2_captured),
+            "tot_co2_avoided": tot_co2_avoided,
+            "fraction_avoided": tot_co2_avoided / emissions_cement_baseline,
+            "cost_of_avoided": (
+                (capex + opex_fixed + opex_variable + energy_cost + transport_stor_cost) / tot_co2_avoided
+                if type_installed != "none"
+                else 0
+            ),
+        }
+    )
+
+results_summary = pd.DataFrame(results_summary)
+results_summary.to_csv(raw_results_path / "results_summary.csv", sep=";", index=False)
+print(results_summary.to_string())
+
+# Matrices: capex ratio on the rows (highest ratio on top), capex of MEA on the columns
+type_matrix = results_summary.pivot(
+    index="capex_ratio_change", columns="mea_capex_multiplier", values="type_installed"
+).sort_index(ascending=False).sort_index(axis=1)
+cost_matrix = results_summary.pivot(
+    index="capex_ratio_change", columns="mea_capex_multiplier", values="cost_of_avoided"
+).sort_index(ascending=False).sort_index(axis=1)
+
+# ------------------------------------------------------------
+# PAPER SETUP
+# ------------------------------------------------------------
+setup_matplotlib_for_paper("single")
+
+types = ["none", "MEA", "Oxyfuel", "Oxyfuel + PCC"]
+type_to_color = {t: batlow_colors[i] for i, t in zip([0, 1, 2, 4], types)}
+
+fig, ax = plt.subplots()
+
+# ------------------------------------------------------------
+# GRID PLOT
+# ------------------------------------------------------------
+for i, ratio_change in enumerate(type_matrix.index):
+    for j, multiplier in enumerate(type_matrix.columns):
+        tech = type_matrix.loc[ratio_change, multiplier]
+        cost = cost_matrix.loc[ratio_change, multiplier]
+
+        # colored cell
+        ax.add_patch(
+            plt.Rectangle(
+                (j, i), 1, 1,
+                facecolor=type_to_color[tech],
+                edgecolor="black",
+                linewidth=0.8
+            )
+        )
+
+        # cost of CO2 avoided [EUR/tCO2] annotation
+        ax.text(
+            j + 0.5, i + 0.5,
+            f"{cost:.1f}" if tech != "none" else "-",
+            ha="center", va="center",
+            color="black" if tech == "Oxyfuel + PCC" else "white",
+            fontsize=rcParams["font.size"] - 2,
+            fontweight="bold"
+        )
+
+# ------------------------------------------------------------
+# AXES FORMATTING
+# ------------------------------------------------------------
+ax.set_xlim(0, len(type_matrix.columns))
+ax.set_ylim(0, len(type_matrix.index))
+
+ax.set_xticks([x + 0.5 for x in range(len(type_matrix.columns))])
+ax.set_yticks([y + 0.5 for y in range(len(type_matrix.index))])
+
+ax.set_xticklabels([f"+{(m - 1) * 100:.0f}%" for m in type_matrix.columns])
+ax.set_yticklabels(["Baseline" if r == 1 else f"{(r - 1) * 100:+.0f}%" for r in type_matrix.index])
+
+ax.invert_yaxis()
+
+ax.set_xlabel("CAPEX increase of MEA [-]")
+ax.set_ylabel("CAPEX ratio oxyfuel/MEA [-]")
+
+legend_patches = [
+    mpatches.Patch(color=type_to_color[t], label=t) for t in types
+]
+
+ax.legend(
+    handles=legend_patches,
+    loc="lower center",
+    bbox_to_anchor=(0.5, 1.0),
+    ncol=len(types),
+    frameon=False
+)
+
+fig.tight_layout(pad=0.6)
+save_figure_for_paper(fig, "cement_tech_selection_capex_ratio", figures_path)
+
+plt.show()

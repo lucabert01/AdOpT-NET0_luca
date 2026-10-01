@@ -469,6 +469,26 @@ class CementHybridCCS(Technology):
             capex_compressor_mea_data[phase].tolist()
         )
 
+        # optional scaling of the capex curves (sensitivity analyses), set in the json file of the technology.
+        # The oxyfuel multiplier is applied to oxyfuel and CPU, the MEA multiplier to MEA and compressor
+        capex_multiplier_oxy = economics["other_economics"].get("capex_multiplier_oxy", 1)
+        capex_multiplier_mea = economics["other_economics"].get("capex_multiplier_MEA", 1)
+        economics["piecewise_capex"]["bp_y"] = [
+            y * capex_multiplier_oxy for y in economics["piecewise_capex"]["bp_y"]
+        ]
+        economics["other_economics"]["bp_y_capex_cpu_oxy"] = [
+            y * capex_multiplier_oxy
+            for y in economics["other_economics"]["bp_y_capex_cpu_oxy"]
+        ]
+        economics["other_economics"]["piecewise_capex_MEA"]["bp_y"] = [
+            y * capex_multiplier_mea
+            for y in economics["other_economics"]["piecewise_capex_MEA"]["bp_y"]
+        ]
+        economics["other_economics"]["bp_y_capex_compressor_mea"] = [
+            y * capex_multiplier_mea
+            for y in economics["other_economics"]["bp_y_capex_compressor_mea"]
+        ]
+
         def calculate_max_capex_oxy():
             max_capex = (
                 max(economics["piecewise_capex"]["bp_y"])
