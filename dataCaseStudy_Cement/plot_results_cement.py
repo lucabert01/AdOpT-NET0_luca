@@ -11,18 +11,20 @@ import json
 import numpy as np
 import warnings
 
-from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
+from utilities.process_results import (
+    save_figure_for_paper,
+    setup_matplotlib_for_paper,
+    draw_tech_selection,
+    draw_heatmap,
+    SEQUENTIAL_CMAPS,
+)
 from matplotlib import rcParams
-from matplotlib.colors import LinearSegmentedColormap
 
 
 # Set global styling for the plots
 colors = []
-pink_cmap = LinearSegmentedColormap.from_list(
-    "white_pink", ["#FAF0F6","#D491B8"]
-)
-batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E', '#F7D03C', '#D491B8','#012E4D']
 figures_path = "../figures"
+figures_path_tech_selection = "../figures/cement_tech_selection"
 
 
 ## -----------------  Carbon and electricity price --------------------------
@@ -192,10 +194,6 @@ type_matrix = type_matrix.sort_index(ascending=False).sort_index(axis=1)
 
 
 
-# --- Define batlow colors ---
-batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
-                 '#F7D03C', '#D491B8', '#012E4D']
-
 # # --- Plot 1: Heatmap of costs (continuous) ---
 # plt.figure(figsize=(7,5))
 # im = plt.imshow(cost_matrix.values.astype(float),
@@ -249,79 +247,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
 
 
 
-# ------------------------------------------------------------
-# PAPER SETUP
-# ------------------------------------------------------------
-setup_matplotlib_for_paper("single")
-
 types = ["none", "MEA", "Oxyfuel", "Oxyfuel + PCC"]
-type_to_color = {t: batlow_colors[i] for i, t in zip([0, 1, 2, 4], types)}
-# ------------------------------------------------------------
-# FIGURE
-# ------------------------------------------------------------
-fig, ax = plt.subplots()
-
-# ------------------------------------------------------------
-# GRID PLOT
-# ------------------------------------------------------------
-for i, ep in enumerate(type_matrix.index):
-    for j, ct in enumerate(type_matrix.columns):
-        tech = type_matrix.loc[ep, ct]
-        cost = cost_matrix.loc[ep, ct]
-
-        # colored cell
-        ax.add_patch(
-            plt.Rectangle(
-                (j, i), 1, 1,
-                facecolor=type_to_color[tech],
-                edgecolor="black",
-                linewidth=0.8
-            )
-        )
-
-        # cost annotation
-        ax.text(
-            j + 0.5, i + 0.5,
-            f"{cost:.1f}",
-            ha="center", va="center",
-            color="black" if tech == "Oxyfuel + PCC" else "white",
-            fontsize=rcParams["font.size"] - 2,
-            fontweight="bold"
-        )
-
-# ------------------------------------------------------------
-# AXES FORMATTING
-# ------------------------------------------------------------
-ax.set_xlim(0, len(type_matrix.columns))
-ax.set_ylim(0, len(type_matrix.index))
-
-ax.set_xticks(np.arange(len(type_matrix.columns)) + 0.5)
-ax.set_yticks(np.arange(len(type_matrix.index)) + 0.5)
-
-ax.set_xticklabels(type_matrix.columns)
-ax.set_yticklabels(type_matrix.index)
-
-ax.invert_yaxis()
-
-ax.set_xlabel("Carbon tax [€/tCO$_2$]")
-ax.set_ylabel("Electricity price [€/MWh]")
-
-
-legend_patches = [
-    mpatches.Patch(color=type_to_color[t], label=t) for t in types
-]
-
-ax.legend(
-    handles=legend_patches,
-    loc="lower center",
-    bbox_to_anchor=(0.5, 1.0),
-    ncol=len(types),
-    frameon=False
-)
-
-fig.tight_layout(pad=0.6)
-save_figure_for_paper(fig, "cement_tech_selection", figures_path)
-
 
 
 # --- PLOT SECONDARY VARIABLES ---
@@ -498,12 +424,56 @@ def plot_heatmap_double(df1, label1, df2, label2, filename, cmap1, cmap2, is_pct
 
 
 
+# --- TECHNOLOGY SELECTION, FRACTION AVOIDED, SIZE, LOAD FACTOR: COMBINED 2x2 FIGURE AND SINGLE FIGURES ---
+def plot_tech_selection_overview(type_df, cost_df, heatmaps):
+    """
+    Plot a 2x2 grid with the technology selection and three heatmaps, and each of the four panels as a single figure.
+    heatmaps: list of (df, label, cmap, is_pct, suffix) tuples, exactly 3 entries.
+    """
+    x_label = r"Carbon tax [€/tCO$_2$]"
+    y_label = "Electricity price [€/MWh]"
+
+    # combined figure
+    fig_width_in, _ = setup_matplotlib_for_paper("double")
+    fig, axes = plt.subplots(2, 2, figsize=(fig_width_in, fig_width_in * 0.618), layout="constrained")
+
+    cbar = draw_tech_selection(fig, axes[0, 0], type_df, cost_df, types)
+    # shorter labels in the legend
+    cbar.ax.set_yticklabels([t.replace(" + ", "\n+ ") for t in types])
+    for ax, (df, label, cmap, is_pct, suffix) in zip(axes.flat[1:], heatmaps):
+        draw_heatmap(fig, ax, df, label, cmap, is_pct)
+
+    for ax in axes[-1, :]:
+        ax.set_xlabel(x_label)
+    for ax in axes[:, 0]:
+        ax.set_ylabel(y_label)
+
+    save_figure_for_paper(fig, "cement_tech_selection_overview", figures_path_tech_selection)
+
+    # single figures
+    setup_matplotlib_for_paper("single")
+    fig, ax = plt.subplots(layout="constrained")
+    cbar = draw_tech_selection(fig, ax, type_df, cost_df, types)
+    # shorter labels in the legend
+    cbar.ax.set_yticklabels([t.replace(" + ", "\n+ ") for t in types])
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    save_figure_for_paper(fig, "cement_tech_selection", figures_path_tech_selection)
+
+    for df, label, cmap, is_pct, suffix in heatmaps:
+        fig, ax = plt.subplots(layout="constrained")
+        draw_heatmap(fig, ax, df, label, cmap, is_pct)
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        save_figure_for_paper(fig, f"cement_{suffix}", figures_path_tech_selection)
+
+
 # --- EXECUTION ---
 metrics = [
     (results_data["net_em_ccs"],      r"Net emissions [ktCO$_2$/y]", "net_emissions",   "RdBu_r",  False),
-    (results_data["load_factor_ccs"], "CCS load factor [-]",         "ccs_lf",          "YlGn",    True),
-    (results_data["size_ccs"],        "CCS size [t/h]",              "ccs_size",        "Purples",  False),
-    (results_data["fraction_avoided"],"Fraction avoided [-]",        "fraction_avoided", pink_cmap, True),
+    (results_data["load_factor_ccs"], "CCS load factor [-]",         "ccs_lf",          SEQUENTIAL_CMAPS["load_factor"], True),
+    (results_data["size_ccs"],        "CCS size [t/h]",              "ccs_size",        SEQUENTIAL_CMAPS["size"], False),
+    (results_data["fraction_avoided"],"Fraction avoided [-]",        "fraction_avoided", SEQUENTIAL_CMAPS["fraction_avoided"], True),
 ]
 
 for df, label, suffix, cmap, is_pct in metrics:
@@ -513,8 +483,19 @@ plot_heatmap_double(
     results_data["size_ccs"],        "CCS size [t/h]",
     results_data["load_factor_ccs"], "CCS load factor [-]",
     "cement_size_lf",
-    "Purples", "YlGn",
+    SEQUENTIAL_CMAPS["size"], SEQUENTIAL_CMAPS["load_factor"],
     False, True,
+)
+
+# technology selection with fraction avoided, size and load factor
+plot_tech_selection_overview(
+    type_matrix,
+    cost_matrix,
+    [
+        (results_data["fraction_avoided"], "Fraction avoided [-]", SEQUENTIAL_CMAPS["fraction_avoided"], True,  "fraction_avoided"),
+        (results_data["size_ccs"],         "CCS size [t/h]",       SEQUENTIAL_CMAPS["size"],             False, "ccs_size"),
+        (results_data["load_factor_ccs"],  "CCS load factor [-]",  SEQUENTIAL_CMAPS["load_factor"],      True,  "ccs_lf"),
+    ],
 )
 
 print("All CCS plots saved.")
