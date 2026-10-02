@@ -4,30 +4,19 @@ import os
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from pathlib import Path
-from matplotlib import rcParams
 
 # All paths are relative to this folder, independently of where the script is launched from
 os.chdir(Path(__file__).resolve().parent)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from adopt_net0.result_management.read_results import extract_datasets_from_h5group
-from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
+from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper, draw_tech_selection
 
 # Technology selection as a function of the capex of MEA (x-axis) and of the capex of CaL (y-axis).
 # Results of main_WtE_capex_sensitivity.py
 
-batlow_colors = [
-    "#222A6A",
-    "#4B708A",
-    "#6FBC7B",
-    "#B1E87E",
-    "#F7D03C",
-    "#D491B8",
-    "#012E4D",
-]
-figures_path = "../figures"
+figures_path = "../figures/wte_tech_selection"
 
 raw_results_path = Path("./raw_results/capex_sensitivity")
 capex_matrix = pd.read_csv(raw_results_path / "capex_matrix.csv", sep=";")
@@ -171,63 +160,16 @@ cost_matrix = results_summary.pivot(
 ).sort_index(ascending=False).sort_index(axis=1)
 
 types = ["none", "MEA", "CaL"]
-type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
 # SINGLE-COLUMN FIGURE
 setup_matplotlib_for_paper("single")
-fig, ax = plt.subplots()
-
-for i, cal_multiplier in enumerate(type_matrix.index):
-    for j, multiplier in enumerate(type_matrix.columns):
-        t = type_matrix.loc[cal_multiplier, multiplier]
-        c = cost_matrix.loc[cal_multiplier, multiplier]
-
-        ax.add_patch(
-            plt.Rectangle(
-                (j, i),
-                1,
-                1,
-                facecolor=type_to_color[t],
-                edgecolor="black",
-                linewidth=0.8,
-            )
-        )
-
-        # Cost of CO2 avoided [EUR/tCO2] label
-        ax.text(
-            j + 0.5,
-            i + 0.5,
-            f"{c:.1f}" if t != "none" else "-",
-            ha="center",
-            va="center",
-            color="white",
-            fontsize=rcParams["axes.labelsize"] - 2,
-            fontweight="bold",
-        )
-
-# AXES FORMATTING
-ax.set_xlim(0, len(type_matrix.columns))
-ax.set_ylim(0, len(type_matrix.index))
-ax.set_xticks([x + 0.5 for x in range(len(type_matrix.columns))])
-ax.set_yticks([y + 0.5 for y in range(len(type_matrix.index))])
+fig, ax = plt.subplots(layout="constrained")
+draw_tech_selection(fig, ax, type_matrix, cost_matrix, types)
 ax.set_xticklabels([f"{(m - 1) * 100:+.0f}%" for m in type_matrix.columns])
 ax.set_yticklabels([f"{(m - 1) * 100:+.0f}%" for m in type_matrix.index])
-ax.invert_yaxis()
 ax.set_xlabel("CAPEX increase of MEA [-]")
 ax.set_ylabel("CAPEX change of CaL [-]")
 
-# LEGEND (TOP, HORIZONTAL, SCALED)
-patches = [mpatches.Patch(color=type_to_color[t], label=t) for t in types]
-ax.legend(
-    handles=patches,
-    loc="lower center",
-    bbox_to_anchor=(0.5, 1),
-    ncol=len(types),
-    fontsize=rcParams["legend.fontsize"],
-    frameon=False,
-)
-
-fig.tight_layout(pad=0.6)
 save_figure_for_paper(fig, "wte_tech_selection_capex_sensitivity", figures_path)
 
 plt.show()

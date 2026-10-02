@@ -5,34 +5,27 @@ import warnings
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from pathlib import Path
 from matplotlib import rcParams
 from adopt_net0.result_management.read_results import (
     print_h5_tree,
     extract_datasets_from_h5group,
 )
-from utilities.process_results import save_figure_for_paper, setup_matplotlib_for_paper
+from utilities.process_results import (
+    save_figure_for_paper,
+    setup_matplotlib_for_paper,
+    draw_tech_selection,
+    draw_heatmap,
+    SEQUENTIAL_CMAPS,
+)
 import io
 from pptx import Presentation
 from pptx.util import Inches
-from matplotlib.colors import LinearSegmentedColormap
 
 # Set global styling for the plots
 colors = []
-pink_cmap = LinearSegmentedColormap.from_list(
-    "white_pink", ["#FAF0F6","#D491B8"]
-)
-batlow_colors = [
-    "#222A6A",
-    "#4B708A",
-    "#6FBC7B",
-    "#B1E87E",
-    "#F7D03C",
-    "#D491B8",
-    "#012E4D",
-]
 figures_path = "../figures"
+figures_path_tech_selection = "../figures/wte_tech_selection"
 
 ## ----------------- Carbon and electricity price --------------------------
 explored_carbon_tax = [100, 150, 200, 250]
@@ -449,79 +442,7 @@ for dh in explored_dh_ratio_str:
         ascending=False
     ).sort_index(axis=1)
 
-# --- Define batlow colors ---
-batlow_colors = [
-    "#222A6A",
-    "#4B708A",
-    "#6FBC7B",
-    "#B1E87E",
-    "#F7D03C",
-    "#D491B8",
-    "#012E4D",
-]
-
-for dh in explored_dh_ratio_str:
-    dh_ratio_str = f"dh_{dh}"
-    # Plot 2: Grid of installed type (categorical)
-    types = ["none", "MEA", "CaL"]
-    type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
-
-    # SINGLE-COLUMN FIGURE
-    setup_matplotlib_for_paper("single")
-    fig, ax = plt.subplots()
-
-    for i, ep in enumerate(type_matrix[dh_ratio_str].index):
-        for j, ct in enumerate(type_matrix[dh_ratio_str].columns):
-            t = type_matrix[dh_ratio_str].loc[ep, ct]
-            c = cost_matrix[dh_ratio_str].loc[ep, ct]
-
-            ax.add_patch(
-                plt.Rectangle(
-                    (j, i),
-                    1,
-                    1,
-                    facecolor=type_to_color[t],
-                    edgecolor="black",
-                    linewidth=0.8,
-                )
-            )
-
-            # Cost label (auto-scaled font)
-            ax.text(
-                j + 0.5,
-                i + 0.5,
-                f"{c:.1f}",
-                ha="center",
-                va="center",
-                color="white",
-                fontsize=rcParams["axes.labelsize"] - 2,
-                fontweight="bold",
-            )
-
-    # AXES FORMATTING
-    ax.set_xlim(0, len(type_matrix[dh_ratio_str].columns))
-    ax.set_ylim(0, len(type_matrix[dh_ratio_str].index))
-    ax.set_xticks([x + 0.5 for x in range(len(type_matrix[dh_ratio_str].columns))])
-    ax.set_yticks([y + 0.5 for y in range(len(type_matrix[dh_ratio_str].index))])
-    ax.set_xticklabels(type_matrix[dh_ratio_str].columns)
-    ax.set_yticklabels(type_matrix[dh_ratio_str].index)
-    ax.invert_yaxis()
-    ax.set_xlabel(r"Carbon tax [€/tCO$_2$]")
-    ax.set_ylabel("Electricity price [€/MWh]")
-
-    # LEGEND (TOP, HORIZONTAL, SCALED)
-    patches = [mpatches.Patch(color=type_to_color[t], label=t) for t in types]
-    ax.legend(
-        handles=patches,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1),
-        ncol=len(types),
-        fontsize=rcParams["legend.fontsize"],
-        frameon=False,
-    )
-
-    fig.tight_layout(pad=0.6)
-    save_figure_for_paper(fig, f"wte_tech_selection_{dh_ratio_str}", figures_path)
+types = ["none", "MEA", "CaL"]
 
 
 # --- PLOT SECONDARY VARIABLES ---
@@ -725,6 +646,46 @@ def plot_combined_heatmap(dfs_labels, filename, zero_color="lightgrey"):
 
     save_figure_for_paper(fig, filename, figures_path)
 
+# --- TECHNOLOGY SELECTION, FRACTION AVOIDED, SIZE, LOAD FACTOR: COMBINED 2x2 FIGURE AND SINGLE FIGURES ---
+def plot_tech_selection_overview(type_df, cost_df, heatmaps, dh_key):
+    """
+    Plot a 2x2 grid with the technology selection and three heatmaps, and each of the four panels as a single figure.
+    heatmaps: list of (df, label, cmap, is_pct, suffix) tuples, exactly 3 entries.
+    """
+    x_label = r"Carbon tax [€/tCO$_2$]"
+    y_label = "Electricity price [€/MWh]"
+
+    # combined figure
+    fig_width_in, _ = setup_matplotlib_for_paper("double")
+    fig, axes = plt.subplots(2, 2, figsize=(fig_width_in, fig_width_in * 0.618), layout="constrained")
+
+    draw_tech_selection(fig, axes[0, 0], type_df, cost_df, types)
+    for ax, (df, label, cmap, is_pct, suffix) in zip(axes.flat[1:], heatmaps):
+        draw_heatmap(fig, ax, df, label, cmap, is_pct)
+
+    for ax in axes[-1, :]:
+        ax.set_xlabel(x_label)
+    for ax in axes[:, 0]:
+        ax.set_ylabel(y_label)
+
+    save_figure_for_paper(fig, f"wte_tech_selection_overview_{dh_key}", figures_path_tech_selection)
+
+    # single figures
+    setup_matplotlib_for_paper("single")
+    fig, ax = plt.subplots(layout="constrained")
+    draw_tech_selection(fig, ax, type_df, cost_df, types)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    save_figure_for_paper(fig, f"wte_tech_selection_{dh_key}", figures_path_tech_selection)
+
+    for df, label, cmap, is_pct, suffix in heatmaps:
+        fig, ax = plt.subplots(layout="constrained")
+        draw_heatmap(fig, ax, df, label, cmap, is_pct)
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        save_figure_for_paper(fig, f"wte_{suffix}_{dh_key}", figures_path_tech_selection)
+
+
 # --- 3. EXECUTION LOOP ---
 for dh in explored_dh_ratio_str:
     dh_key = f"dh_{dh}"
@@ -737,9 +698,9 @@ for dh in explored_dh_ratio_str:
         (results_data["boiler_out_no_ccs"][dh_key]/1000,   "Boiler output [GWh/y]",           "boiler_out",         "OrRd",    False),
         (results_data["boiler_em_no_ccs"][dh_key],        r"Boiler emissions [ktCO$_2$/y]",   "boiler_em",          "OrRd",    False),
         (results_data["net_em_ccs"][dh_key],              r"Net emissions [ktCO$_2$/y]",      "net_emissions",      "RdBu_r",  False),
-        (results_data["load_factor_ccs"][dh_key],          "CCS load factor [%]",             "ccs_lf",             "YlGn",    True),
-        (results_data["size_ccs"][dh_key],                 "CCS size [t/h]",                  "ccs_size",           "Purples", False),
-        (results_data["fraction_avoided_ccs"][dh_key],    r"CO$_2$ avoided [%]",             "fraction_avoided",   pink_cmap, True),
+        (results_data["load_factor_ccs"][dh_key],          "CCS load factor [%]",             "ccs_lf",             SEQUENTIAL_CMAPS["load_factor"], True),
+        (results_data["size_ccs"][dh_key],                 "CCS size [t/h]",                  "ccs_size",           SEQUENTIAL_CMAPS["size"], False),
+        (results_data["fraction_avoided_ccs"][dh_key],    r"CO$_2$ avoided [%]",             "fraction_avoided",   SEQUENTIAL_CMAPS["fraction_avoided"], True),
         (results_data["extra_gas_ccs"][dh_key],            "Extra gas usage boiler [GWh/y]",  "extra_gas_boiler",   "Blues",   False),
         (results_data["loss_el_revenues_ccs"][dh_key],     "Loss el. revenues [M€/y]",        "loss_el_revenues",   "OrRd",    False),
     ]
@@ -750,8 +711,8 @@ for dh in explored_dh_ratio_str:
 
     # NEW: combined 2x2 CCS figure
     combined_metrics = [
-        (results_data["size_ccs"][dh_key],              "CCS size [t/h]",                 "Purples", False),
-        (results_data["load_factor_ccs"][dh_key],        "CCS load factor [%]",            "YlGn",    True),
+        (results_data["size_ccs"][dh_key],              "CCS size [t/h]",                 SEQUENTIAL_CMAPS["size"], False),
+        (results_data["load_factor_ccs"][dh_key],        "CCS load factor [%]",            SEQUENTIAL_CMAPS["load_factor"], True),
         (results_data["loss_el_revenues_ccs"][dh_key],   "Loss el. revenues [M€/y]",       "OrRd",    False),
         (results_data["extra_gas_ccs"][dh_key],          "Extra gas usage boiler [GWh/y]", "Blues",   False),
     ]
@@ -761,10 +722,17 @@ for dh in explored_dh_ratio_str:
         filename=f"wte_ccs_combined_{dh_key}",
     )
 
-
-
-
-
+    # technology selection with fraction avoided, size and load factor
+    plot_tech_selection_overview(
+        type_matrix[dh_key],
+        cost_matrix[dh_key],
+        [
+            (results_data["fraction_avoided_ccs"][dh_key], r"CO$_2$ avoided [%]", SEQUENTIAL_CMAPS["fraction_avoided"], True,  "fraction_avoided"),
+            (results_data["size_ccs"][dh_key],             "CCS size [t/h]",      SEQUENTIAL_CMAPS["size"],             False, "ccs_size"),
+            (results_data["load_factor_ccs"][dh_key],      "CCS load factor [%]", SEQUENTIAL_CMAPS["load_factor"],      True,  "ccs_lf"),
+        ],
+        dh_key,
+    )
 
 
 plt.show()
