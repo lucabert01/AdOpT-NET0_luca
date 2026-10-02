@@ -8,7 +8,8 @@ import os
 # Technology selection (MEA vs oxyfuel, with the option of a small MEA) as a function of the capex of the
 # capture technologies.
 # x-axis: capex of MEA relative to its baseline (1 = baseline, 1.5 = +50%, ...). It is applied to the MEA of
-#         CementEmitter and to the small MEA + compressor of CementHybridCCS
+#         CementEmitter, to the heat pump that supplies its heat and to the small MEA + compressor of
+#         CementHybridCCS
 # y-axis: capex of oxyfuel relative to its baseline. It is applied to the oxyfuel + CPU of CementHybridCCS
 # The baseline data (json files in dataCaseStudy_Cement and cement_sheet.xlsx) are never modified: the multipliers
 # are only written in the json files copied to the case study folder.
@@ -67,10 +68,23 @@ capex_matrix = pd.DataFrame(capex_matrix)
 print(capex_matrix.to_string())
 
 os.makedirs(result_path, exist_ok=True)
+
+# Results obtained with another definition of the capex scaling cannot be reused
+capex_scaling = "MEA multiplier: MEA, heat pump, small MEA + compressor. Oxyfuel multiplier: oxyfuel + CPU"
+info_path = result_path / "capex_matrix_info.json"
+if skip_solved_cases and any(result_path.glob("*/optimization_results.h5")):
+    previous_capex_scaling = json.loads(info_path.read_text()).get("capex_scaling") if info_path.exists() else None
+    if previous_capex_scaling != capex_scaling:
+        raise ValueError(
+            f"The results in {result_path} were obtained with another definition of the capex scaling. "
+            f"Move or delete them before running the script (or set skip_solved_cases = 0)."
+        )
+
 capex_matrix.to_csv(result_path / "capex_matrix.csv", sep=";", index=False)
-with open(result_path / "capex_matrix_info.json", "w") as json_file:
+with open(info_path, "w") as json_file:
     json.dump(
         {
+            "capex_scaling": capex_scaling,
             "carbon_tax": carbon_tax,
             "av_el_price": av_el_price,
             "plant_analyzed": plant_analyzed,
@@ -169,7 +183,18 @@ def run_case(case_name, mea_capex_multiplier, oxy_capex_multiplier):
         case_mea["Economics"][capex_parameter] = case_mea["Economics"][capex_parameter] * mea_capex_multiplier
     (tec_data_path / f"{ccs_type}.json").write_text(json.dumps(case_mea, indent=4))
 
-    case_oxy_ccs = json.loads((json_files_path / "CementHybridCCS.json").read_text())
+    # the heat pump supplies the heat of the MEA of CementEmitter, its capex is scaled as the one of MEA
+    case_heat_pump = json.loads((json_files_path / "HeatPump.json").read_text())
+    for capex_parameter in ["unit_capex", "fix_capex"]:
+        case_heat_pump["Economics"][capex_parameter] = (
+            case_heat_pump["Economics"][capex_parameter] * mea_capex_multiplier
+        )
+    case_heat_pump["Economics"]["piecewise_capex"]["bp_y"] = [
+        y * mea_capex_multiplier for y in case_heat_pump["Economics"]["piecewise_capex"]["bp_y"]
+    ]
+    (tec_data_path / "HeatPump.json").write_text(json.dumps(case_heat_pump, indent=4))
+
+    case_oxy_ccs =json.loads((json_files_path / "CementHybridCCS.json").read_text())
     case_oxy_ccs["Economics"]["other_economics"]["capex_multiplier_oxy"] = oxy_capex_multiplier
     case_oxy_ccs["Economics"]["other_economics"]["capex_multiplier_MEA"] = mea_capex_multiplier
     (tec_data_path / "CementHybridCCS.json").write_text(json.dumps(case_oxy_ccs, indent=4))
