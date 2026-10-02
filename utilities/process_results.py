@@ -188,20 +188,30 @@ def draw_heatmap(fig, ax, df, label, cmap, is_pct=False, zero_color=TECH_COLORS[
     :param bool is_pct: if True, values are shown as percentages
     :param zero_color: color of the cells equal to 0
     """
-    data = df.to_numpy()
+    # colors are based on the values rounded as they are shown in the cells, so that equal numbers have equal colors
+    data = df.round(3 if is_pct else 1).to_numpy()
     nonzero = data[data != 0]
     vmin = np.nanmin(nonzero) if len(nonzero) > 0 else 0
     vmax = np.nanmax(nonzero) if len(nonzero) > 0 else 1
+    single_value = vmin if vmin == vmax else None
+    if single_value is not None:
+        # all the cells have the same value: use the middle of the colormap
+        vmin, vmax = 0.99 * vmin, 1.01 * vmax
     norm = plt.Normalize(vmin=vmin, vmax=vmax)
     cmap_obj = plt.get_cmap(cmap)
 
-    facecolors = df.apply(lambda col: col.map(lambda val: zero_color if val == 0 else to_hex(cmap_obj(norm(val)))))
+    facecolors = df.round(3 if is_pct else 1).apply(
+        lambda col: col.map(lambda val: zero_color if val == 0 else to_hex(cmap_obj(norm(val))))
+    )
     texts = df.apply(lambda col: col.map(lambda val: "-" if val == 0 else f"{val:.1%}" if is_pct else f"{val:.1f}"))
     _draw_cells(ax, facecolors, texts)
 
     sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=ax, label=label)
-    if is_pct:
+    if single_value is not None:
+        cbar.set_ticks([single_value])
+        cbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.1%}" if is_pct else f"{x:.1f}"))
+    elif is_pct:
         cbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0%}"))
     return cbar
