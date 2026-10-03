@@ -144,7 +144,7 @@ def _draw_cells(ax, facecolors, texts):
 
 
 def draw_tech_selection(fig, ax, type_matrix, cost_matrix, types,
-                        label="Technology installed\n" + r"(cells: €/tCO$_2$ avoided)"):
+                        label="Technology installed"):
     """
     Draws the grid of the installed technology, with the cost of CO2 avoided in each cell
 
@@ -160,7 +160,7 @@ def draw_tech_selection(fig, ax, type_matrix, cost_matrix, types,
     """
     facecolors = type_matrix.apply(lambda col: col.map(TECH_COLORS))
     texts = pd.DataFrame(
-        [[f"{cost_matrix.iloc[i, j]:.1f}" if type_matrix.iloc[i, j] != "none" else "-"
+        [[f"{cost_matrix.iloc[i, j]:.1f} €/t" if type_matrix.iloc[i, j] != "none" else "-"
           for j in range(type_matrix.shape[1])] for i in range(type_matrix.shape[0])],
         index=type_matrix.index, columns=type_matrix.columns,
     )
