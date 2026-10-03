@@ -89,7 +89,7 @@ TECH_COLORS = {
     "none": "#D3D3D3",
     "MEA": "#2F6B9E",
     "CaL": "#D887B5",
-    "Oxyfuel": "#9D892B",
+    "Oxyfuel": "#C9603A",
     "Oxyfuel + PCC": "#D887B5",
 }
 
