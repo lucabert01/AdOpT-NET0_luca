@@ -698,8 +698,8 @@ for dh in explored_dh_ratio_str:
         (results_data["boiler_out_no_ccs"][dh_key]/1000,   "Boiler output [GWh/y]",           "boiler_out",         "OrRd",    False),
         (results_data["boiler_em_no_ccs"][dh_key],        r"Boiler emissions [ktCO$_2$/y]",   "boiler_em",          "OrRd",    False),
         (results_data["net_em_ccs"][dh_key],              r"Net emissions [ktCO$_2$/y]",      "net_emissions",      "RdBu_r",  False),
-        (results_data["load_factor_ccs"][dh_key],          "CCS load factor [%]",             "ccs_lf",             SEQUENTIAL_CMAPS["load_factor"], True),
-        (results_data["size_ccs"][dh_key],                 "CCS size [t/h]",                  "ccs_size",           SEQUENTIAL_CMAPS["size"], False),
+        (results_data["load_factor_ccs"][dh_key],          "Capture unit load factor [%]",             "ccs_lf",             SEQUENTIAL_CMAPS["load_factor"], True),
+        (results_data["size_ccs"][dh_key],                 "Capture unit size [t/h]",                  "ccs_size",           SEQUENTIAL_CMAPS["size"], False),
         (results_data["fraction_avoided_ccs"][dh_key],    r"CO$_2$ avoided [%]",             "fraction_avoided",   SEQUENTIAL_CMAPS["fraction_avoided"], True),
         (results_data["extra_gas_ccs"][dh_key],            "Extra gas usage boiler [GWh/y]",  "extra_gas_boiler",   "Blues",   False),
         (results_data["loss_el_revenues_ccs"][dh_key],     "Loss el. revenues [M€/y]",        "loss_el_revenues",   "OrRd",    False),
@@ -711,8 +711,8 @@ for dh in explored_dh_ratio_str:
 
     # NEW: combined 2x2 CCS figure
     combined_metrics = [
-        (results_data["size_ccs"][dh_key],              "CCS size [t/h]",                 SEQUENTIAL_CMAPS["size"], False),
-        (results_data["load_factor_ccs"][dh_key],        "CCS load factor [%]",            SEQUENTIAL_CMAPS["load_factor"], True),
+        (results_data["size_ccs"][dh_key],              "Capture unit size [t/h]",                 SEQUENTIAL_CMAPS["size"], False),
+        (results_data["load_factor_ccs"][dh_key],        "Capture unit load factor [%]",            SEQUENTIAL_CMAPS["load_factor"], True),
         (results_data["loss_el_revenues_ccs"][dh_key],   "Loss el. revenues [M€/y]",       "OrRd",    False),
         (results_data["extra_gas_ccs"][dh_key],          "Extra gas usage boiler [GWh/y]", "Blues",   False),
     ]
@@ -728,8 +728,8 @@ for dh in explored_dh_ratio_str:
         cost_matrix[dh_key],
         [
             (results_data["fraction_avoided_ccs"][dh_key], r"CO$_2$ avoided [%]", SEQUENTIAL_CMAPS["fraction_avoided"], True,  "fraction_avoided"),
-            (results_data["size_ccs"][dh_key],             "CCS size [t/h]",      SEQUENTIAL_CMAPS["size"],             False, "ccs_size"),
-            (results_data["load_factor_ccs"][dh_key],      "CCS load factor [%]", SEQUENTIAL_CMAPS["load_factor"],      True,  "ccs_lf"),
+            (results_data["size_ccs"][dh_key],             "Capture unit size [t/h]",      SEQUENTIAL_CMAPS["size"],             False, "ccs_size"),
+            (results_data["load_factor_ccs"][dh_key],      "Capture unit load factor [%]", SEQUENTIAL_CMAPS["load_factor"],      True,  "ccs_lf"),
         ],
         dh_key,
     )

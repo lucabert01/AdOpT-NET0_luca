@@ -527,8 +527,8 @@ for idx, name_sim in enumerate(simulations):
 ax1.set_xticks(x)
 ax1.set_xticklabels([str(r) for r in explored_dh_ratio])
 ax1.set_xlabel("District heating demand ratio [-]")
-ax1.set_ylabel("CCS size [t/h]", color=batlow_colors[0])
-ax2.set_ylabel("CCS load factor [-]", color=batlow_colors[3])
+ax1.set_ylabel("Capture unit size [t/h]", color=batlow_colors[0])
+ax2.set_ylabel("Capture unit load factor [-]", color=batlow_colors[3])
 
 ax1.set_ylim(bottom=15)
 ax2.set_ylim(0.8, 1.2)
@@ -546,8 +546,8 @@ ax1.add_artist(legend1)
 
 # --- Variable legend ---
 variable_handles = [
-    Line2D([0], [0], color=batlow_colors[0], linestyle="-", marker="o", markersize=4, label="CCS size [t/h]"),
-    Line2D([0], [0], color=batlow_colors[3], linestyle="-", marker="o", markersize=4, label="CCS load factor [-]"),
+    Line2D([0], [0], color=batlow_colors[0], linestyle="-", marker="o", markersize=4, label="Capture unit size [t/h]"),
+    Line2D([0], [0], color=batlow_colors[3], linestyle="-", marker="o", markersize=4, label="Capture unit load factor [-]"),
 ]
 ax1.legend(handles=variable_handles, frameon=False, loc="best")
 
