@@ -471,8 +471,8 @@ def plot_tech_selection_overview(type_df, cost_df, heatmaps):
 # --- EXECUTION ---
 metrics = [
     (results_data["net_em_ccs"],      r"Net emissions [ktCO$_2$/y]", "net_emissions",   "RdBu_r",  False),
-    (results_data["load_factor_ccs"], "CCS load factor [-]",         "ccs_lf",          SEQUENTIAL_CMAPS["load_factor"], True),
-    (results_data["size_ccs"],        "CCS size [t/h]",              "ccs_size",        SEQUENTIAL_CMAPS["size"], False),
+    (results_data["load_factor_ccs"], "Capture unit load factor [-]",         "ccs_lf",          SEQUENTIAL_CMAPS["load_factor"], True),
+    (results_data["size_ccs"],        "Capture unit size [t/h]",              "ccs_size",        SEQUENTIAL_CMAPS["size"], False),
     (results_data["fraction_avoided"],"Fraction avoided [-]",        "fraction_avoided", SEQUENTIAL_CMAPS["fraction_avoided"], True),
 ]
 
@@ -480,8 +480,8 @@ for df, label, suffix, cmap, is_pct in metrics:
     plot_heatmap(df, label, f"cement_{suffix}", cmap, is_pct)
 
 plot_heatmap_double(
-    results_data["size_ccs"],        "CCS size [t/h]",
-    results_data["load_factor_ccs"], "CCS load factor [-]",
+    results_data["size_ccs"],        "Capture unit size [t/h]",
+    results_data["load_factor_ccs"], "Capture unit load factor [-]",
     "cement_size_lf",
     SEQUENTIAL_CMAPS["size"], SEQUENTIAL_CMAPS["load_factor"],
     False, True,
@@ -493,8 +493,8 @@ plot_tech_selection_overview(
     cost_matrix,
     [
         (results_data["fraction_avoided"], "Fraction avoided [-]", SEQUENTIAL_CMAPS["fraction_avoided"], True,  "fraction_avoided"),
-        (results_data["size_ccs"],         "CCS size [t/h]",       SEQUENTIAL_CMAPS["size"],             False, "ccs_size"),
-        (results_data["load_factor_ccs"],  "CCS load factor [-]",  SEQUENTIAL_CMAPS["load_factor"],      True,  "ccs_lf"),
+        (results_data["size_ccs"],         "Capture unit size [t/h]",       SEQUENTIAL_CMAPS["size"],             False, "ccs_size"),
+        (results_data["load_factor_ccs"],  "Capture unit load factor [-]",  SEQUENTIAL_CMAPS["load_factor"],      True,  "ccs_lf"),
     ],
 )
 
