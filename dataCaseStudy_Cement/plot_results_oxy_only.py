@@ -123,7 +123,7 @@ for j in range(0,num_carbon_tax):
             cement_oxy_design = df_design.loc[:, ('industrial_cluster', 'CementHybridCCS')]
             cement_oxy_operation = df_operation.loc[:, ('technology_operation', 'period1', 'industrial_cluster', 'CementHybridCCS')]
             if cement_oxy_design["size_mea"].iloc[0] > 0:
-                type_installed = "Oxyfuel + PCC"
+                type_installed = "Oxyfuel + MEA"
             else:
                 type_installed = "Oxyfuel"
 
@@ -196,7 +196,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B', '#B1E87E',
 # ------------------------------------------------------------
 setup_matplotlib_for_paper("single")
 
-types = ["MEA","Oxyfuel", "Oxyfuel + PCC"]
+types = ["MEA","Oxyfuel", "Oxyfuel + MEA"]
 type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 
 # ------------------------------------------------------------
@@ -330,5 +330,5 @@ ax.legend(
     handletextpad=0.4,
     frameon=False,
 )
-save_figure_for_paper(fig, "cement_oxy_only_cost_breakdown", figures_path)
+save_figure_for_paper(fig, "cement_oxy_only_cost_breakdown", "../figures/cement_tech_selection")
 plt.show()

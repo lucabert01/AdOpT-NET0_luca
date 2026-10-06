@@ -80,7 +80,7 @@ for _, case in capex_matrix.iterrows():
 
     elif cement_oxy_design["size"].iloc[0] > 0:
         if cement_oxy_design["size_mea"].iloc[0] > 0:
-            type_installed = "Oxyfuel + PCC"
+            type_installed = "Oxyfuel + MEA"
         else:
             type_installed = "Oxyfuel"
 
@@ -134,7 +134,7 @@ cost_matrix = results_summary.pivot(
     index="oxy_capex_multiplier", columns="mea_capex_multiplier", values="cost_of_avoided"
 ).sort_index(ascending=False).sort_index(axis=1)
 
-types = ["none", "MEA", "Oxyfuel", "Oxyfuel + PCC"]
+types = ["none", "MEA", "Oxyfuel", "Oxyfuel + MEA"]
 
 # SINGLE-COLUMN FIGURE
 setup_matplotlib_for_paper("single")

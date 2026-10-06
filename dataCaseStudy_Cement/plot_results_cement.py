@@ -120,7 +120,7 @@ for j in range(0,num_carbon_tax):
 
         elif cement_oxy_design["size"].iloc[0] > 0:
             if cement_oxy_design["size_mea"].iloc[0] > 0:
-                type_installed = "Oxyfuel + PCC"
+                type_installed = "Oxyfuel + MEA"
             else:
                 type_installed = "Oxyfuel"
 
@@ -214,7 +214,7 @@ type_matrix = type_matrix.sort_index(ascending=False).sort_index(axis=1)
 # plt.show()
 
 # --- Plot 2: Grid of installed type (categorical) ---
-# types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + PCC"]
+# types = ["none", "MEA", "Partial oxyfuel", "Oxyfuel + MEA"]
 # type_to_color = {t: batlow_colors[i] for i, t in enumerate(types)}
 #
 # plt.figure(figsize=(7,5))
@@ -247,7 +247,7 @@ type_matrix = type_matrix.sort_index(ascending=False).sort_index(axis=1)
 
 
 
-types = ["none", "MEA", "Oxyfuel", "Oxyfuel + PCC"]
+types = ["none", "MEA", "Oxyfuel", "Oxyfuel + MEA"]
 
 
 # --- PLOT SECONDARY VARIABLES ---

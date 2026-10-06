@@ -91,6 +91,7 @@ TECH_COLORS = {
     "CaL": "#D887B5",
     "Oxyfuel": "#C9603A",
     "Oxyfuel + PCC": "#D887B5",
+    "Oxyfuel + MEA": "#D887B5",
 }
 
 # Colormaps (light to dark) of the variables shown next to the technology selection
