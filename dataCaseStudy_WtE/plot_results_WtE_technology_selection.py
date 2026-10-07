@@ -267,7 +267,8 @@ for i_dh in range(0, num_dh_ratio):
                     :, ("technology_operation", "period1", "industrial_cluster", "WasteCHP")
                 ]
                 waste_in = w2e_operation["wasteIn_input"]
-                el_out = w2e_operation["electricity_output"]
+                # The electricity used by the MEA plant is not sold
+                el_out = w2e_operation["electricity_output"] - w2e_operation["electricity_var_input_ccs"]
                 emissions_w2e = waste_in * emission_factor
                 emissions_boiler = (
                     sum(boiler_output["heat_output"])
@@ -348,7 +349,8 @@ for i_dh in range(0, num_dh_ratio):
                 fraction_avoided = tot_co2_avoided/emission_baseline
                 extra_gas_usage_boiler = (sum(boiler_output["heat_output"]) - tot_boiler_out_no_ccs
                                          ) / th_efficiency_boiler
-                loss_el_revenues = revenues_no_ccs - (revenue_el_cal+revenue_el_wte)
+                # electricity_output already includes el_cal
+                loss_el_revenues = revenues_no_ccs - revenue_el_wte
             else:
                 no_ccs_entry = no_ccs_summary[dh_ratio_str][carbon_tax_str][el_price_str]
                 revenues_no_ccs = no_ccs_entry["electricity_revenues"]
@@ -579,13 +581,16 @@ def plot_heatmap(df, label, filename, cmap, is_pct=False, zero_color="lightgrey"
     save_figure_for_paper(fig, filename, figures_path)
 
 # --- COMBINED 2x2 CCS METRICS FIGURE ---
-def plot_combined_heatmap(dfs_labels, filename, zero_color="lightgrey"):
+def plot_combined_heatmap(dfs_labels, filename, zero_color="lightgrey", path=figures_path):
     """
-    Plot a 2x2 grid of heatmaps.
-    dfs_labels: list of (df, label, cmap, is_pct) tuples, exactly 4 entries.
+    Plot a grid of heatmaps with 2 columns.
+    dfs_labels: list of (df, label, cmap, is_pct) tuples, 2 or 4 entries.
     """
-    setup_matplotlib_for_paper("double")  # wider figure for 2 columns
-    fig, axes = plt.subplots(2, 2, layout="constrained")
+    fig_width_in, fig_height_in = setup_matplotlib_for_paper("double")  # wider figure for 2 columns
+    n_rows_fig = len(dfs_labels) // 2
+    fig, axes = plt.subplots(
+        n_rows_fig, 2, figsize=(fig_width_in, fig_height_in * n_rows_fig / 2), layout="constrained", squeeze=False
+    )
     for ax, (df, label, cmap, is_pct) in zip(axes.flat, dfs_labels):
         data = df.to_numpy()
         n_rows, n_cols = data.shape
@@ -618,6 +623,7 @@ def plot_combined_heatmap(dfs_labels, filename, zero_color="lightgrey"):
                 )
 
                 txt = f"{val:.1%}" if is_pct else f"{val:.1f}"
+                txt = txt.replace("-0.0", "0.0") if txt in ("-0.0", "-0.0%") else txt
                 ax.text(
                     j + 0.5, i + 0.5, txt,
                     ha="center", va="center",
@@ -644,7 +650,7 @@ def plot_combined_heatmap(dfs_labels, filename, zero_color="lightgrey"):
             from matplotlib.ticker import FuncFormatter
             cbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0%}"))
 
-    save_figure_for_paper(fig, filename, figures_path)
+    save_figure_for_paper(fig, filename, path)
 
 # --- TECHNOLOGY SELECTION, FRACTION AVOIDED, SIZE, LOAD FACTOR: COMBINED 2x2 FIGURE AND SINGLE FIGURES ---
 def plot_tech_selection_overview(type_df, cost_df, heatmaps, dh_key):
@@ -720,6 +726,16 @@ for dh in explored_dh_ratio_str:
     plot_combined_heatmap(
         combined_metrics,
         filename=f"wte_ccs_combined_{dh_key}",
+    )
+
+    # energy penalty of the capture: lost electricity revenues and extra gas usage of the boiler
+    plot_combined_heatmap(
+        [
+            (results_data["loss_el_revenues_ccs"][dh_key], "Loss el. revenues [M€/y]",       "OrRd",  False),
+            (results_data["extra_gas_ccs"][dh_key],        "Extra gas usage boiler [GWh/y]", "Blues", False),
+        ],
+        filename=f"wte_energy_penalty_{dh_key}",
+        path=figures_path_tech_selection,
     )
 
     # technology selection with fraction avoided, size and load factor

@@ -21,6 +21,7 @@ figures_path = "../figures/wte_tech_selection"
 raw_results_path = Path("./raw_results/capex_sensitivity")
 capex_matrix = pd.read_csv(raw_results_path / "capex_matrix.csv", sep=";")
 capex_matrix_info = json.loads((raw_results_path / "capex_matrix_info.json").read_text())
+carbon_tax = capex_matrix_info["carbon_tax"]
 gas_price = 40
 import_price_RDF = 20
 
@@ -84,7 +85,9 @@ for _, case in capex_matrix.iterrows():
     if w2e_design["size"].iloc[0] > 0 and w2e_design["size_ccs"].iloc[0] > 0:
         w2e_operation = tec_operation(df_operation, "WasteCHP")
         co2_captured = w2e_operation["CO2captured_var_output_ccs"]
-        loss_el_revenues = revenues_no_ccs - sum(w2e_operation["electricity_output"] * el_price)
+        # The electricity used by the MEA plant is not sold
+        el_sold = w2e_operation["electricity_output"] - w2e_operation["electricity_var_input_ccs"]
+        loss_el_revenues = revenues_no_ccs - sum(el_sold * el_price)
         extra_cost_boiler = (
             (sum(boiler_output["heat_output"]) - tot_boiler_out_no_ccs) / th_efficiency_boiler * gas_price
         )
@@ -148,7 +151,7 @@ for _, case in capex_matrix.iterrows():
     )
 
 results_summary = pd.DataFrame(results_summary)
-results_summary.to_csv(raw_results_path / "results_summary.csv", sep=";", index=False)
+results_summary.to_csv(raw_results_path / f"results_summary_ctax_{carbon_tax}.csv", sep=";", index=False)
 print(results_summary.to_string())
 
 # Matrices: capex of CaL on the rows (baseline on top), capex of MEA on the columns
@@ -170,6 +173,6 @@ ax.set_yticklabels([f"{(m - 1) * 100:+.0f}%" for m in type_matrix.index])
 ax.set_xlabel("CAPEX increase of MEA [-]")
 ax.set_ylabel("CAPEX change of CaL [-]")
 
-save_figure_for_paper(fig, "wte_tech_selection_capex_sensitivity", figures_path)
+save_figure_for_paper(fig, f"wte_tech_selection_capex_sensitivity_ctax_{carbon_tax}", figures_path)
 
 plt.show()

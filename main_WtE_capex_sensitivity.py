@@ -34,7 +34,7 @@ path_processed_data = Path("./dataCaseStudy_WtE/dataSources/hourly_data_casestud
 data = pd.read_excel(path_processed_data)
 
 # General input data
-carbon_tax = 200
+carbon_tax = 150
 dh_ratio = 0.5
 explored_mea_capex_multiplier = [1, 1.5, 2]
 explored_cal_capex_multiplier = [1, 0.5, 0.25]
@@ -64,12 +64,13 @@ for cal_multiplier in explored_cal_capex_multiplier:
     for mea_multiplier in explored_mea_capex_multiplier:
         capex_matrix.append(
             {
-                "case_name": f"mea_{mea_multiplier:.2f}_cal_{cal_multiplier:.2f}",
+                "case_name": f"mea_{mea_multiplier:.2f}_cal_{cal_multiplier:.2f}_ctax_{carbon_tax}",
                 "mea_capex_multiplier": mea_multiplier,
                 "cal_capex_multiplier": cal_multiplier,
             }
         )
 capex_matrix = pd.DataFrame(capex_matrix)
+no_ccs_case_name = f"noCCS_ctax_{carbon_tax}"
 print(capex_matrix.to_string())
 
 os.makedirs(result_path, exist_ok=True)
@@ -80,7 +81,7 @@ with open(result_path / "capex_matrix_info.json", "w") as json_file:
             "carbon_tax": carbon_tax,
             "av_el_price": av_el_price,
             "dh_ratio": dh_ratio,
-            "no_ccs_case_name": "noCCS",
+            "no_ccs_case_name": no_ccs_case_name,
         },
         json_file,
         indent=4,
@@ -368,8 +369,8 @@ def run_case(case_name, mea_capex_multiplier, cal_capex_multiplier, ccs_possible
 
 
 # Benchmark without CCS (does not depend on the capex of the capture technologies)
-if not (skip_solved_cases and case_is_solved("noCCS")):
-    run_case("noCCS", 1, 1, ccs_possible=0)
+if not (skip_solved_cases and case_is_solved(no_ccs_case_name)):
+    run_case(no_ccs_case_name, 1, 1, ccs_possible=0)
 
 for _, case in capex_matrix.iterrows():
     if skip_solved_cases and case_is_solved(case["case_name"]):

@@ -31,6 +31,7 @@ batlow_colors = ['#222A6A', '#4B708A', '#6FBC7B',
                  '#B1E87E', '#F7D03C', '#D491B8', '#012E4D']
 
 figures_path = "../figures"
+figures_path_tech_selection = "../figures/wte_tech_selection"
 
 
 # ======================================================
@@ -145,7 +146,7 @@ for name_sim in simulations:
         results_summary[name_sim][dh_ratio_str]['opex_variable'] = float(w2e_design["opex_variable_ccs"])
         results_summary[name_sim][dh_ratio_str]['transport_stor_cost'] = float(transport_stor_cost)
         results_summary[name_sim][dh_ratio_str]['loss_el_revenues'] = float(sum(
-            (baseline_el_prod - el_out) * el_price))
+            (baseline_el_prod - (el_out - w2e_output['electricity_var_input_ccs'])) * el_price))
         results_summary[name_sim][dh_ratio_str]['extra_cost_boiler'] = float(
             extra_usage_boiler * (emission_factor_boiler * carbon_tax + gas_price))
 
@@ -442,7 +443,7 @@ ax.set_xticks(x)
 ax.set_xticklabels([str(r) for r in explored_dh_ratio])
 ax.set_xlabel("District heating demand ratio [-]")
 ax.set_ylabel("CO$_2$ avoidance cost [€/tCO$_2$]")
-ax.set_ylim(0, 150)
+ax.set_ylim(0, 175)
 
 ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
 ax.set_axisbelow(True)
@@ -484,7 +485,7 @@ fig.tight_layout()
 save_figure_for_paper(
     fig,
     "MEA_vs_MEA_timeless_cost_breakdown",
-    figures_path
+    figures_path_tech_selection
 )
 
 # ======================================================
