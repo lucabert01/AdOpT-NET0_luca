@@ -424,14 +424,13 @@ ax.plot(time_axis, entry['hourly_clinker_output'],
 delta_cost = float(entry['delta_cost_abatement'])
 
 ax.set_ylim(0, 125)
-ax.spines[['top', 'right']].set_visible(False)
 ax.set_xlabel("Time [h]")
 ax.set_ylabel("Clinker [t/h]")
 ax.legend(loc='upper right', frameon=False)
 ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
 ax.set_axisbelow(True)
 
-save_figure_for_paper(fig, "flex_ops_ep150_std2", figures_path)
+save_figure_for_paper(fig, "flex_ops_cement", Path(figures_path) / "cement_tech_selection")
 
 
 ## Plot with hours of shifting
@@ -478,11 +477,11 @@ ax.annotate('Decrease in cost \n of carbon avoided',
 
 ax.set_xlabel("Electricity price [€/MWh]")
 ax.set_ylabel("Hours with load shifting [%]")
-ax.spines[['top', 'right']].set_visible(False)
 handles, labels = ax.get_legend_handles_labels()
 ax.legend(handles[::-1], labels[::-1], loc='best', frameon=False)
 ax.set_xlim(0, 175)
+ax.set_ylim(top=ax.get_ylim()[1] * 1.15)
 ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
 ax.set_axisbelow(True)
-save_figure_for_paper(fig, "fract_hours_shifting_mea", figures_path)
+save_figure_for_paper(fig, "load_shifted_cement", Path(figures_path) / "cement_tech_selection")
 plt.show()
