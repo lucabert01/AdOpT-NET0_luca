@@ -1,0 +1,57 @@
+
+Gurobi 12.0.2 (win64) logging started Wed Oct  7 15:54:05 2026
+
+Set parameter LogFile to value "dataCaseStudy_WtE\raw_results\capex_sensitivity\20261007155259_noCCS_ctax_150\solver_log.txt"
+Set parameter TimeLimit to value 36000
+Set parameter MIPGap to value 0.02
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 12.0.2 build v12.0.2rc0 (win64 - Windows 11+.0 (26200.2))
+
+CPU model: 12th Gen Intel(R) Core(TM) i7-1255U, instruction set [SSE2|AVX|AVX2]
+Thread count: 10 physical cores, 12 logical processors, using up to 12 threads
+
+Non-default parameters:
+TimeLimit  36000
+MIPGap  0.02
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1051242 rows, 1103801 columns and 2295203 nonzeros
+Model fingerprint: 0x1270b9ef
+Variable types: 1103799 continuous, 2 integer (2 binary)
+Coefficient statistics:
+  Matrix range     [1e-05, 1e+07]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 1e+09]
+  RHS range        [8e-03, 1e+07]
+Warning: Model contains large matrix coefficient range
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+Presolve removed 1047166 rows and 1095654 columns
+Presolve time: 0.51s
+Presolved: 4076 rows, 8147 columns, 8154 nonzeros
+Variable types: 8146 continuous, 1 integer (1 binary)
+Performing another presolve...
+Presolve removed 4076 rows and 8147 columns
+Presolve time: 0.01s
+Found heuristic solution: objective 1.688262e+07
+
+Explored 1 nodes (0 simplex iterations) in 0.85 seconds (0.70 work units)
+Thread count was 12 (of 12 available processors)
+
+Solution count 1: 1.68826e+07 
+
+Optimal solution found (tolerance 2.00e-02)
+Best objective 1.688262016082e+07, best bound 1.688262016082e+07, gap 0.0000%

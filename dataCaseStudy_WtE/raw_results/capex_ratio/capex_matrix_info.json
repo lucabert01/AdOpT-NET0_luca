@@ -1,0 +1,11 @@
+{
+    "baseline_capex_ratio": 6.6733939672919,
+    "ref_size_mea": 24.7,
+    "ref_size_cal": 49.6,
+    "baseline_capex_mea": 43583435.79754363,
+    "baseline_capex_cal": 290849437.5251815,
+    "carbon_tax": 200,
+    "av_el_price": 107.47160730593608,
+    "dh_ratio": 0.5,
+    "no_ccs_case_name": "noCCS"
+}

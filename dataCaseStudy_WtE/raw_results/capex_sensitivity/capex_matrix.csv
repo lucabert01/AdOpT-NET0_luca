@@ -1,0 +1,10 @@
+case_name;mea_capex_multiplier;cal_capex_multiplier
+mea_1.00_cal_1.00_ctax_150;1.0;1.0
+mea_1.50_cal_1.00_ctax_150;1.5;1.0
+mea_2.00_cal_1.00_ctax_150;2.0;1.0
+mea_1.00_cal_0.50_ctax_150;1.0;0.5
+mea_1.50_cal_0.50_ctax_150;1.5;0.5
+mea_2.00_cal_0.50_ctax_150;2.0;0.5
+mea_1.00_cal_0.25_ctax_150;1.0;0.25
+mea_1.50_cal_0.25_ctax_150;1.5;0.25
+mea_2.00_cal_0.25_ctax_150;2.0;0.25
