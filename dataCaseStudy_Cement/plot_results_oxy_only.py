@@ -291,14 +291,15 @@ ax.set_xticklabels(bar_labels, ha='center')
 # --- Fraction avoided on secondary axis ---
 ax2.scatter(x_cement, frac_avoided_arr,
             color='black', marker='D', s=9, zorder=5)
-# Add text labels for each marker
+# Add text labels for each marker, just below the top of each bar so that they are aligned
+bar_top = bottom + transp_arr
 for i, val in enumerate(frac_avoided_arr):
-    ax2.text(
+    ax.text(
         x_cement[i],
-        val - 15,
+        bar_top[i] - 5,
         f"{val:.1f}%",
         ha='center',
-        va='bottom',
+        va='top',
         fontsize=7,
         bbox=dict(
             boxstyle='round,pad=0.2',
