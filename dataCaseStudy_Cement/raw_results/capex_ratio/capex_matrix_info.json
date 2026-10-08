@@ -1,0 +1,10 @@
+{
+    "baseline_capex_ratio": 1.1961050905269,
+    "ref_size_mea": 79.37617225502161,
+    "ref_size_oxy": 102.5531941279349,
+    "baseline_capex_mea": 100389511.78868908,
+    "baseline_capex_oxy": 120076406.08596124,
+    "carbon_tax": 200,
+    "av_el_price": 107.47160730593608,
+    "plant_analyzed": "Vernasca"
+}

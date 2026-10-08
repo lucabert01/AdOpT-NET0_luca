@@ -1,0 +1,6 @@
+{
+    "capex_scaling": "MEA multiplier: MEA, heat pump, small MEA + compressor. Oxyfuel multiplier: oxyfuel + CPU",
+    "carbon_tax": 200,
+    "av_el_price": 107.47160730593608,
+    "plant_analyzed": "Vernasca"
+}
