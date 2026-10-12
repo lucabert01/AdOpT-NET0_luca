@@ -152,7 +152,32 @@ SCENARIOS = [
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteCaL_CCS"],
      "objective": "emissions_minC"},
+    # Same choice set as technology_selection, but the permanent storage sink must
+    # inject at a near-constant rate (between 85% and 100% of its injection
+    # capacity in every hour), with a temporary CO2 buffer storage offered at the
+    # Casalborsetti hub to absorb the mismatch between capture and injection.
+    {"name": "constant_injection",
+     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
+     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
+     "objective": "costs",
+     "carbon_tax": 200,
+     "injection_rate_tolerance": 0.15,
+     "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"]},
+    {"name": "constant_injection",
+     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
+     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
+     "objective": "costs",
+     "carbon_tax": 250,
+     "injection_rate_tolerance": 0.15,
+     "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"]},
 ]
+
+# Technology (filename under italy_data/technologies/) used for the temporary CO2
+# buffer storage added at a scenario's "temporary_storage_nodes"
+TEMPORARY_STORAGE_TECHNOLOGY = "TemporaryStorage_CO2"
+# Permanent storage sink technology, whose copied JSON gets the constant injection
+# rate settings for scenarios that set "injection_rate_tolerance"
+PERMANENT_STORAGE_TECHNOLOGY = "PermanentStorage_CO2_simple"
 
 #----- Import data-----#
 path_data_case_study = Path("./italy_data")
@@ -261,9 +286,55 @@ def enforce_single_cement_technology(m: "adopt.ModelHub", period: str = "period1
     return dual_nodes
 
 
+def add_new_technology_to_nodes(input_data_path: Path, tech_name: str, nodes: list,
+                                 period: str = "period1"):
+    """
+    Appends tech_name to the "new" technologies of each node in nodes, by editing
+    that node's Technologies.json (as written by assign_ccs_technologies_debug).
+    Must be called before copy_technology_data_custom, which then copies the
+    technology's JSON into the node's technology_data folder.
+    """
+    for node in nodes:
+        tech_file_path = input_data_path / period / "node_data" / node / "Technologies.json"
+        if not tech_file_path.exists():
+            raise FileNotFoundError(f"Technologies.json not found for node '{node}': {tech_file_path}")
+        with open(tech_file_path, "r") as f:
+            technologies_at_node = json.load(f)
+        if tech_name not in technologies_at_node["new"]:
+            technologies_at_node["new"].append(tech_name)
+        with open(tech_file_path, "w") as f:
+            json.dump(technologies_at_node, f, indent=4)
+        print(f"  Added {tech_name} as new technology at {node}")
+
+
+def set_constant_injection(input_data_path: Path, injection_rate_tolerance: float,
+                            period: str = "period1"):
+    """
+    Enables the Sink constant injection rate constraint (injection between
+    (1 - tolerance) * injection capacity and the injection capacity in every
+    timestep) in every node's copy of the permanent storage JSON. Edits the
+    case-study copies only, so the source JSON in italy_data stays unchanged.
+    """
+    tech_files = list((input_data_path / period / "node_data").glob(
+        f"*/technology_data/{PERMANENT_STORAGE_TECHNOLOGY}.json"
+    ))
+    if not tech_files:
+        raise FileNotFoundError(f"No {PERMANENT_STORAGE_TECHNOLOGY}.json found under {input_data_path}")
+    for tech_file in tech_files:
+        with open(tech_file, "r") as f:
+            tec_data = json.load(f)
+        tec_data["Flexibility"]["injection_rate_is_constant"] = 1
+        tec_data["Flexibility"]["injection_rate_tolerance"] = injection_rate_tolerance
+        with open(tech_file, "w") as f:
+            json.dump(tec_data, f, indent=4)
+        print(f"  Constant injection (tolerance {injection_rate_tolerance}) set in {tech_file}")
+
+
 def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list,
                   objective: str = "costs", carbon_tax: int = None,
-                  flatten_profiles: bool = False, nr_dd_days: int = None):
+                  flatten_profiles: bool = False, nr_dd_days: int = None,
+                  injection_rate_tolerance: float = None,
+                  temporary_storage_nodes: list = None):
     """
     Runs the full CCS-chain data-preparation + optimization pipeline for one
     emitter-technology scenario (a choice of cement and waste technology).
@@ -295,6 +366,11 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         annual totals.
     :param int nr_dd_days: overrides the module-level nr_DD_days for this scenario's
         number of typical/design days, if given.
+    :param float injection_rate_tolerance: if given, the permanent storage sink must
+        inject between (1 - injection_rate_tolerance) * injection capacity and the
+        injection capacity in every timestep (see set_constant_injection).
+    :param list temporary_storage_nodes: node names at which the temporary CO2
+        buffer storage (TEMPORARY_STORAGE_TECHNOLOGY) is offered as a new technology.
     """
     if carbon_tax is None:
         carbon_tax = default_carbon_tax
@@ -428,6 +504,9 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     assign_ccs_technologies_debug(network_location, network_emission_flux, path_data_case_study, input_data_path,
                                    technology_selection, tech_as_existing)
 
+    if temporary_storage_nodes:
+        add_new_technology_to_nodes(input_data_path, TEMPORARY_STORAGE_TECHNOLOGY, temporary_storage_nodes)
+
 
     # ===== DEBUG 1: After assign_ccs_technologies() =====
     print("\n🔍 DEBUG: Checking Technologies.json files after assignment...")
@@ -464,6 +543,9 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     # those are read (not overwritten) from the source templates; see
     # sector_emission_factor / co2_concentration_by_type above.
     copy_technology_data_custom(input_data_path, path_files_technologies, network_emission_flux)
+
+    if injection_rate_tolerance is not None:
+        set_constant_injection(input_data_path, injection_rate_tolerance)
 
     # Update CCS references in emitter technologies to match determined MEA sizes
     update_emitter_ccs_references(input_data_path, network_emission_flux, technology_selection, co2_concentration_by_type)
@@ -771,4 +853,6 @@ if __name__ == "__main__":
             carbon_tax=scenario.get("carbon_tax"),
             flatten_profiles=scenario.get("flatten_profiles", False),
             nr_dd_days=scenario.get("nr_dd_days"),
+            injection_rate_tolerance=scenario.get("injection_rate_tolerance"),
+            temporary_storage_nodes=scenario.get("temporary_storage_nodes"),
         )

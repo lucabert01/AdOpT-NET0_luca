@@ -1,0 +1,53 @@
+{
+  "tec_type": "STOR",
+  "size_min": 0,
+  "size_max": 115000,
+  "size_is_int": 0,
+  "decommission": "impossible",
+  "Economics": {
+    "comment": "Buffer storage of captured CO2 ahead of permanent injection. CAPEX in EUR/tCO2 storage capacity (linear, through the origin), opex_variable in EUR/tCO2 total output, opex_fixed as fraction of up-front CAPEX",
+    "capex_model": 1,
+    "unit_capex": 1103,
+    "fix_capex": 0,
+    "opex_variable": 0,
+    "opex_fixed": 0.06,
+    "discount_rate": 0.08,
+    "lifetime": 25,
+    "decommission_cost": 0
+  },
+  "Performance": {
+    "comment": "Lossless storage, no energy consumption. allow_only_one_direction = 0 keeps the model linear (no losses, so simultaneous charging/discharging has no effect)",
+    "input_carrier": [
+      "CO2captured"
+    ],
+    "main_input_carrier": "CO2captured",
+    "output_carrier": [
+      "CO2captured"
+    ],
+    "emission_factor": 0,
+    "allow_only_one_direction": 0,
+    "performance": {
+      "eta_in": 1,
+      "eta_out": 1,
+      "lambda": 0,
+      "theta": 0
+    }
+  },
+  "Flexibility": {
+    "comment": "Charging/discharging capacity as a ratio of the storage size (per hour), no separate cost",
+    "power_energy_ratio": "fixedratio",
+    "charge_rate": 1,
+    "discharge_rate": 1,
+    "capex_charging_power": 0,
+    "capex_discharging_power": 0
+  },
+  "Units": {
+    "size": "tonne",
+    "input_carrier": {
+      "CO2": "tonne/hr"
+    },
+    "output_carrier": {
+      "CO2": "tonne/hr"
+    }
+  }
+}
