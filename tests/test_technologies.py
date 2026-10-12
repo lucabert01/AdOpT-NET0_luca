@@ -643,6 +643,33 @@ def test_tec_sink(request):
     assert model.var_input[2, "electricity"].value == 1
     assert model.var_capex.value > 0
 
+    # CONSTANT INJECTION RATE
+    tec.processed_coeff.time_independent["injection_rate_is_constant"] = 1
+    tec.processed_coeff.time_independent["injection_rate_tolerance"] = 0.05
+
+    # Injection outside of the tolerance band is infeasible
+    model = construct_tec_model(tec, nr_timesteps=time_steps)
+    model.test_const_input1 = Constraint(expr=model.var_input[1, "CO2captured"] == 1)
+    model.test_const_input2 = Constraint(
+        expr=model.var_input[2, "CO2captured"] == 0.5
+    )
+    termination = run_model(model, request.config.solver)
+    assert termination in [
+        TerminationCondition.infeasibleOrUnbounded,
+        TerminationCondition.infeasible,
+        TerminationCondition.other,
+    ]
+
+    # Injection within the tolerance band is feasible
+    model = construct_tec_model(tec, nr_timesteps=time_steps)
+    model.test_const_input1 = Constraint(expr=model.var_input[1, "CO2captured"] == 1)
+    model.test_const_input2 = Constraint(
+        expr=model.var_input[2, "CO2captured"] == 0.96
+    )
+    termination = run_model(model, request.config.solver)
+    assert termination == TerminationCondition.optimal
+    assert model.var_injection_capacity.value >= 1
+
 
 def test_dynamics_fast(request):
     """

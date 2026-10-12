@@ -37,7 +37,9 @@
     "comment": "determines the flexibility of the power capacity compared to the energy capacity",
     "injection_capacity_is_decision_var": 0,
     "injection_rate_max": 1826.4,
-    "capex_injection_cap": 0
+    "capex_injection_cap": 0,
+    "injection_rate_is_constant": 0,
+    "injection_rate_tolerance": 0.02
   },
   "Units": {
     "size": "tonne",

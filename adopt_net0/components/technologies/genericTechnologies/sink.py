@@ -36,11 +36,16 @@ class Sink(Technology):
       .. math::
         Input_{t, maincar} \\leq injCapacity
 
-    - Maximal injection capacity:
+    - Maximal injection capacity (enforced as variable bound):
 
       .. math::
         injCapacity \\leq injRateMax
 
+    - Constant injection rate (optional, if ``injection_rate_is_constant`` is 1 in
+      Flexibility, with relative tolerance ``injection_rate_tolerance``, e.g. 0.02):
+
+      .. math::
+        (1 - tol) injCapacity \\leq Input_{t, maincar}
 
     - Storage level calculation:
 
@@ -94,6 +99,12 @@ class Sink(Technology):
 
         self.processed_coeff.time_independent["injection_rate_max"] = (
             self.flexibility_data["injection_rate_max"]
+        )
+        self.processed_coeff.time_independent["injection_rate_is_constant"] = (
+            self.flexibility_data.get("injection_rate_is_constant", 0)
+        )
+        self.processed_coeff.time_independent["injection_rate_tolerance"] = (
+            self.flexibility_data.get("injection_rate_tolerance", 0)
         )
         if "energy_consumption" in self.performance_data["performance"]:
             self.processed_coeff.time_independent["energy_consumption"] = (
@@ -217,16 +228,25 @@ class Sink(Technology):
             self.set_t_performance, rule=init_maximal_injection
         )
 
-        # if injection rates are fixed/ flexible:
-        def init_max_capacity_injection(const):
-            if self.flexibility_data["injection_capacity_is_decision_var"]:
-                # injectionCapacity <= injectionRateMax
-                return b_tec.var_injection_capacity <= coeff_ti["injection_rate_max"]
-            else:
-                # injectionCapacity == injectionRateMax
-                return b_tec.var_injection_capacity == coeff_ti["injection_rate_max"]
+        # injectionCapacity <= injectionRateMax is enforced by the variable bounds.
+        # If injection capacity is not a decision variable, it carries no cost and only
+        # acts as an upper bound on the input, so fixing it to injectionRateMax is
+        # not needed.
 
-        b_tec.const_max_injection_cap = pyo.Constraint(rule=init_max_capacity_injection)
+        # Constant injection rate: operate within tolerance below injection capacity
+        if coeff_ti["injection_rate_is_constant"]:
+            tolerance = coeff_ti["injection_rate_tolerance"]
+
+            def init_constant_injection(const, t):
+                # input[t] >= (1 - tol) * injectionCapacity
+                return (
+                    self.input[t, self.main_input_carrier]
+                    >= (1 - tolerance) * b_tec.var_injection_capacity
+                )
+
+            b_tec.const_constant_injection = pyo.Constraint(
+                self.set_t_performance, rule=init_constant_injection
+            )
 
         # Energy consumption for injection
         if "energy_consumption" in coeff_ti:
@@ -359,10 +379,15 @@ class Sink(Technology):
         """
         super(Sink, self).write_results_tec_design(h5_group, model_block)
 
-        if self.flexibility_data["injection_capacity_is_decision_var"]:
+        if (
+            self.flexibility_data["injection_capacity_is_decision_var"]
+            or self.processed_coeff.time_independent["injection_rate_is_constant"]
+        ):
             h5_group.create_dataset(
                 "injection_capacity", data=[model_block.var_injection_capacity.value]
             )
+
+        if self.flexibility_data["injection_capacity_is_decision_var"]:
             h5_group.create_dataset(
                 "capex_injection_cap", data=[model_block.var_capex_injection_cap.value]
             )
