@@ -33,8 +33,11 @@ from data_process.utilities.defined_functions import (
 )
 
 # All data/result paths below are relative to this script's folder, so the script
-# runs the same no matter which working directory it is started from
-os.chdir(Path(__file__).resolve().parent)
+# runs the same no matter which working directory it is started from. abspath
+# rather than Path.resolve(): resolve() expands mapped network drives to their
+# full UNC path, which can push the case-study paths over Windows' 260-character
+# limit.
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 
 #----- Scenario parameterization (shared across all runs) -----#
