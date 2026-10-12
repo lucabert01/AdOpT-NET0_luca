@@ -32,6 +32,10 @@ from data_process.utilities.defined_functions import (
     ALWAYS_NEW_TECHNOLOGIES,
 )
 
+# All data/result paths below are relative to this script's folder, so the script
+# runs the same no matter which working directory it is started from
+os.chdir(Path(__file__).resolve().parent)
+
 
 #----- Scenario parameterization (shared across all runs) -----#
 ref_year = 2024
@@ -171,6 +175,11 @@ SCENARIOS = [
      "injection_rate_tolerance": 0.15,
      "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"]},
 ]
+
+# Names of the SCENARIOS entries to run when the script is started without
+# command-line arguments (e.g. with the IDE's Run button). Set to None to run all
+# of SCENARIOS. Command-line arguments (`python main_italy.py <name> ...`) override it.
+RUN_SCENARIOS = ["constant_injection"]
 
 # Technology (filename under italy_data/technologies/) used for the temporary CO2
 # buffer storage added at a scenario's "temporary_storage_nodes"
@@ -833,8 +842,9 @@ if __name__ == "__main__":
     import sys
 
     # Optional CLI filter: `python main_italy.py technology_selection [other_name ...]`
-    # runs only the named scenario(s) instead of the full SCENARIOS list.
-    requested_names = sys.argv[1:]
+    # runs only the named scenario(s). Without arguments, RUN_SCENARIOS is used
+    # (or the full SCENARIOS list if RUN_SCENARIOS is None).
+    requested_names = sys.argv[1:] or RUN_SCENARIOS
     scenarios_to_run = (
         [s for s in SCENARIOS if s["name"] in requested_names] if requested_names else SCENARIOS
     )
