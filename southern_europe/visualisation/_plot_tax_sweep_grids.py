@@ -7,9 +7,16 @@ minimizing run -- one figure of the built network maps, one of the MACC
 
 No panel title/figure title is added (the paper's own caption covers that);
 each panel instead carries a small in-axes annotation ("CO2 tax = 150 EUR/t"
-etc.) plus that scenario's total captured CO2. A single legend, built from
-the union of what's present across all four scenarios, is shared by the
-whole figure rather than repeated per panel.
+etc.) plus that scenario's total captured CO2 (and, on the maps, the
+fraction of baseline emissions avoided). A single legend, built from the
+union of what's present across all four scenarios, is shared by the whole
+figure rather than repeated per panel. Axis labels are only drawn on the
+outer panels (latitude/y on the left column, longitude/x on the bottom row),
+so the right column's y label doesn't run into the left column's panels.
+
+Each panel is also saved as its own single-panel figure
+(..._tax_sweep_<scenario>.{png,pdf}, own legend), for when the four
+scenarios are shown separately rather than as one grid.
 
 Reuses ccs_chain_plots._draw_ccs_network_on_ax and
 ccs_chain_emitter_cost_ranking._draw_macc_on_ax -- the exact same drawing
@@ -17,12 +24,13 @@ code the single-scenario ccs_chain_network_map.png / ccs_chain_emitter_macc.png
 figures use -- so these panels are pixel-for-pixel consistent with those.
 
 Output: ccs_chain_results/scenario_comparison/ccs_chain_{network_map,macc}_
-tax_sweep.{png,pdf} -- PDF for the paper (vector), PNG for quick previewing.
+tax_sweep.{png,pdf} (2x2 grid) and ccs_chain_{network_map,macc}_tax_sweep_
+<scenario>.{png,pdf} (one per panel) -- PDF for the paper (vector), PNG for
+quick previewing.
 """
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
@@ -73,14 +81,34 @@ def _load_panel_data():
         macc_df, storage_node = cr.build_emitter_cost_table(h5_path)
         panels.append({
             "label": label,
+            "slug": f"tax{carbon_tax}" if carbon_tax is not None else objective,
             "h5_path": h5_path,
             "built_arcs": built_arcs,
             "ccs_df": ccs_df,
+            "summary": m.load_summary(h5_path),
             "macc_df": macc_df,
             "storage_node": storage_node,
         })
         print(f"Loaded {label!r} ({SCENARIO_NAME}, {objective}, carbon_tax={carbon_tax}) <- {h5_path}")
     return nodes_gdf, panels
+
+
+def _draw_map_panel(ax, panel, nodes_gdf, italy):
+    """One scenario's built network on ax, with its label/KPI annotation."""
+    ax.set_facecolor(m.SURFACE)
+    m.setup_base_map(ax, italy, "")  # no per-panel title -- caption covers it
+    real_df = m._draw_ccs_network_on_ax(ax, panel["built_arcs"], nodes_gdf, panel["ccs_df"])
+
+    total_capture_t = real_df["captured_annual"].sum()
+    ax.text(
+        0.02, 0.98,
+        f"{panel['label']}\n{total_capture_t / 1e6:.2f} Mt/yr CO$_2$ captured\n"
+        f"{m.fraction_avoided(panel['summary']['emissions_pos']):.1%} of baseline emissions avoided",
+        transform=ax.transAxes, fontsize=12, color=m.INK_PRIMARY,
+        va="top", ha="left",
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor=m.GRIDLINE, alpha=0.92),
+    )
+    return real_df
 
 
 def plot_tax_sweep_maps(nodes_gdf, panels):
@@ -94,43 +122,37 @@ def plot_tax_sweep_maps(nodes_gdf, panels):
     fig, axes = plt.subplots(2, 2, figsize=(19, 11.2), gridspec_kw=dict(hspace=0.12, wspace=0.08))
     fig.patch.set_facecolor(m.SURFACE)
 
-    real_dfs = []
-    for ax, panel in zip(axes.flat, panels):
-        ax.set_facecolor(m.SURFACE)
-        m.setup_base_map(ax, italy, "")  # no per-panel title -- caption covers it
-        real_df = m._draw_ccs_network_on_ax(ax, panel["built_arcs"], nodes_gdf, panel["ccs_df"])
-        real_dfs.append(real_df)
-
-        total_capture_mt = real_df["captured_annual"].sum() / 1e6
-        ax.text(
-            0.02, 0.98, f"{panel['label']}\n{total_capture_mt:.2f} Mt/yr CO$_2$ captured",
-            transform=ax.transAxes, fontsize=12, color=m.INK_PRIMARY,
-            va="top", ha="left",
-            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor=m.GRIDLINE, alpha=0.92),
-        )
+    real_dfs = [_draw_map_panel(ax, panel, nodes_gdf, italy) for ax, panel in zip(axes.flat, panels)]
+    _outer_labels_only(axes)
 
     # Union across all four panels so the shared legend covers every family/
     # status that appears in ANY of them, not just the first panel's.
-    all_ccs_df = pd.concat([p["ccs_df"] for p in panels], ignore_index=True)
-    legend_handles = [
-        Line2D([0], [0], color=m.MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
-        Line2D([0], [0], color=m.MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
-        Line2D([0], [0], color=m.MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
-        *m._capture_legend_handles(all_ccs_df),
-        Line2D([0], [0], marker="s", color="w", markerfacecolor=m.TRANSPORT_COLOR, markeredgecolor="white",
-               markersize=10, label="Transport hub", linestyle="None"),
-        Line2D([0], [0], marker="*", color="w", markerfacecolor=m.STORAGE_COLOR, markeredgecolor="white",
-               markersize=17, label="CO$_2$ storage", linestyle="None"),
-    ]
-    fig.legend(
-        handles=legend_handles, loc="lower center", bbox_to_anchor=(0.5, 0.0),
-        ncol=4, frameon=True, fontsize=12, framealpha=0.95, edgecolor=m.GRIDLINE,
-    )
+    all_real_df = pd.concat(real_dfs, ignore_index=True)
+    m.add_split_map_legend(fig, all_real_df, y=0.085, x_left=0.3, x_right=0.7, fontsize=12, ncol=3)
 
-    fig.tight_layout(rect=[0, 0.075, 1, 1])
+    fig.tight_layout(rect=[0, 0.09, 1, 1])
     _save_fig(fig, "ccs_chain_network_map_tax_sweep", m.SURFACE)
     plt.close(fig)
 
+    # --- one figure per scenario ---
+    for panel in panels:
+        fig, ax = plt.subplots(figsize=(12.5, 8))
+        fig.patch.set_facecolor(m.SURFACE)
+        real_df = _draw_map_panel(ax, panel, nodes_gdf, italy)
+        m.add_split_map_legend(ax, real_df, y=-0.1)
+        fig.tight_layout()
+        _save_fig(fig, f"ccs_chain_network_map_tax_sweep_{panel['slug']}", m.SURFACE)
+        plt.close(fig)
+
+
+def _outer_labels_only(axes):
+    """Keeps the x label on the bottom row and the y label on the left column
+    of a 2x2 grid only -- the right column's y label would otherwise sit in
+    the narrow gap between columns, on top of the left column's panels."""
+    for ax in axes[:, 1]:
+        ax.set_ylabel("")
+    for ax in axes[0, :]:
+        ax.set_xlabel("")
 
 def plot_tax_sweep_macc(panels):
     fig, axes = plt.subplots(2, 2, figsize=(19, 11), gridspec_kw=dict(hspace=0.22, wspace=0.1))
@@ -148,44 +170,12 @@ def plot_tax_sweep_macc(panels):
 
     all_low_cf = False
     for ax, panel in zip(axes.flat, panels):
-        ax.set_facecolor(cr.SURFACE)
-        df = panel["macc_df"]
-        # annotate_fertilizers=False: 4 cramped panels have no room for the
-        # per-bar callout arrows without them overlapping -- sector color
-        # (still shared, canonical across every panel) is enough here.
-        _, low_cf_mask = cr._draw_macc_on_ax(ax, df, annotate_fertilizers=False)
+        low_cf_mask = _draw_macc_panel(ax, panel, x_max, y_max)
         all_low_cf = all_low_cf or low_cf_mask.any()
-        ax.set_xlim(0, x_max)
-        ax.set_ylim(0, y_max)
+    _outer_labels_only(axes)
 
-        ax.set_xlabel("Cumulative CO$_2$ captured (Mt/yr)", fontsize=10.5)
-        ax.set_ylabel("€/t CO$_2$", fontsize=10.5)
-
-        total_capture_mt = df["captured_annual_t"].sum() / 1e6
-        ax.text(
-            0.02, 0.98, f"{panel['label']}\n{total_capture_mt:.2f} Mt/yr CO$_2$ captured",
-            transform=ax.transAxes, fontsize=12, color=cr.INK_PRIMARY,
-            va="top", ha="left",
-            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor=cr.GRIDLINE, alpha=0.92),
-        )
-
-    # Shared legend built from the union of sectors present across all four
-    # panels (sector_display_label already renders "Other" as "Industrial
-    # cluster of Ravenna", same as every other plot -- see ccs_chain_plots.py).
     all_macc_df = pd.concat([p["macc_df"] for p in panels], ignore_index=True)
-    seen_labels = set()
-    legend_handles = []
-    for s in cr.SECTOR_ORDER:
-        label = cr.SECTOR_LEGEND_LABEL[s]
-        if s not in set(all_macc_df["sector"]) or label in seen_labels:
-            continue
-        seen_labels.add(label)
-        legend_handles.append(Patch(facecolor=cr.SECTOR_COLORS[s], edgecolor="white", label=label))
-    if all_low_cf:
-        legend_handles.append(Patch(
-            facecolor="none", edgecolor=cr.INK_SECONDARY, hatch="////",
-            label=f"Capacity factor < {cr.LOW_CAPACITY_FACTOR_THRESHOLD:.0%}",
-        ))
+    legend_handles = _sector_legend_handles(all_macc_df, all_low_cf)
     fig.legend(
         handles=legend_handles, loc="lower center", bbox_to_anchor=(0.5, 0.0),
         ncol=len(legend_handles), frameon=True, fontsize=11.5, framealpha=0.95,
@@ -195,6 +185,66 @@ def plot_tax_sweep_macc(panels):
     fig.tight_layout(rect=[0, 0.08, 1, 1])
     _save_fig(fig, "ccs_chain_macc_tax_sweep", cr.SURFACE)
     plt.close(fig)
+
+    # --- one figure per scenario, same shared axis limits as the grid ---
+    for panel in panels:
+        fig, ax = plt.subplots(figsize=(11, 6.5))
+        fig.patch.set_facecolor(cr.SURFACE)
+        low_cf_mask = _draw_macc_panel(ax, panel, x_max, y_max)
+        legend_handles = _sector_legend_handles(panel["macc_df"], low_cf_mask.any())
+        ax.legend(
+            handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.13),
+            ncol=min(len(legend_handles), 4), frameon=True, fontsize=11, framealpha=0.95,
+            edgecolor=cr.GRIDLINE, title="Sector", title_fontsize=11,
+        )
+        fig.tight_layout()
+        _save_fig(fig, f"ccs_chain_macc_tax_sweep_{panel['slug']}", cr.SURFACE)
+        plt.close(fig)
+
+
+def _draw_macc_panel(ax, panel, x_max, y_max):
+    """One scenario's MACC on ax, with its label/KPI annotation; returns the
+    panel's low-capacity-factor mask."""
+    ax.set_facecolor(cr.SURFACE)
+    df = panel["macc_df"]
+    # annotate_fertilizers=False: 4 cramped panels have no room for the
+    # per-bar callout arrows without them overlapping -- sector color
+    # (still shared, canonical across every panel) is enough here.
+    _, low_cf_mask = cr._draw_macc_on_ax(ax, df, annotate_fertilizers=False)
+    ax.set_xlim(0, x_max)
+    ax.set_ylim(0, y_max)
+
+    ax.set_xlabel("Cumulative CO$_2$ captured (Mt/yr)", fontsize=10.5)
+    ax.set_ylabel("€/t CO$_2$", fontsize=10.5)
+
+    total_capture_mt = df["captured_annual_t"].sum() / 1e6
+    ax.text(
+        0.02, 0.98, f"{panel['label']}\n{total_capture_mt:.2f} Mt/yr CO$_2$ captured",
+        transform=ax.transAxes, fontsize=12, color=cr.INK_PRIMARY,
+        va="top", ha="left",
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor=cr.GRIDLINE, alpha=0.92),
+    )
+    return low_cf_mask
+
+
+def _sector_legend_handles(macc_df, low_cf: bool) -> list:
+    """Sector patches for the sectors present in macc_df (sector_display_label
+    already renders "Other" as "Industrial cluster of Ravenna", same as every
+    other plot -- see ccs_chain_plots.py), plus the low-capacity-factor hatch."""
+    seen_labels = set()
+    legend_handles = []
+    for s in cr.SECTOR_ORDER:
+        label = cr.SECTOR_LEGEND_LABEL[s]
+        if s not in set(macc_df["sector"]) or label in seen_labels:
+            continue
+        seen_labels.add(label)
+        legend_handles.append(Patch(facecolor=cr.SECTOR_COLORS[s], edgecolor="white", label=label))
+    if low_cf:
+        legend_handles.append(Patch(
+            facecolor="none", edgecolor=cr.INK_SECONDARY, hatch="////",
+            label=f"Capacity factor < {cr.LOW_CAPACITY_FACTOR_THRESHOLD:.0%}",
+        ))
+    return legend_handles
 
 
 def main():

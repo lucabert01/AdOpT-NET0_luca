@@ -45,6 +45,7 @@ Produces five figures from a solved optimization_results.h5:
                                         chain stage, transport-mode split.
 """
 
+import importlib.util
 import h5py
 import geopandas as gpd
 import pandas as pd
@@ -72,7 +73,11 @@ BATLOW = [cmc.batlow(x) for x in np.linspace(0, 1, 7)]
 
 MODE_COLORS = {
     "CO2_Pipeline": BATLOW[0],  # dark blue
-    "CO2Truck": BATLOW[2],      # green
+    # mustard ochre, sampled from batlow between BATLOW[3] and BATLOW[4] --
+    # not green (BATLOW[2], which is STATUS_GOOD, the color of every
+    # CCS-equipped emitter marker on the result maps), and darker/browner than
+    # both BATLOW[4] and the Waste sector marker (#E69F00) on the input-data maps
+    "CO2Truck": cmc.batlow(0.6),
     # purple, not batlow's ochre BATLOW[4]: that read as the same hue as the
     # Waste sector marker (#E69F00) on the input-data maps
     "CO2Railway": "#7B3294",
@@ -157,7 +162,10 @@ SECTOR_TO_MAP_GROUP = {"FertilizersCombustion": "Fertilizers", "FertilizersSMR":
 # design/operation variable names (see main_italy.py SCENARIOS and
 # data_process/utilities/defined_functions.py:update_emitter_ccs_references,
 # which explicitly skips MEA-retrofit wiring for these):
-#   - CementHybridCCS   (oxyfuel + MEA polish, cement sector)
+#   - CementHybridCCS   (oxyfuel + optional MEA polish, cement sector) -- two
+#     families: "oxyfuel_hybrid" when the MEA polish is built (size_mea > 0),
+#     "oxyfuel" when the optimizer leaves it out (size_mea == 0 is an explicit
+#     option in cement_hybrid_ccs.py's MEA installed/not-installed disjunction)
 #   - WasteCaL_CCS      (calcium looping, waste sector; tec_type WasteToEnergyCaLCCS)
 #   - FertilizerSMREmitter (direct capture, FertilizersSMR sector) -- a plain
 #     CONV3 technology with no Performance.ccs block at all (main_italy.py
@@ -172,15 +180,17 @@ SECTOR_TO_MAP_GROUP = {"FertilizersCombustion": "Fertilizers", "FertilizersSMR":
 # CCS status (green=captured, muted=not) and avoids adding low-contrast
 # batlow hues for identity (validated: adjacent-pair contrast among mid-tone
 # batlow stops falls below the CVD-safe floor for small filled markers).
-FAMILY_ORDER = ["mea_retrofit", "oxyfuel_hybrid", "calcium_looping", "direct_capture"]
+FAMILY_ORDER = ["mea_retrofit", "oxyfuel", "oxyfuel_hybrid", "calcium_looping", "direct_capture"]
 FAMILY_LABELS = {
-    "mea_retrofit": "MEA retrofit",
+    "mea_retrofit": "MEA",
+    "oxyfuel": "Oxyfuel",
     "oxyfuel_hybrid": "Oxyfuel + MEA hybrid",
     "calcium_looping": "Calcium looping",
-    "direct_capture": "Direct capture (integrated)",
+    "direct_capture": "Pure process CO$_2$",
 }
 FAMILY_MARKERS = {
     "mea_retrofit": "o",
+    "oxyfuel": "v",
     "oxyfuel_hybrid": "^",
     "calcium_looping": "D",
     # "P" (filled plus), not "s" (square) -- transport hubs already use a
@@ -192,8 +202,14 @@ FAMILY_MARKERS = {
 # the same `s` as a circle reads as visually smaller (lower fill ratio) -- scale
 # up so the shapes read as equal-weight on the map.
 FAMILY_MARKER_SCALE = {
-    "mea_retrofit": 1.0, "oxyfuel_hybrid": 1.35, "calcium_looping": 1.2, "direct_capture": 1.3,
+    "mea_retrofit": 1.0, "oxyfuel": 1.35, "oxyfuel_hybrid": 1.35, "calcium_looping": 1.2,
+    "direct_capture": 1.3,
 }
+# CementHybridCCS's MEA polish counts as built from this size_mea (t CO2/h)
+# up -- the same threshold cement_hybrid_ccs.py's "MEA is installed"
+# disjunct enforces (var_size_mea >= 0.001); below it, the technology runs as
+# oxyfuel only.
+MEA_INSTALLED_MIN_SIZE = 0.001
 
 # In the technology-selection scenarios, main_italy.py wires up EVERY capture
 # family a sector could use as a candidate technology at each node (e.g. a
@@ -216,7 +232,7 @@ EMITTER_MATERIALITY_THRESHOLD_T = 1000.0
 # above:
 #   - "mea_retrofit"    -- the generic CCS mixin's own suffixed variables
 #                          (technology.py's _define_ccs_performance)
-#   - "oxyfuel_hybrid"  -- CementHybridCCS is a plain generic technology as far
+#   - "oxyfuel"/"oxyfuel_hybrid" -- CementHybridCCS is a plain generic technology as far
 #                          as operation reporting goes (no override), so its
 #                          main input carrier is written under the base
 #                          Technology class's unsuffixed "{carrier}_input"
@@ -231,12 +247,14 @@ EMITTER_MATERIALITY_THRESHOLD_T = 1000.0
 #                          FertilizerSMREmitter.json); it has no heat input.
 ELEC_INPUT_KEY_BY_FAMILY = {
     "mea_retrofit": "electricity_var_input_ccs",
+    "oxyfuel": "electricity_input",
     "oxyfuel_hybrid": "electricity_input",
     "calcium_looping": None,
     "direct_capture": "electricity_input",
 }
 HEAT_INPUT_KEY_BY_FAMILY = {
     "mea_retrofit": "heat_var_input_ccs",
+    "oxyfuel": None,
     "oxyfuel_hybrid": None,
     "calcium_looping": None,
     "direct_capture": None,
@@ -458,17 +476,20 @@ def compute_cost_factor_grid(italy: gpd.GeoDataFrame, category: float = COST_FAC
     return gpd.clip(fishnet, italy)
 
 
-def classify_capture_family(design_keys, operation_keys=None) -> str | None:
+def classify_capture_family(design, operation_keys=None) -> str | None:
     """
     Identifies which capture technology a node's technology block belongs to,
-    from the dataset names present in its design/nodes/period1/<node>/<tech>
-    HDF5 group -- robust to technology naming/suffixes ("_existing" etc.),
-    since it keys off variables each technology CLASS writes unconditionally:
+    from its design/nodes/period1/<node>/<tech> HDF5 group (`design`) -- robust
+    to technology naming/suffixes ("_existing" etc.), since it keys off
+    variables each technology CLASS writes unconditionally:
 
       - "size_ccs"  -- generic bolt-on MEA retrofit (technology.py's shared
                        CCS mixin, gated on Performance.ccs.possible)
-      - "size_mea"  -- CementHybridCCS (oxyfuel + MEA polish); written by
-                       cement_hybrid_ccs.py:write_results_tec_design
+      - "size_mea"  -- CementHybridCCS; written by
+                       cement_hybrid_ccs.py:write_results_tec_design. Its
+                       MEA polish is optional, so this is "oxyfuel_hybrid"
+                       when size_mea >= MEA_INSTALLED_MIN_SIZE and "oxyfuel"
+                       (oxyfuel only) otherwise
       - "size_cal"  -- WasteCaL_CCS / WasteToEnergyCaLCCS (calcium looping);
                        written by wasteToEnergy_CaL_ccs.py:write_results_tec_design
 
@@ -496,11 +517,12 @@ def classify_capture_family(design_keys, operation_keys=None) -> str | None:
     Returns None for technologies with none of these keys (transport/storage
     technologies, or an emitter with no capture at all).
     """
-    keys = set(design_keys)
+    keys = set(design.keys())
     if "size_ccs" in keys:
         return "mea_retrofit"
     if "size_mea" in keys:
-        return "oxyfuel_hybrid"
+        size_mea = float(design["size_mea"][()][0])
+        return "oxyfuel_hybrid" if size_mea >= MEA_INSTALLED_MIN_SIZE else "oxyfuel"
     if "size_cal" in keys:
         return "calcium_looping"
     if operation_keys is not None:
@@ -571,6 +593,102 @@ def _capture_legend_handles(ccs_df: pd.DataFrame) -> list:
                    markersize=11, markeredgewidth=1.8, linestyle="None", label="No CCS installed")
         )
     return handles
+
+
+def _transport_storage_legend_handles(lw: float = 3) -> list:
+    """Legend entries for the transport modes and non-emitter node types."""
+    return [
+        Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=lw, label="Pipeline"),
+        Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=lw, label="Truck"),
+        Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=lw, label="Railway"),
+        Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
+               markersize=10, label="Transport hub", linestyle="None"),
+        Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
+               markersize=17, label="CO$_2$ storage", linestyle="None"),
+    ]
+
+
+def add_split_map_legend(target, real_df: pd.DataFrame, *, y: float, x_left: float = 0.27,
+                         x_right: float = 0.73, fontsize: float = 11, ncol: int = 2,
+                         extra_transport_handles: list = (), transport_lw: float = 3):
+    """Two legends side by side below a map: capture technologies (shape/status,
+    see _capture_legend_handles) on the left, transport modes and transport/
+    storage nodes on the right. `target` is an Axes (anchors in axes
+    coordinates) or a Figure (anchors in figure coordinates, for a multi-panel
+    figure's shared legend); y is the top edge of both legends."""
+    kwargs = dict(loc="upper center", ncol=ncol, frameon=True, fontsize=fontsize, framealpha=0.95,
+                  edgecolor=GRIDLINE, title_fontsize=fontsize)
+    capture_legend = target.legend(
+        handles=_capture_legend_handles(real_df), bbox_to_anchor=(x_left, y),
+        title="Capture technology", **kwargs,
+    )
+    if isinstance(target, plt.Axes):
+        target.add_artist(capture_legend)  # a second ax.legend() call would replace it
+    target.legend(
+        handles=[*extra_transport_handles, *_transport_storage_legend_handles(transport_lw)],
+        bbox_to_anchor=(x_right, y), title="Transport & storage", **kwargs,
+    )
+
+
+# Same helper main_italy.py uses to turn the hourly emission profiles into the
+# emitters' annual emissions (and from there their product demand).
+_DEFINED_FUNCTIONS_PATH = Path(__file__).resolve().parent.parent / "data_process/utilities/defined_functions.py"
+_BASELINE_EMISSIONS_T: float | None = None
+
+
+def load_baseline_emissions_t() -> float:
+    """
+    Total annual CO2 emissions (t/yr) of every emitter in the source data,
+    before any capture -- the reference for the "fraction avoided" reported
+    on the maps (see fraction_avoided).
+
+    Taken from the source data, NOT from the results: a technology's
+    emissions in a solved run depend on the technology chosen (e.g. a cement
+    plant switched to CementHybridCCS emits more CO2 per tonne of clinker
+    than the CementEmitter reference its demand was derived from), so
+    summing captured + vented CO2 from the results would not give the fixed
+    baseline. Computed exactly as main_italy.py does: node_metrics_paper.xlsx's
+    emitter nodes, each with its annual emission = the sum of its hourly
+    profile in emission_profile_emitters.xlsx (calculate_annual_emission_values).
+    This differs from node_metrics_paper.xlsx's own annual_flux column for some
+    nodes (e.g. SILLA 2), which main_italy.py does not use.
+    """
+    global _BASELINE_EMISSIONS_T
+    if _BASELINE_EMISSIONS_T is None:
+        spec = importlib.util.spec_from_file_location("_data_process_defined_functions", _DEFINED_FUNCTIONS_PATH)
+        defined_functions = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(defined_functions)
+
+        nodes = pd.read_excel(NODE_METRICS_PAPER, sheet_name="nodes")
+        nodes["node_type"] = nodes["node_type"].str.strip()
+        nodes["node_name"] = nodes["node_name"].str.strip()
+        nodes = defined_functions.calculate_annual_emission_values(nodes, path_files_grids)
+        emitters = nodes[~nodes["node_type"].isin(["Transport", "Storage"])]
+        _BASELINE_EMISSIONS_T = float(emitters["annual_emission"].sum())
+    return _BASELINE_EMISSIONS_T
+
+
+def fraction_avoided(emissions_pos_t: float) -> float:
+    """
+    Fraction of the baseline emissions (load_baseline_emissions_t) avoided:
+    (baseline - CO2 still emitted) / baseline, with the CO2 still emitted
+    being the run's summary emissions_pos (t/yr, see load_summary).
+
+    Deliberately NOT captured / baseline: capture technologies that produce
+    more CO2 than the reference technology (e.g. oxyfuel cement) also capture
+    that extra CO2, which captured / baseline would count as avoided although
+    it was never part of the baseline -- making a run that captures more but
+    also emits more look better than one that emits less.
+    """
+    baseline = load_baseline_emissions_t()
+    return (baseline - emissions_pos_t) / baseline
+
+
+def captured_kpi_text(total_capture_t: float, emissions_pos_t: float) -> str:
+    """'<captured> t/yr captured CO2' plus the fraction of baseline emissions
+    avoided (see fraction_avoided), for the maps' KPI boxes."""
+    return (f"{total_capture_t:,.0f} t/yr captured CO$_2$\n"
+            f"{fraction_avoided(emissions_pos_t):.1%} of baseline emissions avoided")
 
 
 def _node_marker_positions(point, n: int, radius: float = 0.055):
@@ -902,9 +1020,8 @@ def load_ccs_status(h5_path: Path) -> pd.DataFrame:
         for node_name in nodes.keys():
             for tech in nodes[node_name].keys():
                 g = nodes[node_name][tech]
-                design_keys = list(g.keys())
                 op_keys = list(op[node_name][tech].keys())
-                family = classify_capture_family(design_keys, op_keys)
+                family = classify_capture_family(g, op_keys)
                 if family is None:
                     continue
 
@@ -1077,9 +1194,8 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
         for node_name in nodes.keys():
             for tech in nodes[node_name].keys():
                 g = nodes[node_name][tech]
-                keys = list(g.keys())
                 op_keys = list(op_tech[node_name][tech].keys())
-                family = classify_capture_family(keys, op_keys)
+                family = classify_capture_family(g, op_keys)
                 if family is not None:
                     if family == "mea_retrofit":
                         comp_capex = float(g["capex_ccs"][()][0])
@@ -1342,27 +1458,14 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
 
     real_df = _draw_ccs_network_on_ax(ax, built_arcs, nodes_gdf, ccs_df)
 
-    legend_handles = [
-        Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
-        Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
-        Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
-        *_capture_legend_handles(real_df),
-        Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
-               markersize=10, label="Transport hub", linestyle="None"),
-        Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
-               markersize=17, label="CO$_2$ storage", linestyle="None"),
-    ]
-    ax.legend(
-        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.14),
-        ncol=4, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
-    )
+    add_split_map_legend(ax, real_df, y=-0.14)
 
     n_installed = int(real_df["ccs_installed"].sum())
     n_total = len(real_df)
     total_capture = real_df["captured_annual"].sum()
     kpi_text = (
         f"{n_installed}/{n_total} emitters equipped with CCS\n"
-        f"{total_capture:,.0f} t/yr captured CO$_2$\n"
+        f"{captured_kpi_text(total_capture, summary['emissions_pos'])}\n"
         f"Network capex: €{summary['cost_capex_netws'] / 1e6:,.0f}M"
     )
     ax.text(
@@ -1444,22 +1547,8 @@ def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
                 ),
             )
 
-    legend_handles = [
-        Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
-        Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
-        Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
-        *_capture_legend_handles(real_df),
-        Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
-               markersize=10, label="Transport hub", linestyle="None"),
-        Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
-               markersize=17, label="CO$_2$ storage", linestyle="None"),
-    ]
-    legend1 = ax.legend(
-        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.35, -0.13),
-        ncol=2, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
-        title="Mode / node type", title_fontsize=11,
-    )
-    ax.add_artist(legend1)
+    add_split_map_legend(ax, real_df, y=-0.13, x_left=0.17, x_right=0.5, ncol=1)
+    ax.add_artist(ax.get_legend())  # keep it when the bubble-size legend below is added
 
     # --- bubble-size legend (reference capacities) ---
     ref_fracs = [0.25, 0.6, 1.0]
@@ -1471,7 +1560,7 @@ def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
         for v in ref_vals
     ]
     ax.legend(
-        handles=size_handles, loc="upper center", bbox_to_anchor=(0.75, -0.13),
+        handles=size_handles, loc="upper center", bbox_to_anchor=(0.83, -0.13),
         ncol=1, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
         title="Total annual emissions", title_fontsize=11, labelspacing=1.6, borderpad=1.1,
     )
@@ -1560,20 +1649,7 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
                                            zorder=22 if row["ccs_installed"] else 21),
             )
 
-    legend_handles = [
-        Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=3, label="Pipeline"),
-        Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=3, label="Truck"),
-        Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=3, label="Railway"),
-        *_capture_legend_handles(real_df),
-        Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
-               markersize=10, label="Transport hub", linestyle="None"),
-        Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
-               markersize=17, label="CO$_2$ storage", linestyle="None"),
-    ]
-    ax.legend(
-        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.14),
-        ncol=4, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
-    )
+    add_split_map_legend(ax, real_df, y=-0.14)
 
     sm = plt.cm.ScalarMappable(
         cmap=BW_CMAP,
@@ -1587,7 +1663,7 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
     total_capture = real_df["captured_annual"].sum()
     kpi_text = (
         f"{n_installed}/{n_total} emitters equipped with CCS\n"
-        f"{total_capture:,.0f} t/yr captured CO$_2$\n"
+        f"{captured_kpi_text(total_capture, summary['emissions_pos'])}\n"
         f"Network capex: €{summary['cost_capex_netws'] / 1e6:,.0f}M"
     )
     ax.text(
@@ -1657,14 +1733,16 @@ def _draw_input_nodes(ax, nodes: pd.DataFrame) -> list:
     ]
 
 
-def plot_cost_factor_input_map(out_name: str = "italy_cost_factor_emitters_storage"):
+def plot_cost_factor_input_map(out_name: str = "italy_cost_factor_emitters_storage",
+                               category: float = COST_FACTOR_PIPELINE_CATEGORY):
     """Case-study input map (no optimization results needed): the integrated
     pipeline cost-factor grid (grayscale, same as plot_network_map_cost_factor)
     with every emitter marked by sector, the transport hubs, and the CO2
     storage site as a star (same style as the ccs_chain network maps) -- see
-    _draw_input_nodes."""
+    _draw_input_nodes. category is the pipeline DN (mm) whose cost-factor
+    coefficients are mapped (see compute_cost_factor_grid)."""
     italy = gpd.read_file(ITALY_SHP)
-    fishnet_clipped = compute_cost_factor_grid(italy)
+    fishnet_clipped = compute_cost_factor_grid(italy, category)
 
     fig, ax = plt.subplots(figsize=(12.5, 12))
     fig.patch.set_facecolor(SURFACE)
@@ -1919,20 +1997,9 @@ def plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary, trunk_path: lis
                 ),
             )
 
-    legend_handles = [
-        Line2D([0], [0], color=TRUNK_COLOR, lw=4.5, label="Trunk line"),
-        Line2D([0], [0], color=MODE_COLORS["CO2_Pipeline"], lw=2, label="Pipeline"),
-        Line2D([0], [0], color=MODE_COLORS["CO2Truck"], lw=2, label="Truck"),
-        Line2D([0], [0], color=MODE_COLORS["CO2Railway"], lw=2, label="Railway"),
-        *_capture_legend_handles(real_df),
-        Line2D([0], [0], marker="s", color="w", markerfacecolor=TRANSPORT_COLOR, markeredgecolor="white",
-               markersize=10, label="Transport hub", linestyle="None"),
-        Line2D([0], [0], marker="*", color="w", markerfacecolor=STORAGE_COLOR, markeredgecolor="white",
-               markersize=17, label="CO$_2$ storage", linestyle="None"),
-    ]
-    ax.legend(
-        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.14),
-        ncol=4, frameon=True, fontsize=11, framealpha=0.95, edgecolor=GRIDLINE,
+    add_split_map_legend(
+        ax, real_df, y=-0.14, transport_lw=2,
+        extra_transport_handles=[Line2D([0], [0], color=TRUNK_COLOR, lw=4.5, label="Trunk line")],
     )
 
     trunk_arcs = built_arcs[
@@ -1985,7 +2052,7 @@ def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str 
         if tech_name is None:
             best_total = -1.0
             for candidate in design_node.keys():
-                if classify_capture_family(design_node[candidate].keys(), op_node[candidate].keys()) is None:
+                if classify_capture_family(design_node[candidate], op_node[candidate].keys()) is None:
                     continue
                 cand_op = op_node[candidate]
                 cand_captured_key = captured_co2_operation_key(cand_op.keys())
@@ -1997,7 +2064,7 @@ def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str 
             if tech_name is None:
                 raise ValueError(f"No capture-capable technology found at node '{node_name}'")
 
-        family = classify_capture_family(design_node[tech_name].keys(), op_node[tech_name].keys())
+        family = classify_capture_family(design_node[tech_name], op_node[tech_name].keys())
         op = op_node[tech_name]
         captured_key = captured_co2_operation_key(op.keys())
         captured = op[captured_key][()]

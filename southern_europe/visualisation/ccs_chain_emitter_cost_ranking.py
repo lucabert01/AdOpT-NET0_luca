@@ -356,7 +356,7 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
             for tech in nodes[node_name].keys():
                 g = nodes[node_name][tech]
                 op_keys = list(op_tech[node_name][tech].keys())
-                family = classify_capture_family(list(g.keys()), op_keys)
+                family = classify_capture_family(g, op_keys)
                 if family is None:
                     continue
                 captured_key = captured_co2_operation_key(op_keys)
