@@ -1,0 +1,2 @@
+node,tech,sector,family,captured_annual_t,max_captured_t_h,capacity_factor,capture_eur_per_t,transport_eur_per_t,storage_eur_per_t,total_eur_per_t
+Ferrara,FertilizerSMREmitter_existing,FertilizersSMR,Pure process CO$_2$,161748.0,20.51598173515982,0.8999999999999998,8.953146210304386,24.006567247347316,50.59576929039448,83.55548274804619
