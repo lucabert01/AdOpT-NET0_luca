@@ -102,6 +102,17 @@ STATUS_CRITICAL = BATLOW[5]
 
 TRANSPORT_COLOR = BATLOW[1]  # transport hub marker
 STORAGE_COLOR = BATLOW[6]    # storage marker
+TEMPORARY_STORAGE_COLOR = BATLOW[5]  # temporary CO2 buffer storage (constant_injection scenarios)
+
+# Name prefix of the temporary CO2 buffer storage technology main_italy.py adds
+# at a scenario's "temporary_storage_nodes" (TEMPORARY_STORAGE_TECHNOLOGY =
+# "TemporaryStorage_CO2", constant_injection scenarios only). Matched as a
+# prefix so an "_existing" suffix would still be picked up.
+TEMPORARY_STORAGE_TECH_PREFIX = "TemporaryStorage"
+
+
+def is_temporary_storage(tech_name: str) -> bool:
+    return tech_name.startswith(TEMPORARY_STORAGE_TECH_PREFIX)
 
 # User-facing name for a node_metrics_paper.xlsx node_type / sector, used by
 # every map/legend that shows sectors -- the only "Other" node is Ravenna's
@@ -475,6 +486,13 @@ def classify_capture_family(design_keys, operation_keys=None) -> str | None:
     the caller already knows design_keys alone is sufficient (e.g. a context
     where a False positive for "direct_capture" is impossible).
 
+    Storage technologies (STOR/SINK, identified by the "storage_level" series
+    stor.py/sink.py write to their operation group) are excluded from
+    "direct_capture" explicitly: the temporary CO2 buffer storage of the
+    constant_injection scenarios (TemporaryStorage_CO2) has CO2captured as
+    its output carrier too, so it writes "CO2captured_output" exactly like
+    FertilizerSMREmitter, but it only releases CO2 captured elsewhere.
+
     Returns None for technologies with none of these keys (transport/storage
     technologies, or an emitter with no capture at all).
     """
@@ -485,8 +503,10 @@ def classify_capture_family(design_keys, operation_keys=None) -> str | None:
         return "oxyfuel_hybrid"
     if "size_cal" in keys:
         return "calcium_looping"
-    if operation_keys is not None and "CO2captured_output" in set(operation_keys):
-        return "direct_capture"
+    if operation_keys is not None:
+        op_keys = set(operation_keys)
+        if "CO2captured_output" in op_keys and "storage_level" not in op_keys:
+            return "direct_capture"
     return None
 
 
@@ -992,10 +1012,17 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
     8760-hour year via k_means_specs/sequence before summing, exactly like the
     model's own full-resolution linking constraint does.
 
+    The temporary CO2 buffer storage of the constant_injection scenarios
+    (see is_temporary_storage) is its own 'temporary_storage' stage: capex +
+    fixed opex only (it has no variable opex and draws no electricity/heat,
+    see TemporaryStorage_CO2.json).
+
     :return: dict with 'capture', 'transport', 'storage' (each a dict of
-        component -> EUR/year), 'capture_by_family' (dict of family label ->
-        same component dict, one entry per capture family actually present),
-        and 'total_stored_t' (t CO2 stored per year).
+        component -> EUR/year), 'temporary_storage' (same component dict, or
+        None when the run has no temporary storage technology, i.e. any
+        scenario other than constant_injection), 'capture_by_family' (dict of
+        family label -> same component dict, one entry per capture family
+        actually present), and 'total_stored_t' (t CO2 stored per year).
     """
     with h5py.File(h5_path, "r") as f:
         seq = f["k_means_specs"]["period1"]["sequence"][()]
@@ -1045,6 +1072,7 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
         capture_by_family = {}
         storage = {k: 0.0 for k in COMPONENT_COLORS}
         transport = {k: 0.0 for k in COMPONENT_COLORS}
+        temporary_storage = None
 
         for node_name in nodes.keys():
             for tech in nodes[node_name].keys():
@@ -1092,6 +1120,11 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
                     storage["Capex"] += float(g["capex_tot"][()][0])
                     storage["Opex (fixed)"] += float(g["opex_fixed"][()][0])
                     storage["Opex (variable)"] += float(g["opex_variable"][()][0])
+                elif is_temporary_storage(tech):
+                    if temporary_storage is None:
+                        temporary_storage = {k: 0.0 for k in COMPONENT_COLORS}
+                    temporary_storage["Capex"] += float(g["capex_tot"][()][0])
+                    temporary_storage["Opex (fixed)"] += float(g["opex_fixed"][()][0])
 
             elec_cost = carrier_import_cost(node_name, "electricity")
             heat_cost = carrier_import_cost(node_name, "heat")
@@ -1139,6 +1172,7 @@ def compute_cost_breakdown(h5_path: Path, storage_node: str = "Porto Corsini") -
         },
         "transport": transport,
         "storage": storage,
+        "temporary_storage": temporary_storage,
         "total_stored_t": total_stored_t,
     }
 
@@ -2212,6 +2246,9 @@ def plot_cost_breakdown(cost_breakdown: dict, per_tonne: bool = True):
         stages["Capture"] = cost_breakdown["capture"]
     stages["Transport"] = cost_breakdown["transport"]
     stages["Storage"] = cost_breakdown["storage"]
+    # constant_injection scenarios only (None otherwise, see compute_cost_breakdown)
+    if cost_breakdown.get("temporary_storage") is not None:
+        stages["Temporary\nstorage"] = cost_breakdown["temporary_storage"]
 
     divisor = cost_breakdown["total_stored_t"] if per_tonne else 1e6
     unit = "€/t CO$_2$ stored" if per_tonne else "Million €/year"
@@ -2230,7 +2267,7 @@ def plot_cost_breakdown(cost_breakdown: dict, per_tonne: bool = True):
                       label=component, edgecolor=SURFACE, linewidth=1.5, zorder=3)
         # direct-label segments that are large enough to read
         for i, h in enumerate(heights):
-            if h / stage_totals[i] > 0.06:
+            if stage_totals[i] > 0 and h / stage_totals[i] > 0.06:
                 ax.text(x[i], bottoms[i] + h / 2, f"{h:,.1f}" if per_tonne else f"{h:,.0f}",
                         ha="center", va="center", fontsize=9, color="white", weight="bold", zorder=4)
         bottoms += heights
@@ -2306,13 +2343,18 @@ def plot_summary_dashboard(built_arcs: pd.DataFrame, ccs_df: pd.DataFrame, cost_
     # dedicated ccs_chain_cost_breakdown_* figures for the component-level split)
     ax = axes[1]
     ax.set_facecolor(SURFACE)
-    cats = STAGE_LABELS
+    cats = list(STAGE_LABELS)
     vals = [
         sum(cost_breakdown["capture"].values()),
         sum(cost_breakdown["transport"].values()),
         sum(cost_breakdown["storage"].values()),
     ]
     colors = ["#4a3aa7", MODE_COLORS["CO2_Pipeline"], STORAGE_COLOR]
+    # constant_injection scenarios only (None otherwise, see compute_cost_breakdown)
+    if cost_breakdown.get("temporary_storage") is not None:
+        cats.append("Temp.\nstorage")
+        vals.append(sum(cost_breakdown["temporary_storage"].values()))
+        colors.append(TEMPORARY_STORAGE_COLOR)
     bars = ax.bar(cats, [v / 1e6 for v in vals], color=colors, width=0.55)
     for rect, v in zip(bars, vals):
         ax.text(rect.get_x() + rect.get_width() / 2, v / 1e6 * 1.02, f"€{v / 1e6:,.0f}M",

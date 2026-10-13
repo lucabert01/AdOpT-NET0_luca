@@ -29,6 +29,9 @@ SCENARIOS = [
     ("technology_selection", "costs", 250),
     ("technology_selection", "emissions_minC", None),
     ("technology_selection_wasteCaL", "emissions_minC", None),
+    # constant injection + temporary CO2 storage (main_italy.py's "c_inj")
+    ("c_inj", "costs", 200),
+    ("c_inj", "costs", 250),
 ]
 
 # Node used for the per-emitter zoom-in and the downstream-of-storage inflow

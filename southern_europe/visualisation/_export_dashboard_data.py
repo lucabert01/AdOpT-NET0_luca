@@ -27,6 +27,9 @@ SCENARIOS = [
     ("technology_selection", "costs", 250),
     ("technology_selection", "emissions_minC", None),
     ("technology_selection_wasteCaL", "emissions_minC", None),
+    # constant injection + temporary CO2 storage (main_italy.py's "c_inj")
+    ("c_inj", "costs", 200),
+    ("c_inj", "costs", 250),
 ]
 
 SCENARIO_LABELS = {
@@ -35,6 +38,8 @@ SCENARIO_LABELS = {
     "technology_selection_costs_tax250": "Technology selection (cost-minimizing, CO2 tax 250 EUR/t)",
     "technology_selection_emissions_minC": "Technology selection (emissions-minimizing)",
     "technology_selection_wasteCaL_emissions_minC": "Technology selection + calcium looping (emissions-minimizing)",
+    "c_inj_costs_tax200": "Constant injection + temporary storage (cost-minimizing, CO2 tax 200 EUR/t)",
+    "c_inj_costs_tax250": "Constant injection + temporary storage (cost-minimizing, CO2 tax 250 EUR/t)",
 }
 
 HOURS_PER_YEAR = 8760
@@ -189,6 +194,8 @@ def build_scenario(h5_path: Path) -> dict:
             "capture": cost_breakdown["capture"],
             "transport": cost_breakdown["transport"],
             "storage": cost_breakdown["storage"],
+            # None (null) except for the constant injection (c_inj) scenarios
+            "temporary_storage": cost_breakdown["temporary_storage"],
             "capture_by_family": cost_breakdown["capture_by_family"],
             "total_stored_t": cost_breakdown["total_stored_t"],
         },

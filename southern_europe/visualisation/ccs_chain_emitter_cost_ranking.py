@@ -41,6 +41,16 @@ node - see transport, below) divided by total annual tonnes stored - a flat
 €/t added to every emitter, since storage is a shared, non-allocable
 resource.
 
+Temporary storage cost (constant_injection scenarios only - the temporary CO2
+buffer storage main_italy.py adds at a scenario's "temporary_storage_nodes")
+is that storage's annual capex + fixed opex, allocated to each emitter by its
+share of the system's total annual captured CO2:
+    temporary storage cost x (emitter's annual captured CO2) / (total annual captured CO2)
+divided by the emitter's own annual captured tonnes. Like storage, this ends
+up as one flat €/t across emitters. It is reported in its own
+temporary_storage_eur_per_t column (only present for these runs) and
+included in total_eur_per_t.
+
 Transport cost is allocated by CAPACITY SHARE, not by flow share: for every
 arc on an emitter's path to the storage node, the emitter pays
     arc's annual cost x (emitter's own max captured CO2, t/h) / (arc's built size, t/h)
@@ -102,6 +112,8 @@ from ccs_chain_plots import (
     SURFACE,
     MODE_COLORS,
     STORAGE_COLOR,
+    TEMPORARY_STORAGE_COLOR,
+    is_temporary_storage,
     _load_node_sectors,
     sector_display_label,
 )
@@ -120,6 +132,7 @@ STAGE_COLORS = {
     "Capture": "#4a3aa7",
     "Transport": MODE_COLORS["CO2_Pipeline"],
     "Storage": STORAGE_COLOR,
+    "Temporary storage": TEMPORARY_STORAGE_COLOR,
 }
 
 SECTOR_ORDER = ["Cement", "Waste", "Refining", "Lime", "FertilizersCombustion", "FertilizersSMR", "Other"]
@@ -382,6 +395,22 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
 
         capture_rows = _keep_real_emitters(capture_rows)
 
+        # ---- temporary storage cost (constant_injection scenarios only) ----
+        # capex + fixed opex of the temporary CO2 buffer storage, allocated to
+        # each emitter by its share of the total annual captured CO2 - see
+        # module docstring. None when the run has no temporary storage.
+        temp_storage_cost = None
+        for node_name in nodes.keys():
+            for tech in nodes[node_name].keys():
+                if is_temporary_storage(tech):
+                    g = nodes[node_name][tech]
+                    temp_storage_cost = (
+                        (temp_storage_cost or 0.0)
+                        + float(g["capex_tot"][()][0])
+                        + float(g["opex_fixed"][()][0])
+                    )
+        total_captured_t = sum(cap["captured_annual_t"] for cap in capture_rows.values())
+
         # ---- storage cost: one flat €/t added to every emitter ----
         # node_carrier_cost is storage_node's FULL electricity/heat import,
         # which (unlike the per-technology draws above) may also include a
@@ -573,24 +602,49 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
                 transport_cost_eur += arc_cost * share
             transport_eur_per_t = transport_cost_eur / cap["captured_annual_t"]
 
-            rows.append(
-                {
-                    "node": node_name,
-                    "tech": tech,
-                    "sector": cap["sector"],
-                    "family": FAMILY_LABELS.get(cap["family"], cap["family"]),
-                    "captured_annual_t": cap["captured_annual_t"],
-                    "max_captured_t_h": cap["max_captured_t_h"],
-                    "capacity_factor": cap["captured_annual_t"] / (cap["max_captured_t_h"] * 8760),
-                    "capture_eur_per_t": cap["capture_eur_per_t"],
-                    "transport_eur_per_t": transport_eur_per_t,
-                    "storage_eur_per_t": storage_eur_per_t,
-                    "total_eur_per_t": cap["capture_eur_per_t"] + transport_eur_per_t + storage_eur_per_t,
-                }
-            )
+            if temp_storage_cost is not None:
+                temp_storage_share = cap["captured_annual_t"] / total_captured_t
+                temp_storage_eur_per_t = temp_storage_cost * temp_storage_share / cap["captured_annual_t"]
+            else:
+                temp_storage_eur_per_t = 0.0
+
+            row = {
+                "node": node_name,
+                "tech": tech,
+                "sector": cap["sector"],
+                "family": FAMILY_LABELS.get(cap["family"], cap["family"]),
+                "captured_annual_t": cap["captured_annual_t"],
+                "max_captured_t_h": cap["max_captured_t_h"],
+                "capacity_factor": cap["captured_annual_t"] / (cap["max_captured_t_h"] * 8760),
+                "capture_eur_per_t": cap["capture_eur_per_t"],
+                "transport_eur_per_t": transport_eur_per_t,
+                "storage_eur_per_t": storage_eur_per_t,
+                "total_eur_per_t": (
+                    cap["capture_eur_per_t"] + transport_eur_per_t + storage_eur_per_t
+                    + temp_storage_eur_per_t
+                ),
+            }
+            # column only exists for runs with a temporary storage (see
+            # has_temporary_storage), so other scenarios' CSVs are unchanged
+            if temp_storage_cost is not None:
+                row["temporary_storage_eur_per_t"] = temp_storage_eur_per_t
+            rows.append(row)
 
         df = pd.DataFrame(rows).sort_values("total_eur_per_t", ascending=False).reset_index(drop=True)
         return df, storage_node
+
+
+def has_temporary_storage(df: pd.DataFrame) -> bool:
+    """True for constant_injection runs, whose total_eur_per_t includes the
+    temporary storage cost (see build_emitter_cost_table)."""
+    return "temporary_storage_eur_per_t" in df.columns
+
+
+def cost_axis_label(df: pd.DataFrame) -> str:
+    """Axis label listing the cost stages summed into total_eur_per_t."""
+    if has_temporary_storage(df):
+        return "€/t CO$_2$ (storage + temp. storage + transport + capture)"
+    return "€/t CO$_2$ (storage + transport + capture)"
 
 
 # ============================================================
@@ -623,11 +677,11 @@ def plot_emitter_cost_ranking(df: pd.DataFrame, storage_node: str):
 
     y = np.arange(n)
     left = np.zeros(n)
-    for stage, col in [
-        ("Storage", "storage_eur_per_t"),
-        ("Transport", "transport_eur_per_t"),
-        ("Capture", "capture_eur_per_t"),
-    ]:
+    stage_cols = [("Storage", "storage_eur_per_t")]
+    if has_temporary_storage(df):
+        stage_cols.append(("Temporary storage", "temporary_storage_eur_per_t"))
+    stage_cols += [("Transport", "transport_eur_per_t"), ("Capture", "capture_eur_per_t")]
+    for stage, col in stage_cols:
         vals = plot_df[col].to_numpy()
         ax.barh(y, vals, left=left, color=STAGE_COLORS[stage], label=stage, height=0.68, zorder=3)
         left += vals
@@ -644,7 +698,7 @@ def plot_emitter_cost_ranking(df: pd.DataFrame, storage_node: str):
     ax.set_yticklabels(labels, fontsize=8.5)
     ax.set_ylim(-0.6, n - 0.4)
 
-    ax.set_xlabel("€/t CO$_2$ (storage + transport + capture)", fontsize=11)
+    ax.set_xlabel(cost_axis_label(df), fontsize=11)
     ax.set_title(
         f"Emitter Cost Ranking — Levelized €/t CO$_2$ to {storage_node}",
         fontsize=14, weight="bold", color=INK_PRIMARY,
@@ -817,7 +871,7 @@ def plot_macc(df: pd.DataFrame, storage_node: str):
     )
 
     ax.set_xlabel("Cumulative CO$_2$ captured (Mt/yr)", fontsize=11)
-    ax.set_ylabel("€/t CO$_2$ (storage + transport + capture)", fontsize=11)
+    ax.set_ylabel(cost_axis_label(df), fontsize=11)
     ax.set_title(
         f"CO$_2$ Capture Cost Curve — {storage_node}",
         fontsize=14, weight="bold", color=INK_PRIMARY,
