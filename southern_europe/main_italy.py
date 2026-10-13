@@ -163,14 +163,14 @@ SCENARIOS = [
     # inject at a near-constant rate (between 85% and 100% of its injection
     # capacity in every hour), with a temporary CO2 buffer storage offered at the
     # Casalborsetti hub to absorb the mismatch between capture and injection.
-    {"name": "constant_injection",
+    {"name": "c_inj",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
      "carbon_tax": 200,
      "injection_rate_tolerance": 0.15,
      "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"]},
-    {"name": "constant_injection",
+    {"name": "c_inj",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
@@ -182,7 +182,7 @@ SCENARIOS = [
 # Names of the SCENARIOS entries to run when the script is started without
 # command-line arguments (e.g. with the IDE's Run button). Set to None to run all
 # of SCENARIOS. Command-line arguments (`python main_italy.py <name> ...`) override it.
-RUN_SCENARIOS = ["constant_injection"]
+RUN_SCENARIOS = ["c_inj"]
 
 # Technology (filename under italy_data/technologies/) used for the temporary CO2
 # buffer storage added at a scenario's "temporary_storage_nodes"
