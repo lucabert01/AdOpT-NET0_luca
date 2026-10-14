@@ -41,6 +41,11 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
         self.default_options["p_inlet_bar"] = 10.000
         self.default_options["p_outlet_bar"] = 70.000
         self.default_options["velocity_m_s"] = 5.000
+        # "oeuvray" (original algorithm) or "gas_node_pressure" (gas phase between
+        # nodes at p_inlet_bar / p_outlet_bar, see CO2Chain_Oeuvray)
+        self.default_options["pressure_mode"] = "oeuvray"
+        self.default_options["p_min_bar"] = 15.000
+        self.default_options["min_station_spacing_km"] = 40.000
 
         # Load cost factor table and fluid properties
         self.cost_factor_table = None

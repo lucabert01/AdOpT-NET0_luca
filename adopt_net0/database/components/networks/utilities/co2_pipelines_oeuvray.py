@@ -980,6 +980,323 @@ class CO2Chain_Oeuvray(CO2Transport_Oeuvray):
                 self.length_km / 40
             )
 
+    def _gas_property(self, p_mpa, column):
+        """
+        Interpolates a CO2 property on the vapour branch of the isotherm of the current terrain
+
+        Only vapour rows are used, so the interpolation never crosses the jump at the
+        saturation pressure.
+
+        :param float p_mpa: pressure in MPa
+        :param str column: column of the fluid property table
+        :return: interpolated property
+        :rtype: float
+        """
+        vapor = self._vapor_properties()
+        return float(np.interp(p_mpa, vapor.index, vapor[column]))
+
+    def _vapor_properties(self):
+        """
+        Vapour branch of the isotherm belonging to the current terrain temperature
+
+        :return: fluid properties of vapour phase, indexed by pressure in MPa
+        :rtype: pd.DataFrame
+        """
+        t_degc = self.terrain_specific_data["gas"][self.terrain]["T_degC"]
+        if t_degc == 4:
+            fluid_properties = self.fluid_properties["277K"]
+        elif t_degc == 15:
+            fluid_properties = self.fluid_properties["288K"]
+        else:
+            raise ValueError("Temperature is not allowed")
+        return fluid_properties[fluid_properties["Phase"] == "vapor"].sort_index()
+
+    def _calculate_gas_recompression_energy(self, p_suction_mpa, p_discharge_mpa):
+        """
+        Specific energy of an intercooled multistage gas compressor in MJ/kg
+
+        Gas is compressed in the gas phase only (no pumping stage), with the
+        compressibility factor taken at suction conditions and intercooling back
+        to the pipeline (ground) temperature.
+
+        :param float p_suction_mpa: suction pressure in MPa
+        :param float p_discharge_mpa: discharge pressure in MPa
+        :return: compression energy in MJ/kg
+        :rtype: float
+        """
+        if p_discharge_mpa <= p_suction_mpa:
+            return 0
+
+        kappa = self.universal_data["kappa"]
+        ratio = p_discharge_mpa / p_suction_mpa
+        n_stages = math.ceil(math.log(ratio) / math.log(self.universal_data["PR"]))
+        pr = ratio ** (1 / n_stages)
+        z = self._gas_property(p_suction_mpa, "Compressibility factor Z")
+        t_k = self.terrain_specific_data["gas"][self.terrain]["T_degC"] + 273.15
+
+        e_comp_J_per_kg = (
+            z
+            * self.universal_data["R_J_per_mol_per_K"]
+            * t_k
+            * n_stages
+            * kappa
+            * (pr ** ((kappa - 1) / kappa) - 1)
+            / (
+                self.universal_data["M_kg_per_mol"]
+                * self.universal_data["etaIso"]
+                * self.universal_data["etaMech"]
+                * (kappa - 1)
+            )
+        )
+        return e_comp_J_per_kg / 1e6
+
+    def _calculate_gas_segment_outlet_pressure(self, p_in_mpa, id_m, segment_m):
+        """
+        Outlet pressure of a horizontal isothermal gas segment in MPa
+
+        Uses p_in^2 - p_out^2 = 16 f Z R T m^2 L / (pi^2 M D^5), with Z and the
+        viscosity evaluated at the average pressure (fixed-point iteration).
+        Returns 0 if the segment cannot be crossed at all.
+
+        :param float p_in_mpa: inlet pressure in MPa
+        :param float id_m: inner diameter in m
+        :param float segment_m: segment length in m
+        :return: outlet pressure in MPa
+        :rtype: float
+        """
+        t_k = self.terrain_specific_data["gas"][self.terrain]["T_degC"] + 273.15
+        p_in_pa = p_in_mpa * 1e6
+        p_out_pa = p_in_pa
+        for _ in range(5):
+            p_ave_mpa = self._calculate_average_pressure(p_out_pa, p_in_pa) * 1e-6
+            z = self._gas_property(p_ave_mpa, "Compressibility factor Z")
+            mu = self._gas_property(p_ave_mpa, "Viscosity (Pa*s)")
+            re = 4 * self.m_kg_per_s / (math.pi * id_m * mu)
+            f = self._calculate_darcyweisbach(id_m, re)
+            dp2 = (
+                16
+                * f
+                * z
+                * self.universal_data["R_J_per_mol_per_K"]
+                * t_k
+                * self.m_kg_per_s**2
+                * segment_m
+                / (math.pi**2 * self.universal_data["M_kg_per_mol"] * id_m**5)
+            )
+            if dp2 >= p_in_pa**2:
+                return 0
+            p_out_pa = (p_in_pa**2 - dp2) ** 0.5
+        return p_out_pa * 1e-6
+
+    def _calculate_gas_required_inner_diameter(self, p_in_mpa, p_min_mpa, segment_m):
+        """
+        Smallest inner diameter in m for which a segment drops from p_in to p_min
+
+        Same equation as _calculate_gas_segment_outlet_pressure, solved for D with
+        a fixed-point iteration on the friction factor.
+
+        :param float p_in_mpa: inlet pressure in MPa
+        :param float p_min_mpa: minimum (suction) pressure in MPa
+        :param float segment_m: segment length in m
+        :return: required inner diameter in m
+        :rtype: float
+        """
+        t_k = self.terrain_specific_data["gas"][self.terrain]["T_degC"] + 273.15
+        p_in_pa = p_in_mpa * 1e6
+        p_min_pa = p_min_mpa * 1e6
+        p_ave_mpa = self._calculate_average_pressure(p_min_pa, p_in_pa) * 1e-6
+        z = self._gas_property(p_ave_mpa, "Compressibility factor Z")
+        mu = self._gas_property(p_ave_mpa, "Viscosity (Pa*s)")
+
+        id_m = 0.5
+        for _ in range(20):
+            re = 4 * self.m_kg_per_s / (math.pi * id_m * mu)
+            f = self._calculate_darcyweisbach(id_m, re)
+            id_m = (
+                16
+                * f
+                * z
+                * self.universal_data["R_J_per_mol_per_K"]
+                * t_k
+                * self.m_kg_per_s**2
+                * segment_m
+                / (
+                    math.pi**2
+                    * self.universal_data["M_kg_per_mol"]
+                    * (p_in_pa**2 - p_min_pa**2)
+                )
+            ) ** (1 / 5)
+        return id_m
+
+    def _calculate_gas_pipe_options(self, p_design_mpa):
+        """
+        Pipe cost for every steel grade and nominal pipe size at the design pressure
+
+        :param float p_design_mpa: design pressure used for the wall thickness in MPa
+        :return: one row per (steel grade, OD) with id_nps_m, t_m, od_nps_m and pipe costs,
+            sorted by inner diameter
+        :rtype: pd.DataFrame
+        """
+        terrain_data = self.terrain_specific_data["gas"][self.terrain]
+        rows = []
+        for grade, steel_grade in self.steel_data.iterrows():
+            for od in terrain_data["OD_NPS"]:
+                t_m = self._calculate_pipe_thickness(od, p_design_mpa, steel_grade.S_MPa)
+                id_m = od - 2 * t_m
+                if id_m <= 0:
+                    continue
+                pipe_cost = self._calculate_pipe_costs(
+                    t_m, od, steel_grade.Csteel_EUR_per_kg
+                )
+                pipe_cost["steel_grade"] = grade
+                pipe_cost["id_nps_m"] = id_m
+                pipe_cost["t_m"] = t_m
+                pipe_cost["od_nps_m"] = od
+                rows.append(pipe_cost)
+        return pd.DataFrame(rows).sort_values("id_nps_m").reset_index(drop=True)
+
+    def _calculate_gas_node_pressure_configuration(self, options):
+        """
+        Least levelized cost design of a gas-phase arc between two fixed-pressure nodes
+
+        The arc leaves the upstream node at p_inlet_bar and must deliver at p_outlet_bar
+        to the downstream node. It is split into n equal segments; every segment drops
+        from p_inlet_bar to p_end >= p_min and ends in a booster station. Intermediate
+        stations recompress p_end -> p_inlet_bar, the terminal station recompresses
+        p_end -> p_outlet_bar. There is no initial compression: the CO2 arrives at the
+        upstream node already at p_inlet_bar (compressed by the emitter). The search
+        runs over p_min and n (station spacing >= min_station_spacing_km).
+
+        Options used (besides those of calculate_cost):
+            - p_inlet_bar: node pressure at the start of the arc (also the design pressure)
+            - p_outlet_bar: pressure to deliver at the downstream node
+            - p_min_bar (default 15): lowest suction pressure considered
+            - min_station_spacing_km (default 40): minimum distance between booster stations
+
+        :param dict options: options of calculate_cost
+        :return: least levelized cost configuration
+        :rtype: dict
+        """
+        self.phase = "gas"
+        terrain_data = self.terrain_specific_data["gas"][self.terrain]
+
+        p_in_mpa = options["p_inlet_bar"] / 10
+        p_out_mpa = options["p_outlet_bar"] / 10
+        p_min_lower_mpa = options.get("p_min_bar", 15) / 10
+        min_station_spacing_km = options.get("min_station_spacing_km", 40)
+
+        p_sat_mpa = self._vapor_properties().index.max()
+        if max(p_in_mpa, p_out_mpa) >= p_sat_mpa:
+            raise ValueError(
+                f"{max(p_in_mpa, p_out_mpa) * 10} bar is not below the saturation pressure "
+                f"of CO2 at {terrain_data['T_degC']} degC ({p_sat_mpa * 10:.1f} bar): "
+                f"no gas-phase transport possible"
+            )
+
+        p_design_mpa = max(p_in_mpa, p_out_mpa)
+        pipe_options = self._calculate_gas_pipe_options(p_design_mpa)
+
+        length_m = self.length_km * 1000
+        n_seg_max = max(1, math.floor(self.length_km / min_station_spacing_km))
+        p_min_grid = np.arange(p_min_lower_mpa, p_in_mpa - 0.05, 0.1)
+
+        best = {"lc": 1e10}
+        for n_seg in range(1, n_seg_max + 1):
+            segment_m = length_m / n_seg
+            for p_min_mpa in p_min_grid:
+                id_req_m = self._calculate_gas_required_inner_diameter(
+                    p_in_mpa, p_min_mpa, segment_m
+                )
+                fitting = pipe_options[pipe_options["id_nps_m"] >= id_req_m]
+                if fitting.empty:
+                    continue
+                # Cheapest steel grade among the smallest fitting OD of each grade
+                fitting = fitting.groupby("steel_grade", sort=False).head(1)
+                pipe = fitting.loc[fitting["capex_total"].idxmin()]
+                id_m = pipe["id_nps_m"]
+
+                p_end_mpa = self._calculate_gas_segment_outlet_pressure(
+                    p_in_mpa, id_m, segment_m
+                )
+                if p_end_mpa <= 0:
+                    continue
+
+                # Velocity is highest where the density is lowest (segment end)
+                v_max_m_per_s = (
+                    4
+                    * self.m_kg_per_s
+                    / (
+                        math.pi
+                        * id_m**2
+                        * self._gas_property(p_end_mpa, "Density (kg/m3)")
+                    )
+                )
+                if v_max_m_per_s > terrain_data["vRange_max"]:
+                    continue
+
+                # Booster stations: n_seg - 1 intermediate + 1 terminal
+                e_intermediate = self._calculate_gas_recompression_energy(
+                    p_end_mpa, p_in_mpa
+                )
+                e_terminal = self._calculate_gas_recompression_energy(
+                    p_end_mpa, p_out_mpa
+                )
+                w_intermediate_mw = e_intermediate * self.m_kg_per_s
+                w_terminal_mw = e_terminal * self.m_kg_per_s
+                capex_recompression = (n_seg - 1) * self._calculate_compressor_cost_gas(
+                    w_intermediate_mw
+                ) + self._calculate_compressor_cost_gas(w_terminal_mw)
+                opex_energy_recompression = self._calculate_recompression_energy_cost(
+                    (n_seg - 1) * w_intermediate_mw + w_terminal_mw
+                )
+                e_total_mj_per_kg = (n_seg - 1) * e_intermediate + e_terminal
+
+                result = {}
+                result["capex_pipe"] = pipe["capex_total"]
+                result["capex_recompression"] = capex_recompression
+                result["capex_initial_compression"] = 0
+                result["capex_total"] = capex_recompression + pipe["capex_total"]
+                result["opex_pipe"] = pipe["opex_fix"]
+                result["opex_energy_recompression"] = opex_energy_recompression
+                result["opex_energy_initial_compression"] = 0
+                result["opex_fix_compression"] = (
+                    capex_recompression * self.universal_data["muOMpumpcomp"]
+                )
+                result["opex_fix"] = result["opex_fix_compression"]
+                result["opex_var_energy"] = opex_energy_recompression
+                result["energy_compression_specific_Mj_per_kg"] = e_total_mj_per_kg
+                result["energy_compression_specific_MWh_per_kg"] = (
+                    e_total_mj_per_kg / 3.6 / 1000
+                )
+                result["energy_compression_specific_MWh_per_t"] = (
+                    e_total_mj_per_kg / 3.6
+                )
+                result["steel_grade"] = pipe["steel_grade"]
+                result["n_pumps"] = n_seg
+                result["n_segments"] = n_seg
+                result["id_nps_m"] = id_m
+                result["od_nps_m"] = pipe["od_nps_m"]
+                result["t_m"] = pipe["t_m"]
+                result["l_pump_km"] = segment_m / 1000
+                result["pinlet_mpa"] = p_in_mpa
+                result["poutlet_mpa"] = p_out_mpa
+                result["p_min_mpa"] = p_min_mpa
+                result["p_end_mpa"] = p_end_mpa
+                result["p_initial_mpa"] = p_in_mpa
+                result["v_max_m_per_s"] = v_max_m_per_s
+                result["lc"] = self._calculate_levelized_cost(result)
+
+                if result["lc"] < best["lc"]:
+                    best = result
+
+        if "capex_pipe" not in best:
+            raise ValueError(
+                f"No feasible gas-phase design for {self.m_kg_per_s:.2f} kg/s over "
+                f"{self.length_km} km ({self.terrain})"
+            )
+        self.current_best_results = best
+        return best
+
     def calculate_cost(self, options):
         """
         Calculates the transport cost of CO2, including pipelines, compression and recompression
@@ -995,6 +1312,10 @@ class CO2Chain_Oeuvray(CO2Transport_Oeuvray):
         :param int operating_hours_per_a: number of operating hours per year
         :param float p_inlet_bar: inlet pressure in bar (beginning of pipeline)
         :param float p_outlet_bar: outlet pressure in bar (end of pipeline)
+        :param str pressure_mode: 'oeuvray' (default, original algorithm: gas below 30 bar
+            outlet pressure, dense phase above, including initial compression from
+            p_inlet_bar) or 'gas_node_pressure' (gas phase between nodes at fixed
+            pressure, see _calculate_gas_node_pressure_configuration)
         :return: dictonary of cost and energy comsumption indicators of lowest levelized cost configuration
         :rtype: dict
         """
@@ -1009,18 +1330,31 @@ class CO2Chain_Oeuvray(CO2Transport_Oeuvray):
 
         self._preprocess_data()
 
-        self.current_best_results["lc"] = 1e3
+        # Reset completely: the same instance is reused for several mass flows,
+        # and stale keys from a previous call must not leak into this one
+        self.current_best_results = {"lc": 1e3}
 
-        if options["p_outlet_bar"] / 10 * 10e6 < 3e6:
+        pressure_mode = options.get("pressure_mode", "oeuvray")
+        if pressure_mode == "gas_node_pressure":
+            self.force_phase = "gas_node_pressure"
+        elif pressure_mode != "oeuvray":
+            raise ValueError(f"Pressure mode {pressure_mode} not supported")
+        # NOTE: this threshold is 3 bar, not the intended 30 bar (10e6 = 1e7).
+        # It is kept on purpose: the original gas branch below does not
+        # terminate (e.g. 10 bar outlet, 100 km, 10 kg/s). For gas-phase
+        # transport use pressure_mode="gas_node_pressure".
+        elif options["p_outlet_bar"] / 10 * 10e6 < 3e6:
             self.force_phase = "gas"
             poutlet_mpa = options["p_outlet_bar"] / 10
-        elif options["p_outlet_bar"] / 10 * 10e6 >= 3e6:
+        else:
             self.force_phase = "liquid"
             poutlet_mpa = options["p_outlet_bar"] / 10
-        else:
-            raise ValueError("Given outlet pressure not supported")
 
-        if self.force_phase == "gas":
+        if self.force_phase == "gas_node_pressure":
+            optimal_configuration = self._calculate_gas_node_pressure_configuration(
+                options
+            )
+        elif self.force_phase == "gas":
             # Starting values
             self.phase = "gas"
             pinlet_mpa = 1.6
@@ -1079,9 +1413,7 @@ class CO2Chain_Oeuvray(CO2Transport_Oeuvray):
         cost_pipeline = {}
         cost_pipeline["unit_capex"] = self.optimal_configuration["capex_pipe"]
         cost_pipeline["opex_var"] = 0
-        cost_pipeline["opex_fix_abs"] = self.optimal_configuration[
-            "opex_fix_compression"
-        ]
+        cost_pipeline["opex_fix_abs"] = self.optimal_configuration["opex_pipe"]
         cost_pipeline["opex_fix_fraction"] = self.optimal_configuration["opex_pipe"] / (
             cost_pipeline["unit_capex"]
         )
@@ -1099,6 +1431,8 @@ class CO2Chain_Oeuvray(CO2Transport_Oeuvray):
         cost_compression["opex_fix_fraction"] = (
             self.optimal_configuration["opex_fix_compression"]
             / cost_compression["unit_capex"]
+            if cost_compression["unit_capex"] > 0
+            else 0
         )
         cost_compression["lifetime"] = self.universal_data["z_pumpcomp"]
 
@@ -1158,9 +1492,9 @@ class CO2Compression_Oeuvray(CO2Transport_Oeuvray):
         self._preprocess_data()
 
         # Determine phase
-        if self.p_outlet_mpa < 3e6:
+        if self.p_outlet_mpa < 3:
             self.phase = "gas"
-        elif self.p_outlet_mpa >= 3e6:
+        else:
             self.phase = "liquid"
 
         # COMPRESSION COST AND ENERGY

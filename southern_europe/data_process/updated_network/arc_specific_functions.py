@@ -25,6 +25,12 @@ import io
 # conversion must scale by this factor.
 TONNES_TO_KG = 1000
 
+# Pressure of every network node (bar). Each emitter has its own compressor up
+# to this pressure, and 40 bar is the maximum allowed pipeline pressure in
+# Italy. At 15 degC (onshore ground temperature in the Oeuvray data) CO2 is a
+# gas up to 50.9 bar, so pipelines are designed for gas-phase transport.
+NODE_PRESSURE_BAR = 40
+
 # Import the calculate_annual_emission_values function from the main project
 import sys
 import os
@@ -905,7 +911,14 @@ def create_base_options(length_km, massflow_min_kg_s, massflow_max_kg_s,
         "massflow_evaluation_points": evaluation_points,
         "terrain": terrain,
         "timeframe": "mid-term",
-        "electricity_price_eur_per_mw": avg_electricity_price_eur_mwh
+        "electricity_price_eur_per_mw": avg_electricity_price_eur_mwh,
+        # Gas-phase transport between nodes held at NODE_PRESSURE_BAR: every
+        # emitter compresses to this pressure with its own compressor, so the
+        # pipeline cost has no initial compression, only booster stations
+        # (intermediate + one at the arc end bringing it back to node pressure).
+        "pressure_mode": "gas_node_pressure",
+        "p_inlet_bar": NODE_PRESSURE_BAR,
+        "p_outlet_bar": NODE_PRESSURE_BAR,
     }
 
 
@@ -1190,30 +1203,19 @@ def determine_arc_terrain(from_node, to_node, data_dict):
     """
     Determine the terrain type for specific arcs in this case study.
 
-    This function contains case-specific logic for the Italy study:
-    - The arc from the onshore terminal "Eni S.p.A Casalborsetti" to the offshore
-      storage site "Porto Corsini" is offshore
-    - All other arcs are onshore
+    All arcs are onshore in the Italy study. The Casalborsetti -> Porto Corsini
+    arc used to be offshore, but at the 4 degC seabed temperature of the
+    Oeuvray data CO2 condenses at 38.7 bar, so gas-phase transport at
+    NODE_PRESSURE_BAR (40 bar) is impossible there. It is treated as onshore
+    (15 degC) instead.
 
     Args:
         from_node: Source node ID
         to_node: Target node ID
-        data_dict: Dictionary containing all network data (used to resolve node
-            names via data_dict['network_nodes']['node_name'])
+        data_dict: Dictionary containing all network data (unused, kept for
+            the terrain_function signature)
 
     Returns:
-        str: "Offshore" for the Casalborsetti -> Porto Corsini arc, "Onshore" for all others
+        str: "Onshore"
     """
-    # A node_id can be shared by multiple co-located facility rows (e.g. node 20
-    # "Piacenza" has both a Waste and a Cement row), which makes a plain
-    # Series.get() return a Series instead of a scalar. The name is identical
-    # across those duplicate rows, so keeping the first is safe here.
-    node_names = data_dict['network_nodes']['node_name']
-    node_names = node_names[~node_names.index.duplicated(keep='first')]
-    from_node_name = node_names.get(from_node)
-    to_node_name = node_names.get(to_node)
-
-    if from_node_name == "Eni S.p.A Casalborsetti" and to_node_name == "Porto Corsini":
-        return "Offshore"
-    else:
-        return "Onshore"
+    return "Onshore"

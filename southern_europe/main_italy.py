@@ -60,8 +60,8 @@ max_transport_capacity = 2000  # default ceiling for truck/railway/generic netwo
 # pipe get built far outside its calibrated range, using extrapolated (wrong)
 # economics.
 pipeline_size_class_max_capacity_t_h = {
-    "CO2_Pipeline_small": 104.4,
-    "CO2_Pipeline_medium": 478.8,
+    "CO2_Pipeline_small": 97.2,
+    "CO2_Pipeline_medium": 450.0,
     "CO2_Pipeline_large": 2000.0,
 }
 default_carbon_tax = 250  # euro per tonne CO2 -- used by any scenario in SCENARIOS
@@ -182,7 +182,7 @@ SCENARIOS = [
 # Names of the SCENARIOS entries to run when the script is started without
 # command-line arguments (e.g. with the IDE's Run button). Set to None to run all
 # of SCENARIOS. Command-line arguments (`python main_italy.py <name> ...`) override it.
-RUN_SCENARIOS = ["c_inj"]
+RUN_SCENARIOS = None
 
 # Technology (filename under italy_data/technologies/) used for the temporary CO2
 # buffer storage added at a scenario's "temporary_storage_nodes"
@@ -857,15 +857,34 @@ if __name__ == "__main__":
             raise ValueError(f"Unknown scenario name(s): {sorted(missing)}. "
                               f"Available: {[s['name'] for s in SCENARIOS]}")
 
-    for scenario in scenarios_to_run:
-        run_scenario(
-            scenario["name"],
-            scenario["tech_for_cement"],
-            scenario["tech_for_waste"],
-            objective=scenario.get("objective", "costs"),
-            carbon_tax=scenario.get("carbon_tax"),
-            flatten_profiles=scenario.get("flatten_profiles", False),
-            nr_dd_days=scenario.get("nr_dd_days"),
-            injection_rate_tolerance=scenario.get("injection_rate_tolerance"),
-            temporary_storage_nodes=scenario.get("temporary_storage_nodes"),
-        )
+    # A failing scenario (data error, solver crash, ...) is logged and skipped so
+    # an unattended batch run still gets through the remaining scenarios; the
+    # script exits non-zero at the end if any of them failed.
+    import traceback
+
+    failed = []
+    for i, scenario in enumerate(scenarios_to_run, start=1):
+        label = (f"{scenario['name']} / {scenario.get('objective', 'costs')} / "
+                 f"tax {scenario.get('carbon_tax', default_carbon_tax)}")
+        print(f"\n### Scenario {i}/{len(scenarios_to_run)}: {label}", flush=True)
+        try:
+            run_scenario(
+                scenario["name"],
+                scenario["tech_for_cement"],
+                scenario["tech_for_waste"],
+                objective=scenario.get("objective", "costs"),
+                carbon_tax=scenario.get("carbon_tax"),
+                flatten_profiles=scenario.get("flatten_profiles", False),
+                nr_dd_days=scenario.get("nr_dd_days"),
+                injection_rate_tolerance=scenario.get("injection_rate_tolerance"),
+                temporary_storage_nodes=scenario.get("temporary_storage_nodes"),
+            )
+        except Exception:
+            traceback.print_exc()
+            failed.append(label)
+            print(f"### Scenario FAILED: {label} -- continuing with the next one", flush=True)
+
+    print(f"\n### Finished: {len(scenarios_to_run) - len(failed)}/{len(scenarios_to_run)} scenarios succeeded")
+    if failed:
+        print("### Failed scenarios:\n  " + "\n  ".join(failed))
+        sys.exit(1)

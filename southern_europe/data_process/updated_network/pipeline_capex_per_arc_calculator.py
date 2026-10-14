@@ -50,20 +50,22 @@ from arc_specific_functions import (
 # Derived from the arcs actually built in
 # Results_CCSchainOptimization/20260711184007_emissions_minC-1 (41 arcs, used
 # as a realistic sample of pipeline sizes since geography drives topology far
-# more than the exact cost coefficients). For each, the TRUE capex at that
-# arc's real flow was recomputed with the bug-fixed Oeuvray model and
+# more than the exact cost coefficients; 34 of them still match current node
+# names). For each, the TRUE capex at that arc's real flow was recomputed with
+# the Oeuvray model in gas-phase node-pressure mode (40 bar nodes) and
 # normalized by length (capex_per_km vs flow_kg_s), giving
-# capex_per_km ~= 199,080 * flow_kg_s^0.433 (log-log R2=0.73) - strong
+# capex_per_km ~= 251,426 * flow_kg_s^0.359 (log-log R2=0.88) - strong
 # economies of scale, steep at small flow and flattening at large flow. The
 # two breakpoints below minimize the piecewise-linear approximation error of
 # that curve (i.e. chosen so each class's straight-line gamma1+gamma2*size
 # fit is a good local approximation), then padded to the network's true
-# floor (~3.1 kg/s, smallest single emitter) and ceiling (~466 kg/s, total
+# floor (~3.1 kg/s, smallest single emitter) and ceiling (~509 kg/s, total
 # network emissions) so nothing falls outside all three ranges.
+# Reproduced by analysis/pipeline_size_class_ranges.py.
 SIZE_CLASS_MASSFLOW_RANGES_KG_S = {
-    "small": (3.1, 29.0),
-    "medium": (29.0, 133.0),
-    "large": (133.0, 470.0),
+    "small": (3.1, 27.0),
+    "medium": (27.0, 125.0),
+    "large": (125.0, 510.0),
 }
 
 
@@ -133,8 +135,8 @@ def main():
     print("This script calculates gamma1/gamma2 for every possible arc, once per")
     print("pipeline size class (small/medium/large), and saves each as its own")
     print("capex_defined_per_arc_{size_class}.xlsx. Gamma3/gamma4 are zeros.")
-    print("\n🌊 SPECIAL CONFIGURATION: Arc Eni S.p.A Casalborsetti -> Porto Corsini will be processed as OFFSHORE terrain")
-    print("🏞️  All other arcs will be processed as ONSHORE terrain")
+    print("\n🏞️  All arcs (including Eni S.p.A Casalborsetti -> Porto Corsini) are processed as ONSHORE terrain,")
+    print("   gas phase between nodes at 40 bar")
     print("\n🔇 VERBOSE OUTPUT: Cost model calculations are suppressed for cleaner output")
     print("📊 UPDATED BEHAVIOR: Failed calculations will be set to 0 instead of NaN")
 
