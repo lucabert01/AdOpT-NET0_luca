@@ -5,6 +5,7 @@ import os
 import pandas as pd
 import numpy as np
 import pyomo.environ as pyo
+from pyomo import gdp
 from data_process.utilities.defined_functions import (
     calculate_annual_emission_values,
     calculate_emitter_capacities,
@@ -121,6 +122,20 @@ REFERENCE_EMITTER_TECHNOLOGIES = {
 # free_cement_hybrid_ccs_sizing() instead of update_cement_hybrid_ccs_capacities()
 # (see that function's docstring for why) -- handled automatically below based on
 # whether "CementHybridCCS" is the sector's ONLY selected technology or one of several.
+# Optional "warmstart" key per scenario:
+#   - a key of WARMSTART_DESIGNS (below): first solves the model with that
+#     technology design fixed, then solves the full model starting from that
+#     solution (see solve_warmstart_design).
+#   - a case name "tax{carbon_tax}_{objective}_{scenario_name}": starts from the
+#     variable values saved by the latest finished run of that case (see
+#     load_warmstart_values), so the source scenario must come earlier in this list.
+#     For emissions_minC this applies to the first (emission-minimizing) solve; the
+#     second (cost-minimizing) solve starts from the first one's solution.
+# Optional "gurobi_parameters" key: extra Gurobi parameters for this scenario only,
+# added on top of gurobi_extra_parameters below.
+WARMSTART_MEA_OXYFUEL_DESIGN = "mea_oxyfuel_design"
+WARMSTART_CAL_MEA_DESIGN = "cal_mea_design"
+
 SCENARIOS = [
     # Baseline choice: cement picks between the existing MEA-retrofit route and a
     # new oxyfuel-hybrid plant; waste picks between the existing MEA-retrofit route
@@ -137,12 +152,14 @@ SCENARIOS = [
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
-     "carbon_tax": 200},
+     "carbon_tax": 200,
+     "warmstart": WARMSTART_MEA_OXYFUEL_DESIGN},
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
-     "carbon_tax": 250},
+     "carbon_tax": 250,
+     "warmstart": "tax200_costs_technology_selection"},
     # Same choice set, minimizing emissions directly -- the upper bound the cost
     # sweep above approaches as carbon_tax rises. carbon_tax doesn't affect an
     # emissions-only objective, so this one run at the default level stands in
@@ -150,7 +167,8 @@ SCENARIOS = [
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
-     "objective": "emissions_minC"},
+     "objective": "emissions_minC",
+     "warmstart": "tax200_costs_technology_selection"},
     # Same cement choice, but waste is forced to calcium looping only (no MEA-retrofit
     # alternative) -- isolates the effect of removing waste's own technology choice
     # while keeping cement's choice active. Emissions-minimizing only (no cost/tax
@@ -158,7 +176,8 @@ SCENARIOS = [
     {"name": "technology_selection_wasteCaL",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteCaL_CCS"],
-     "objective": "emissions_minC"},
+     "objective": "emissions_minC",
+     "warmstart": WARMSTART_CAL_MEA_DESIGN},
     # Same choice set as technology_selection, but the permanent storage sink must
     # inject at a near-constant rate (between 85% and 100% of its injection
     # capacity in every hour), with a temporary CO2 buffer storage offered at the
@@ -190,6 +209,36 @@ TEMPORARY_STORAGE_TECHNOLOGY = "TemporaryStorage_CO2"
 # Permanent storage sink technology, whose copied JSON gets the constant injection
 # rate settings for scenarios that set "injection_rate_tolerance"
 PERMANENT_STORAGE_TECHNOLOGY = "PermanentStorage_CO2_simple"
+
+# Further Gurobi parameters passed straight to the solver for every scenario (any
+# name from the Gurobi parameter documentation), e.g. {"Symmetry": 2, "DegenMoves": 0}
+gurobi_extra_parameters = {}
+
+# Technology designs a scenario's fixed-design warm start can use (see
+# fix_warmstart_design): capture route for cement ("oxyfuel" hybrid or "mea"
+# retrofit) and waste ("mea" retrofit or "cal" calcium looping), and the waste
+# nodes that get no capture at all. Every other emitter gets its MEA retrofit.
+WARMSTART_DESIGNS = {
+    WARMSTART_MEA_OXYFUEL_DESIGN: {
+        "cement": "oxyfuel",
+        "waste": "mea",
+        "no_capture_nodes": [
+            "Impianto di Termovalorizzazione Rifiuti di Trieste",
+            "TERMOVALORIZZATORE DI BOLZANO",
+            "TERMOVALORIZZATORE COMO",
+        ],
+    },
+    WARMSTART_CAL_MEA_DESIGN: {
+        "cement": "mea",
+        "waste": "cal",
+        "no_capture_nodes": [],
+    },
+}
+# Time limit (hours) of the fixed-design solve that builds that warm start
+WARMSTART_DESIGN_TIME_LIMIT_H = 2
+# File in each result folder holding all variable values of the final solution,
+# read back by load_warmstart_values
+VARIABLE_VALUES_FILE = "variable_values.pkl.gz"
 
 #----- Import data-----#
 path_data_case_study = Path("./italy_data")
@@ -342,11 +391,200 @@ def set_constant_injection(input_data_path: Path, injection_rate_tolerance: floa
         print(f"  Constant injection (tolerance {injection_rate_tolerance}) set in {tech_file}")
 
 
+def _all_variables(model):
+    """All variables of the model, including the GDP indicator binaries on Disjuncts."""
+    return model.component_data_objects(pyo.Var, descend_into=(pyo.Block, gdp.Disjunct))
+
+
+def fix_warmstart_design(m: "adopt.ModelHub", design: dict, period: str = "period1") -> list:
+    """
+    Fixes the technology design of a WARMSTART_DESIGNS entry:
+
+    - design["cement"] == "oxyfuel": every CementHybridCCS is built at the clinker
+      capacity of the node's existing cement plant, without MEA retrofit on the
+      existing plant (var_cement_route = 0 in enforce_single_cement_technology)
+    - design["cement"] == "mea": MEA retrofit on the existing cement plant, no
+      CementHybridCCS (var_cement_route = 1)
+    - design["waste"] == "mea": MEA retrofit on every existing waste plant, no
+      WasteCaL_CCS capture unit (var_size_cal = 0)
+    - design["waste"] == "cal": WasteCaL_CCS capture unit at full capture capacity
+      (waste throughput x capture factor) at every waste plant, no MEA retrofit
+    - every other existing emitter with a CCS option gets its MEA retrofit
+    - waste plants in design["no_capture_nodes"] get no capture unit at all
+
+    Network design and operation stay free. Variables are only fixed if they are
+    not already fixed, and returned so the caller can unfix them afterwards.
+
+    :param m: a ModelHub with construct_model(), construct_balances() and
+        enforce_single_cement_technology() already called
+    :param dict design: WARMSTART_DESIGNS entry
+    :param str period: investment period name
+    :return: list of the variables this function fixed
+    """
+    model = m.model[m.info_solving_algorithms["aggregation_model"]]
+    b_period = model.periods[period]
+    no_capture_nodes = design["no_capture_nodes"]
+
+    missing = set(no_capture_nodes) - set(b_period.node_blocks)
+    if missing:
+        raise ValueError(f"Warm-start no_capture_nodes not in the model: {sorted(missing)}")
+
+    fixed = []
+
+    def _fix(var, value):
+        if not var.fixed:
+            var.fix(value)
+            fixed.append(var)
+
+    def _fix_mea(b_tec, installed):
+        _fix(b_tec.dis_installation_ccs[1].binary_indicator_var, 1 if installed else 0)
+        _fix(b_tec.dis_installation_ccs[0].binary_indicator_var, 0 if installed else 1)
+
+    counts = {"MEA": 0, "no capture": 0, "oxyfuel": 0, "CaL": 0}
+    for node in b_period.node_blocks:
+        tech_blocks = b_period.node_blocks[node].tech_blocks_active
+        no_capture = node in no_capture_nodes
+        for tec in tech_blocks:
+            b_tec = tech_blocks[tec]
+            if tec == "CementHybridCCS":
+                if design["cement"] == "oxyfuel":
+                    clinker_capacity = pyo.value(tech_blocks["CementEmitter_existing"].var_size)
+                    _fix(b_tec.var_size, min(clinker_capacity, pyo.value(b_tec.para_size_max)))
+                    counts["oxyfuel"] += 1
+                else:
+                    _fix(b_tec.var_size, 0)
+            elif tec == "WasteCaL_CCS":
+                if design["waste"] == "cal" and not no_capture:
+                    tec_data = m.data.technology_data[period][node][tec]
+                    capture_factor = b_tec.var_size_cal.ub / pyo.value(b_tec.para_size_max)
+                    size_cal = tec_data.performance_data["prod_capacity_wte"] * capture_factor
+                    _fix(b_tec.var_size_cal, min(size_cal, b_tec.var_size_cal.ub,
+                                                 max(tec_data.economics["bp_x_capex_cal"])))
+                    counts["CaL"] += 1
+                else:
+                    _fix(b_tec.var_size_cal, 0)
+                    if no_capture:
+                        counts["no capture"] += 1
+            elif b_tec.find_component("dis_installation_ccs") is not None:
+                if tec == "CementEmitter_existing" and "CementHybridCCS" in tech_blocks:
+                    installed = design["cement"] == "mea"
+                elif tec.startswith("WasteToEnergyEmitter"):
+                    installed = design["waste"] == "mea" and not no_capture
+                    if no_capture:
+                        counts["no capture"] += 1
+                else:
+                    installed = True
+                _fix_mea(b_tec, installed)
+                if installed:
+                    counts["MEA"] += 1
+
+    if model.find_component("var_cement_route") is not None:
+        for node in model.set_cement_dual_nodes:
+            _fix(model.var_cement_route[node], 1 if design["cement"] == "mea" else 0)
+
+    print(f"  Warm-start design: MEA retrofit at {counts['MEA']} emitters, oxyfuel "
+          f"hybrid at {counts['oxyfuel']} cement plants, CaL at {counts['CaL']} waste "
+          f"plants, no capture at {counts['no capture']} waste plants "
+          f"({len(fixed)} variables fixed)")
+    return fixed
+
+
+def solve_warmstart_design(m: "adopt.ModelHub", design_name: str):
+    """
+    Solves the model with the WARMSTART_DESIGNS[design_name] technology design fixed
+    (fix_warmstart_design), for at most WARMSTART_DESIGN_TIME_LIMIT_H hours, then
+    unfixes it again. The solution stays loaded in the Pyomo variables, so the
+    following m.solve() hands it to Gurobi as a complete (and therefore feasible)
+    MIP start. The fixed-design run is written as its own result folder, with
+    "_warmstart_design" appended to the case name.
+
+    For emissions_minC, the fixed-design run only minimizes emissions
+    (emissions_net): that is the solve the start is meant for, and the following
+    cost-minimizing solve starts from the emission-minimizing one anyway.
+
+    :param m: a ModelHub ready to solve (enforce_single_cement_technology applied)
+    :param str design_name: key of WARMSTART_DESIGNS
+    """
+    print(f"\n🔥 Building warm start: solving with the '{design_name}' design fixed "
+          f"(time limit {WARMSTART_DESIGN_TIME_LIMIT_H} h)")
+    fixed = fix_warmstart_design(m, WARMSTART_DESIGNS[design_name])
+
+    config = m.data.model_config
+    original = {
+        "timelim": config["solveroptions"]["timelim"]["value"],
+        "case_name": config["reporting"]["case_name"]["value"],
+        "objective": config["optimization"]["objective"]["value"],
+    }
+    config["solveroptions"]["timelim"]["value"] = WARMSTART_DESIGN_TIME_LIMIT_H
+    config["reporting"]["case_name"]["value"] = f"{original['case_name']}_warmstart_design"
+    if original["objective"] == "emissions_minC":
+        config["optimization"]["objective"]["value"] = "emissions_net"
+    try:
+        m.solve()
+    finally:
+        config["solveroptions"]["timelim"]["value"] = original["timelim"]
+        config["reporting"]["case_name"]["value"] = original["case_name"]
+        config["optimization"]["objective"]["value"] = original["objective"]
+        for var in fixed:
+            var.unfix()
+
+
+def save_variable_values(m: "adopt.ModelHub"):
+    """
+    Saves all variable values of the last solution to VARIABLE_VALUES_FILE in that
+    solve's result folder, so later scenarios can warm start from it.
+    """
+    model = m.model[m.info_solving_algorithms["aggregation_model"]]
+    values = {var.name: var.value for var in _all_variables(model) if var.value is not None}
+    if not values:
+        print("  No solution values to save for warm starts")
+        return
+    path = Path(m.last_solve_info["result_folder_path"]) / VARIABLE_VALUES_FILE
+    pd.Series(values).to_pickle(path)
+    print(f"  Saved {len(values)} variable values for warm starts to {path}")
+
+
+def load_warmstart_values(m: "adopt.ModelHub", source_case: str) -> bool:
+    """
+    Loads the variable values saved by the latest finished run of source_case
+    ("tax{carbon_tax}_{objective}_{scenario_name}") into the model, matched by
+    variable name; Pyomo then passes them to Gurobi as MIP start. Variables that do
+    not exist in the source run stay empty, and Gurobi tries to complete the start.
+
+    :param m: a ModelHub ready to solve
+    :param str source_case: case name of the run to start from
+    :return: True if values were loaded, False if no saved run was found
+    """
+    candidates = sorted(
+        Path("Results_CCSchainOptimization").glob(f"*/*_{source_case}-*/{VARIABLE_VALUES_FILE}"),
+        key=lambda path: path.parent.name,  # folder names start with the run's timestamp
+    )
+    if not candidates:
+        print(f"  ⚠️  No saved run of '{source_case}' found -- solving without warm start")
+        return False
+    source = candidates[-1]
+    values = pd.read_pickle(source).to_dict()
+
+    model = m.model[m.info_solving_algorithms["aggregation_model"]]
+    n_vars, n_set = 0, 0
+    for var in _all_variables(model):
+        if var.fixed:
+            continue
+        n_vars += 1
+        value = values.get(var.name)
+        if value is not None:
+            var.set_value(value, skip_validation=True)
+            n_set += 1
+    print(f"\n🔥 Warm start from {source}: {n_set}/{n_vars} variables set")
+    return True
+
+
 def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list,
                   objective: str = "costs", carbon_tax: int = None,
                   flatten_profiles: bool = False, nr_dd_days: int = None,
                   injection_rate_tolerance: float = None,
-                  temporary_storage_nodes: list = None):
+                  temporary_storage_nodes: list = None,
+                  warmstart: str = None, gurobi_parameters: dict = None):
     """
     Runs the full CCS-chain data-preparation + optimization pipeline for one
     emitter-technology scenario (a choice of cement and waste technology).
@@ -383,6 +621,10 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         injection capacity in every timestep (see set_constant_injection).
     :param list temporary_storage_nodes: node names at which the temporary CO2
         buffer storage (TEMPORARY_STORAGE_TECHNOLOGY) is offered as a new technology.
+    :param str warmstart: a key of WARMSTART_DESIGNS, or the case name of an
+        earlier run to start from (see the "warmstart" key described above SCENARIOS).
+    :param dict gurobi_parameters: extra Gurobi parameters for this scenario, added
+        on top of gurobi_extra_parameters.
     """
     if carbon_tax is None:
         carbon_tax = default_carbon_tax
@@ -479,6 +721,10 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     configuration["optimization"]["objective"]["value"] = objective # set optimization objective
     configuration["solveroptions"]["mipgap"]["value"] = 0.01 # set MILP gap
     configuration["solveroptions"]["timelim"]["value"] = 18 # set solver time limit (hours)
+    configuration["solveroptions"]["gurobi_extra_parameters"] = {
+        "description": "Further Gurobi parameters passed to the solver as is.",
+        "value": {**gurobi_extra_parameters, **(gurobi_parameters or {})},
+    }
     configuration['optimization']['typicaldays']['N']['value'] = nr_dd_days if nr_dd_days is not None else nr_DD_days
     configuration['optimization']['typicaldays']['method']['value'] = 1  # cluster demand/balances too (see IIS diagnosis: method 2 forced identical clinker output across hours mapped to the same typical day despite differing demand)
     configuration['reporting']['save_summary_path']['value'] = result_path
@@ -838,7 +1084,12 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
             f"  Enforced cement MEA-retrofit / oxyfuel-hybrid exclusivity at "
             f"{len(dual_cement_nodes)} node(s): {dual_cement_nodes}"
         )
+    if warmstart in WARMSTART_DESIGNS:
+        solve_warmstart_design(m, warmstart)
+    elif warmstart:
+        load_warmstart_values(m, warmstart)
     m.solve()
+    save_variable_values(m)
 
 
 if __name__ == "__main__":
@@ -878,6 +1129,8 @@ if __name__ == "__main__":
                 nr_dd_days=scenario.get("nr_dd_days"),
                 injection_rate_tolerance=scenario.get("injection_rate_tolerance"),
                 temporary_storage_nodes=scenario.get("temporary_storage_nodes"),
+                warmstart=scenario.get("warmstart"),
+                gurobi_parameters=scenario.get("gurobi_parameters"),
             )
         except Exception:
             traceback.print_exc()

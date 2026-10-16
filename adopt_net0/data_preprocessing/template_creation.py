@@ -416,6 +416,12 @@ def initialize_configuration_templates() -> dict:
                 "options": [-1, 0, 1, 2, 3],
                 "value": -1,
             },
+            "gurobi_extra_parameters": {
+                "description": "Further Gurobi parameters passed to the solver as is, "
+                "e.g. {'Symmetry': 2, 'ConcurrentMIP': 2}. Names as in the Gurobi "
+                "documentation.",
+                "value": {},
+            },
         },
         "reporting": {
             "write_results": {

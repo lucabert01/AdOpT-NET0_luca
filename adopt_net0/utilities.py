@@ -24,6 +24,11 @@ def get_gurobi_parameters(solveroptions: dict):
     solver.options["Cuts"] = solveroptions["cuts"]["value"]
     solver.options["NumericFocus"] = solveroptions["numericfocus"]["value"]
 
+    # Any further Gurobi parameter, passed through as {"ParameterName": value}
+    if "gurobi_extra_parameters" in solveroptions:
+        for name, value in solveroptions["gurobi_extra_parameters"]["value"].items():
+            solver.options[name] = value
+
     return solver
 
 
