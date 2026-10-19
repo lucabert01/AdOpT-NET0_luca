@@ -1,0 +1,112 @@
+
+Gurobi 13.0.3 (win64) logging started Sun Oct 18 09:39:06 2026
+
+Set parameter LogFile to value "Results_CCSchainOptimization\technology_selection\20261018093900_tax250_emissions_minC_technology_selection-1\solver_log.txt"
+Set parameter TimeLimit to value 64800
+Set parameter MIPGap to value 0.01
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 13.0.3 build v13.0.3rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Silver 4210 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 40 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  64800
+MIPGap  0.01
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1640034 rows, 1569567 columns and 3767041 nonzeros (Min)
+Model fingerprint: 0x823cf7c0
+Model has 1 linear objective coefficients
+Model has 46 SOS constraints
+Variable types: 1563105 continuous, 6462 integer (6462 binary)
+Coefficient statistics:
+  Matrix range     [1e-03, 1e+08]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 3e+10]
+  RHS range        [9e-01, 4e+07]
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+
+User MIP start did not produce a new incumbent solution
+User MIP start violates constraint x2391526 by 8922.862782570
+Processed MIP start in 1.56 seconds (0.41 work units)
+
+Presolve removed 1412276 rows and 1380298 columns
+Presolve time: 3.43s
+Presolved: 227758 rows, 189269 columns, 646369 nonzeros
+Variable types: 185860 continuous, 3409 integer (3409 binary)
+Found heuristic solution: objective 1.456553e+07
+Performing another presolve...
+Presolve removed 192304 rows and 91707 columns
+Presolve time: 3.19s
+Performing another presolve...
+Presolve removed 4172 rows and 57343 columns
+Presolve time: 1.09s
+Found heuristic solution: objective 1.180782e+07
+Deterministic concurrent LP optimizer: primal and dual simplex
+Showing primal log only...
+
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0   -1.2515964e+06   5.266218e+05   1.948329e+10     19s
+   35037    5.8694067e+06   0.000000e+00   3.501611e+06     19s
+Concurrent spin time: 0.05s
+
+Solved with dual simplex
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+   13520    1.5504263e+06   0.000000e+00   0.000000e+00     20s
+
+Root relaxation: objective 1.550426e+06, 13520 iterations, 0.89 seconds (0.44 work units)
+Total elapsed time = 19.59s (DegenMoves)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 1550426.34    0   53 1.1808e+07 1550426.34  86.9%     -   20s
+     0     0 1550426.34    0   57 1.1808e+07 1550426.34  86.9%     -   20s
+H    0     0                    1651789.2027 1550426.34  6.14%     -   22s
+     0     0 1599320.67    0   28 1651789.20 1599320.67  3.18%     -   22s
+     0     0 1623711.54    0    7 1651789.20 1623711.54  1.70%     -   24s
+*    0     0               0    1623733.7072 1623733.71  0.00%     -   24s
+
+Cutting planes:
+  Learned: 544
+  Gomory: 2
+  Cover: 13
+  Implied bound: 2038
+  Clique: 12
+  MIR: 3
+  Flow cover: 120
+  Network: 1
+  RLT: 1391
+  Relax-and-lift: 186
+  BQP: 240
+  PSD: 148
+
+Explored 1 nodes (16057 simplex iterations) in 25.06 seconds (6.90 work units)
+Thread count was 32 (of 40 available processors)
+
+Solution count 4: 1.62373e+06 1.65179e+06 1.18078e+07 1.45655e+07 
+
+Optimal solution found (tolerance 1.00e-02)
+Warning: max constraint violation (1.5909e-05) exceeds tolerance
+Best objective 1.623733707193e+06, best bound 1.623733707193e+06, gap 0.0000%
