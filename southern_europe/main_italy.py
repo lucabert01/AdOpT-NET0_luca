@@ -2,6 +2,7 @@ import adopt_net0 as adopt
 import json
 from pathlib import Path
 import os
+import re
 import pandas as pd
 import numpy as np
 import pyomo.environ as pyo
@@ -131,6 +132,11 @@ REFERENCE_EMITTER_TECHNOLOGIES = {
 #     load_warmstart_values), so the source scenario must come earlier in this list.
 #     For emissions_minC this applies to the first (emission-minimizing) solve; the
 #     second (cost-minimizing) solve starts from the first one's solution.
+# Optional "warmstart_design_only" key (with a case-name "warmstart"): only the
+# design is taken from that run -- technology installation and sizes, transport
+# arc installation and sizes (WARMSTART_DESIGN_VARIABLES) -- while the operation is
+# left to Gurobi to complete. Meant for a source run whose operation does not fit
+# this scenario (e.g. c_inj's constant injection constraint).
 # Optional "gurobi_parameters" key: extra Gurobi parameters for this scenario only,
 # added on top of gurobi_extra_parameters below.
 WARMSTART_MEA_OXYFUEL_DESIGN = "mea_oxyfuel_design"
@@ -148,18 +154,18 @@ SCENARIOS = [
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
      "carbon_tax": 150},
+    # tax 250 runs before tax 200 so that tax 200 can start from its solution
+    {"name": "technology_selection",
+     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
+     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
+     "objective": "costs",
+     "carbon_tax": 250},
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
      "carbon_tax": 200,
-     "warmstart": WARMSTART_MEA_OXYFUEL_DESIGN},
-    {"name": "technology_selection",
-     "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
-     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
-     "objective": "costs",
-     "carbon_tax": 250,
-     "warmstart": "tax200_costs_technology_selection"},
+     "warmstart": "tax250_costs_technology_selection"},
     # Same choice set, minimizing emissions directly -- the upper bound the cost
     # sweep above approaches as carbon_tax rises. carbon_tax doesn't affect an
     # emissions-only objective, so this one run at the default level stands in
@@ -176,26 +182,30 @@ SCENARIOS = [
     {"name": "technology_selection_wasteCaL",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteCaL_CCS"],
-     "objective": "emissions_minC",
-     "warmstart": WARMSTART_CAL_MEA_DESIGN},
+     "objective": "emissions_minC"},
     # Same choice set as technology_selection, but the permanent storage sink must
     # inject at a near-constant rate (between 85% and 100% of its injection
     # capacity in every hour), with a temporary CO2 buffer storage offered at the
     # Casalborsetti hub to absorb the mismatch between capture and injection.
+    # Each starts from the design of technology_selection at the same CO2 tax.
     {"name": "c_inj",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
      "carbon_tax": 200,
      "injection_rate_tolerance": 0.15,
-     "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"]},
+     "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"],
+     "warmstart": "tax200_costs_technology_selection",
+     "warmstart_design_only": True},
     {"name": "c_inj",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
      "carbon_tax": 250,
      "injection_rate_tolerance": 0.15,
-     "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"]},
+     "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"],
+     "warmstart": "tax250_costs_technology_selection",
+     "warmstart_design_only": True},
 ]
 
 # Names of the SCENARIOS entries to run when the script is started without
@@ -239,6 +249,15 @@ WARMSTART_DESIGN_TIME_LIMIT_H = 2
 # File in each result folder holding all variable values of the final solution,
 # read back by load_warmstart_values
 VARIABLE_VALUES_FILE = "variable_values.pkl.gz"
+# Variables taken from the source run by a "warmstart_design_only" warm start:
+# technology sizes (incl. the CCS/MEA/CaL capture units and the storage injection
+# capacity), the CCS and transport arc installation binaries, and the cement route
+# choice
+WARMSTART_DESIGN_VARIABLES = re.compile(
+    r"\.(var_size\w*|var_injection_capacity"
+    r"|dis_installation\w*\[\d+\]\.binary_indicator_var)$"
+    r"|^var_cement_route\["
+)
 
 #----- Import data-----#
 path_data_case_study = Path("./italy_data")
@@ -546,7 +565,8 @@ def save_variable_values(m: "adopt.ModelHub"):
     print(f"  Saved {len(values)} variable values for warm starts to {path}")
 
 
-def load_warmstart_values(m: "adopt.ModelHub", source_case: str) -> bool:
+def load_warmstart_values(m: "adopt.ModelHub", source_case: str,
+                          design_only: bool = False) -> bool:
     """
     Loads the variable values saved by the latest finished run of source_case
     ("tax{carbon_tax}_{objective}_{scenario_name}") into the model, matched by
@@ -555,6 +575,8 @@ def load_warmstart_values(m: "adopt.ModelHub", source_case: str) -> bool:
 
     :param m: a ModelHub ready to solve
     :param str source_case: case name of the run to start from
+    :param bool design_only: only load the design variables
+        (WARMSTART_DESIGN_VARIABLES), not the operation
     :return: True if values were loaded, False if no saved run was found
     """
     candidates = sorted(
@@ -566,6 +588,9 @@ def load_warmstart_values(m: "adopt.ModelHub", source_case: str) -> bool:
         return False
     source = candidates[-1]
     values = pd.read_pickle(source).to_dict()
+    if design_only:
+        values = {name: value for name, value in values.items()
+                  if WARMSTART_DESIGN_VARIABLES.search(name)}
 
     model = m.model[m.info_solving_algorithms["aggregation_model"]]
     n_vars, n_set = 0, 0
@@ -577,7 +602,8 @@ def load_warmstart_values(m: "adopt.ModelHub", source_case: str) -> bool:
         if value is not None:
             var.set_value(value, skip_validation=True)
             n_set += 1
-    print(f"\n🔥 Warm start from {source}: {n_set}/{n_vars} variables set")
+    print(f"\n🔥 Warm start from {source}{' (design only)' if design_only else ''}: "
+          f"{n_set}/{n_vars} variables set")
     return True
 
 
@@ -586,7 +612,8 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
                   flatten_profiles: bool = False, nr_dd_days: int = None,
                   injection_rate_tolerance: float = None,
                   temporary_storage_nodes: list = None,
-                  warmstart: str = None, gurobi_parameters: dict = None):
+                  warmstart: str = None, warmstart_design_only: bool = False,
+                  gurobi_parameters: dict = None):
     """
     Runs the full CCS-chain data-preparation + optimization pipeline for one
     emitter-technology scenario (a choice of cement and waste technology).
@@ -625,6 +652,8 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         buffer storage (TEMPORARY_STORAGE_TECHNOLOGY) is offered as a new technology.
     :param str warmstart: a key of WARMSTART_DESIGNS, or the case name of an
         earlier run to start from (see the "warmstart" key described above SCENARIOS).
+    :param bool warmstart_design_only: with a case-name warmstart, only start from
+        that run's design (see load_warmstart_values).
     :param dict gurobi_parameters: extra Gurobi parameters for this scenario, added
         on top of gurobi_extra_parameters.
     """
@@ -1089,7 +1118,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     if warmstart in WARMSTART_DESIGNS:
         solve_warmstart_design(m, warmstart)
     elif warmstart:
-        load_warmstart_values(m, warmstart)
+        load_warmstart_values(m, warmstart, design_only=warmstart_design_only)
     m.solve()
     save_variable_values(m)
 
@@ -1132,6 +1161,7 @@ if __name__ == "__main__":
                 injection_rate_tolerance=scenario.get("injection_rate_tolerance"),
                 temporary_storage_nodes=scenario.get("temporary_storage_nodes"),
                 warmstart=scenario.get("warmstart"),
+                warmstart_design_only=scenario.get("warmstart_design_only", False),
                 gurobi_parameters=scenario.get("gurobi_parameters"),
             )
         except Exception:
