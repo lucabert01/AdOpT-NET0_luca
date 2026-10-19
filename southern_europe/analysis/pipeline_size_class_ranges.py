@@ -382,15 +382,16 @@ def make_figure(df, a, b, r2, breakpoints, final_ranges, output_path, log_scale=
     """
     fig, ax = plt.subplots(figsize=(8, 5.5))
 
-    ax.scatter(df["flow_kg_s"], df["capex_per_km"], s=28, alpha=0.75, color="#2c3e50",
+    # Plotted in MEUR/km so the linear axis has no "1e6" offset label
+    ax.scatter(df["flow_kg_s"], df["capex_per_km"] / 1e6, s=28, alpha=0.75, color="#2c3e50",
                label="Arcs built in reference run\n(true capex)")
 
     if log_scale:
         grid = np.geomspace(df["flow_kg_s"].min(), df["flow_kg_s"].max(), 200)
     else:
         grid = np.linspace(df["flow_kg_s"].min(), df["flow_kg_s"].max(), 200)
-    ax.plot(grid, a * grid ** b, color="#7f8c8d", linestyle="--", linewidth=1.5,
-            label=f"Fitted power law: {a:,.0f}$\\cdot$flow$^{{{b:.3f}}}$ (R$^2$={r2:.2f})")
+    ax.plot(grid, a * grid ** b / 1e6, color="#7f8c8d", linestyle="--", linewidth=1.5,
+            label=f"Fitted power law (R$^2$={r2:.2f})")
 
     if log_scale:
         ax.set_xscale("log")
@@ -401,18 +402,27 @@ def make_figure(df, a, b, r2, breakpoints, final_ranges, output_path, log_scale=
     for name, (lo, hi) in final_ranges.items():
         ax.axvspan(lo, hi, color=colors[name], alpha=0.12)
         mid = np.sqrt(max(lo, 1e-6) * hi) if log_scale else (lo + hi) / 2
-        label_y = ymin * 1.5 if log_scale else ymin + 0.03 * (ymax - ymin)
-        ax.annotate(name, xy=(mid, label_y), ha="center", fontsize=11, fontweight="bold",
-                    color=colors[name])
+        if log_scale:
+            ax.annotate(name, xy=(mid, ymin * 1.5), ha="center", fontsize=11,
+                        fontweight="bold", color=colors[name])
+        else:
+            # Labels along the (empty) top edge; the 'small' band is narrower
+            # than its label, so it is left-aligned at the band start (spilling
+            # slightly into 'medium') instead of centred past x=0
+            x, ha = (lo + 2, "left") if name == "small" else (mid, "center")
+            ax.annotate(name, xy=(x, ymax - 0.03 * (ymax - ymin)), ha=ha, va="top",
+                        fontsize=11, fontweight="bold", color=colors[name])
 
     for bp in breakpoints:
         ax.axvline(bp, color="#34495e", linestyle=":", linewidth=1)
 
     ax.set_ylim(ymin, ymax)
+    if not log_scale:
+        # Start at 0 and end exactly where the 'large' class ends
+        ax.set_xlim(0, final_ranges["large"][1])
     ax.set_xlabel("Pipeline mass flow (kg CO$_2$/s)")
-    ax.set_ylabel("CAPEX per unit length (EUR/km)")
-    ax.set_title("Three CO2 pipeline size-class ranges" + ("" if log_scale else " (linear scale)"))
-    ax.legend(loc="upper left", fontsize=8, framealpha=0.9)
+    ax.set_ylabel("CAPEX per unit length (M€/km)")
+    ax.legend(loc="upper left" if log_scale else "lower right", fontsize=11, framealpha=0.9)
     ax.grid(True, which="both", alpha=0.25)
 
     fig.tight_layout()
