@@ -496,7 +496,9 @@ def solve_warmstart_design(m: "adopt.ModelHub", design_name: str):
     unfixes it again. The solution stays loaded in the Pyomo variables, so the
     following m.solve() hands it to Gurobi as a complete (and therefore feasible)
     MIP start. The fixed-design run is written as its own result folder, with
-    "_warmstart_design" appended to the case name.
+    "_ws" appended to the case name (kept short: the longer "_warmstart_design"
+    pushed technology_selection_wasteCaL's h5 path on the network drive past
+    Windows' 260-character limit, so writing the results failed).
 
     For emissions_minC, the fixed-design run only minimizes emissions
     (emissions_net): that is the solve the start is meant for, and the following
@@ -516,7 +518,7 @@ def solve_warmstart_design(m: "adopt.ModelHub", design_name: str):
         "objective": config["optimization"]["objective"]["value"],
     }
     config["solveroptions"]["timelim"]["value"] = WARMSTART_DESIGN_TIME_LIMIT_H
-    config["reporting"]["case_name"]["value"] = f"{original['case_name']}_warmstart_design"
+    config["reporting"]["case_name"]["value"] = f"{original['case_name']}_ws"
     if original["objective"] == "emissions_minC":
         config["optimization"]["objective"]["value"] = "emissions_net"
     try:
@@ -719,8 +721,8 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     with open(input_data_path / "ConfigModel.json", "r") as json_file:
         configuration = json.load(json_file)
     configuration["optimization"]["objective"]["value"] = objective # set optimization objective
-    configuration["solveroptions"]["mipgap"]["value"] = 0.01 # set MILP gap
-    configuration["solveroptions"]["timelim"]["value"] = 18 # set solver time limit (hours)
+    configuration["solveroptions"]["mipgap"]["value"] = 0.015 # set MILP gap
+    configuration["solveroptions"]["timelim"]["value"] = 54 # set solver time limit (hours)
     configuration["solveroptions"]["gurobi_extra_parameters"] = {
         "description": "Further Gurobi parameters passed to the solver as is.",
         "value": {**gurobi_extra_parameters, **(gurobi_parameters or {})},
