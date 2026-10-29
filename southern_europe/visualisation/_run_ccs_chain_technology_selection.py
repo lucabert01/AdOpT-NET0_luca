@@ -32,6 +32,8 @@ SCENARIOS = [
     # constant injection + temporary CO2 storage (main_italy.py's "c_inj")
     ("c_inj", "costs", 200),
     ("c_inj", "costs", 250),
+    # constant injection with a 95% minimum injection rate
+    ("c_inj_min95", "costs", 200),
 ]
 
 # Node used for the per-emitter zoom-in and the downstream-of-storage inflow

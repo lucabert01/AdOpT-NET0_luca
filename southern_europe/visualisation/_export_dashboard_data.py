@@ -31,6 +31,8 @@ SCENARIOS = [
     # constant injection + temporary CO2 storage (main_italy.py's "c_inj")
     ("c_inj", "costs", 200),
     ("c_inj", "costs", 250),
+    # constant injection with a 95% minimum injection rate
+    ("c_inj_min95", "costs", 200),
 ]
 
 SCENARIO_LABELS = {
@@ -41,6 +43,7 @@ SCENARIO_LABELS = {
     "technology_selection_wasteCaL_emissions_minC": "Technology selection + calcium looping (emissions-minimizing)",
     "c_inj_costs_tax200": "Constant injection + temporary storage (cost-minimizing, CO2 tax 200 EUR/t)",
     "c_inj_costs_tax250": "Constant injection + temporary storage (cost-minimizing, CO2 tax 250 EUR/t)",
+    "c_inj_min95_costs_tax200": "Constant injection, 95% minimum + temporary storage (cost-minimizing, CO2 tax 200 EUR/t)",
 }
 
 HOURS_PER_YEAR = 8760

@@ -184,10 +184,13 @@ SCENARIOS = [
      "tech_for_waste": ["WasteCaL_CCS"],
      "objective": "emissions_minC"},
     # Same choice set as technology_selection, but the permanent storage sink must
-    # inject at a near-constant rate (between 85% and 100% of its injection
-    # capacity in every hour), with a temporary CO2 buffer storage offered at the
-    # Casalborsetti hub to absorb the mismatch between capture and injection.
-    # Each starts from the design of technology_selection at the same CO2 tax.
+    # inject at a near-constant rate (between 85% resp. 95% and 100% of its
+    # injection capacity in every hour), with a temporary CO2 buffer storage
+    # offered at the Casalborsetti hub to absorb the mismatch between capture and
+    # injection. Both at a CO2 tax of 200 EUR/t.
+    # c_inj (85% minimum) starts from the full solution of its own previous run:
+    # same model, only the buffer's size_max was raised, so that solution is
+    # still feasible.
     {"name": "c_inj",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
@@ -195,23 +198,24 @@ SCENARIOS = [
      "carbon_tax": 200,
      "injection_rate_tolerance": 0.15,
      "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"],
-     "warmstart": "tax200_costs_technology_selection",
-     "warmstart_design_only": True},
-    {"name": "c_inj",
+     "warmstart": "tax200_costs_c_inj"},
+    # c_inj_min95 (95% minimum) runs after c_inj and starts from its design: its
+    # operation (85% band) does not fit the narrower band.
+    {"name": "c_inj_min95",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
-     "carbon_tax": 250,
-     "injection_rate_tolerance": 0.15,
+     "carbon_tax": 200,
+     "injection_rate_tolerance": 0.05,
      "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"],
-     "warmstart": "tax250_costs_technology_selection",
+     "warmstart": "tax200_costs_c_inj",
      "warmstart_design_only": True},
 ]
 
 # Names of the SCENARIOS entries to run when the script is started without
 # command-line arguments (e.g. with the IDE's Run button). Set to None to run all
 # of SCENARIOS. Command-line arguments (`python main_italy.py <name> ...`) override it.
-RUN_SCENARIOS = None
+RUN_SCENARIOS = ["c_inj", "c_inj_min95"]
 
 # Technology (filename under italy_data/technologies/) used for the temporary CO2
 # buffer storage added at a scenario's "temporary_storage_nodes"
@@ -250,11 +254,13 @@ WARMSTART_DESIGN_TIME_LIMIT_H = 2
 # read back by load_warmstart_values
 VARIABLE_VALUES_FILE = "variable_values.pkl.gz"
 # Variables taken from the source run by a "warmstart_design_only" warm start:
-# technology sizes (incl. the CCS/MEA/CaL capture units and the storage injection
-# capacity), the CCS and transport arc installation binaries, and the cement route
-# choice
+# technology sizes (incl. the CCS/MEA/CaL capture units), the CCS and transport
+# arc installation binaries, and the cement route choice. The storage injection
+# capacity is left out: with a constant injection rate it sets the minimum
+# injection in every hour, so a source run's value (e.g. the full 1826.4 t/h of
+# an unconstrained run) can make the start infeasible.
 WARMSTART_DESIGN_VARIABLES = re.compile(
-    r"\.(var_size\w*|var_injection_capacity"
+    r"\.(var_size\w*"
     r"|dis_installation\w*\[\d+\]\.binary_indicator_var)$"
     r"|^var_cement_route\["
 )
