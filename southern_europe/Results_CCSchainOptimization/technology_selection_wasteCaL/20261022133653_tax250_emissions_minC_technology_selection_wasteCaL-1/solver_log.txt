@@ -1,0 +1,76 @@
+
+Gurobi 13.0.3 (win64) logging started Thu Oct 22 13:36:55 2026
+
+Set parameter LogFile to value "Results_CCSchainOptimization\technology_selection_wasteCaL\20261022133653_tax250_emissions_minC_technology_selection_wasteCaL-1\solver_log.txt"
+Set parameter TimeLimit to value 194400
+Set parameter MIPGap to value 0.015
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 13.0.3 build v13.0.3rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Silver 4210 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 40 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  194400
+MIPGap  0.015
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1602722 rows, 1537645 columns and 3660737 nonzeros (Min)
+Model fingerprint: 0xc36d28fa
+Model has 1 linear objective coefficients
+Model has 46 SOS constraints
+Variable types: 1531227 continuous, 6418 integer (6418 binary)
+Coefficient statistics:
+  Matrix range     [1e-03, 1e+08]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 3e+10]
+  RHS range        [8e-01, 4e+07]
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+
+Presolve removed 1403926 rows and 1360766 columns
+Presolve time: 3.42s
+Presolved: 198796 rows, 176879 columns, 582030 nonzeros
+Variable types: 173492 continuous, 3387 integer (3387 binary)
+Performing another presolve...
+Presolve removed 169182 rows and 85071 columns
+Presolve time: 2.70s
+Performing another presolve...
+Presolve removed 4155 rows and 57255 columns
+Presolve time: 0.95s
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    4.9483099e+05   6.585283e+05   0.000000e+00     14s
+   10689    3.5394158e+06   0.000000e+00   0.000000e+00     14s
+
+Root relaxation: objective 3.539416e+06, 10689 iterations, 0.21 seconds (0.07 work units)
+Total elapsed time = 14.33s (DegenMoves)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+*    0     0               0    3539415.8111 3539415.81  0.00%     -   14s
+
+Explored 1 nodes (10942 simplex iterations) in 15.12 seconds (4.31 work units)
+Thread count was 32 (of 40 available processors)
+
+Solution count 1: 3.53942e+06 
+
+Optimal solution found (tolerance 1.50e-02)
+Warning: max constraint violation (1.7161e-05) exceeds tolerance
+Best objective 3.539415811095e+06, best bound 3.539415811095e+06, gap 0.0000%

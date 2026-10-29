@@ -1,0 +1,113 @@
+
+Gurobi 13.0.3 (win64) logging started Thu Oct 22 10:20:12 2026
+
+Set parameter LogFile to value "Results_CCSchainOptimization\technology_selection\20261022102006_tax250_emissions_minC_technology_selection-1\solver_log.txt"
+Set parameter TimeLimit to value 194400
+Set parameter MIPGap to value 0.015
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 13.0.3 build v13.0.3rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Silver 4210 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 40 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  194400
+MIPGap  0.015
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1640034 rows, 1569567 columns and 3767041 nonzeros (Min)
+Model fingerprint: 0x6c5d5a78
+Model has 1 linear objective coefficients
+Model has 46 SOS constraints
+Variable types: 1563105 continuous, 6462 integer (6462 binary)
+Coefficient statistics:
+  Matrix range     [1e-03, 1e+08]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 3e+10]
+  RHS range        [6e-01, 4e+07]
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+
+User MIP start did not produce a new incumbent solution
+User MIP start violates constraint x2391526 by 19918.896752099
+Processed MIP start in 1.57 seconds (0.41 work units)
+
+Presolve removed 1414777 rows and 1381598 columns
+Presolve time: 3.29s
+Presolved: 225257 rows, 187969 columns, 639782 nonzeros
+Variable types: 184560 continuous, 3409 integer (3409 binary)
+Performing another presolve...
+Presolve removed 190688 rows and 90911 columns
+Presolve time: 3.13s
+Performing another presolve...
+Presolve removed 4145 rows and 57521 columns
+Presolve time: 1.11s
+Deterministic concurrent LP optimizer: primal and dual simplex
+Showing primal log only...
+
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0   -8.3219559e+05   5.482288e+05   2.001516e+10     18s
+   32623    8.0952407e+06   0.000000e+00   7.612741e+06     18s
+Concurrent spin time: 0.01s
+
+Solved with dual simplex
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+   13111    1.5675999e+06   0.000000e+00   0.000000e+00     19s
+
+Root relaxation: objective 1.567600e+06, 13111 iterations, 0.98 seconds (0.41 work units)
+Total elapsed time = 18.61s (DegenMoves)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 1567599.87    0   48          - 1567599.87      -     -   19s
+     0     0 1567599.87    0   54          - 1567599.87      -     -   19s
+H    0     0                    1746576.3084 1567599.87  10.2%     -   19s
+H    0     0                    1699926.9781 1567599.87  7.78%     -   19s
+H    0     0                    1689516.9864 1567599.87  7.22%     -   20s
+     0     0 1616974.28    0   44 1689516.99 1616974.28  4.29%     -   21s
+     0     0 1652499.20    0   14 1689516.99 1652499.20  2.19%     -   23s
+     0     0 1652574.95    0    8 1689516.99 1652574.95  2.19%     -   23s
+     0     0 1652574.95    0    8 1689516.99 1652574.95  2.19%     -   23s
+*    0     0               0    1652688.3261 1652688.33  0.00%     -   24s
+
+Cutting planes:
+  Learned: 776
+  Gomory: 1
+  Cover: 12
+  Implied bound: 1672
+  Clique: 16
+  MIR: 2
+  Flow cover: 7
+  RLT: 1347
+  Relax-and-lift: 111
+  BQP: 2047
+  PSD: 20
+
+Explored 1 nodes (16055 simplex iterations) in 24.71 seconds (6.69 work units)
+Thread count was 32 (of 40 available processors)
+
+Solution count 4: 1.65269e+06 1.68952e+06 1.69993e+06 1.74658e+06 
+
+Optimal solution found (tolerance 1.50e-02)
+Warning: max constraint violation (1.2307e-05) exceeds tolerance
+Best objective 1.652688326057e+06, best bound 1.652688326057e+06, gap 0.0000%
