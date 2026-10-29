@@ -15,6 +15,7 @@ filters, same real-emitter collapsing, same annualized network flow).
 import json
 from pathlib import Path
 
+import h5py
 import numpy as np
 
 import ccs_chain_plots as m
@@ -44,6 +45,15 @@ SCENARIO_LABELS = {
 
 HOURS_PER_YEAR = 8760
 
+# Sink receiving all captured CO2, and the hub where the c_inj scenarios offer
+# the temporary buffer storage (main_italy.py's "temporary_storage_nodes")
+STORAGE_NODE = "Porto Corsini"
+STORAGE_TECH = "PermanentStorage_CO2_simple"
+BUFFER_NODE = "Eni S.p.A Casalborsetti"
+BUFFER_TECH = "TemporaryStorage_CO2"
+# The sink's injection_rate_max (t/h) from its technology JSON
+STORAGE_JSON = Path("../italy_data/technologies/Sink") / f"{STORAGE_TECH}.json"
+
 
 def geom_to_paths(geom):
     """[[ [lon,lat], ... ], ...] -- a list of one or more line-strings (a
@@ -67,6 +77,51 @@ def polygon_to_paths(geom, tolerance=0.01):
         [[round(x, 4), round(y, 4)] for x, y in poly.exterior.coords]
         for poly in polys
     ]
+
+
+def load_run_info(h5_path: Path) -> dict:
+    """Objective-level results and solver outcome of the run, for the
+    dashboard's scenario overview table."""
+    with h5py.File(h5_path, "r") as f:
+        s = f["summary"]
+        number = lambda k: float(s[k][()])
+        text = lambda k: s[k][()].decode() if isinstance(s[k][()], bytes) else str(s[k][()])
+        total_cost = number("total_cost")
+        return {
+            "total_cost_eur": total_cost,
+            "carbon_cost_eur": number("carbon_cost"),
+            "chain_cost_eur": total_cost - number("carbon_cost"),
+            "emissions_net_t_yr": number("emissions_net"),
+            "mip_gap": number("absolute gap") / total_cost if total_cost else 0.0,
+            "solver_status": text("solver_status"),
+            "solve_time_h": number("time_total") / 3600,
+        }
+
+
+def load_storage_timeseries(h5_path: Path) -> dict:
+    """
+    Hourly injection into the permanent storage sink and, where it is built,
+    the storage level of the temporary buffer at BUFFER_NODE, over the full
+    year. Operation is only solved for the clustered typical-day hours, so
+    the injection is mapped back to all 8760 hours through the k-means
+    sequence; storage levels are already stored per real hour.
+    """
+    with h5py.File(h5_path, "r") as f:
+        sequence = f["k_means_specs/period1/sequence"][:].astype(int) - 1
+        ops = f["operation/technology_operation/period1"]
+        injection = ops[STORAGE_NODE][STORAGE_TECH]["CO2captured_input"][:][sequence]
+        buffer_level, buffer_size = None, None
+        if BUFFER_NODE in ops and BUFFER_TECH in ops[BUFFER_NODE]:
+            buffer_level = ops[BUFFER_NODE][BUFFER_TECH]["storage_level"][:]
+            buffer_size = float(f["design/nodes/period1"][BUFFER_NODE][BUFFER_TECH]["size"][0])
+    with open(STORAGE_JSON, "r", encoding="utf-8") as f:
+        injection_rate_max = json.load(f)["Flexibility"]["injection_rate_max"]
+    return {
+        "injection_t_h": [round(float(v), 1) for v in injection],
+        "injection_rate_max_t_h": injection_rate_max,
+        "buffer_level_t": None if buffer_level is None else [round(float(v), 0) for v in buffer_level],
+        "buffer_size_t": buffer_size,
+    }
 
 
 def build_scenario(h5_path: Path) -> dict:
@@ -199,6 +254,23 @@ def build_scenario(h5_path: Path) -> dict:
             "capture_by_family": cost_breakdown["capture_by_family"],
             "total_stored_t": cost_breakdown["total_stored_t"],
         },
+        "run": {
+            **(run_info := load_run_info(h5_path)),
+            # same definition as the maps' "of baseline emissions avoided"
+            # (see ccs_chain_plots.fraction_avoided)
+            "baseline_emissions_t_yr": m.load_baseline_emissions_t(),
+            "avoided_t_yr": m.load_baseline_emissions_t() - summary["emissions_pos"],
+            "avoided_fraction": m.fraction_avoided(summary["emissions_pos"]),
+            "chain_cost_per_t_avoided": (
+                run_info["chain_cost_eur"] / (m.load_baseline_emissions_t() - summary["emissions_pos"])
+                if m.load_baseline_emissions_t() > summary["emissions_pos"] else None
+            ),
+            # annualized; None for scenarios without the temporary buffer storage
+            "buffer_capex_eur_yr": (
+                cost_breakdown["temporary_storage"]["Capex"] if cost_breakdown["temporary_storage"] else None
+            ),
+        },
+        "storage_timeseries": load_storage_timeseries(h5_path),
         "nodes": nodes,
         "arcs": arcs,
         "emitters": emitters,
