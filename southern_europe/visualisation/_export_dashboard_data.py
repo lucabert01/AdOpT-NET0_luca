@@ -265,9 +265,11 @@ def build_scenario(h5_path: Path) -> dict:
                 run_info["chain_cost_eur"] / (m.load_baseline_emissions_t() - summary["emissions_pos"])
                 if m.load_baseline_emissions_t() > summary["emissions_pos"] else None
             ),
-            # annualized; None for scenarios without the temporary buffer storage
-            "buffer_capex_eur_yr": (
-                cost_breakdown["temporary_storage"]["Capex"] if cost_breakdown["temporary_storage"] else None
+            # annual cost of the temporary buffer storage: annualized capex plus
+            # fixed and variable opex (all cost components); None for scenarios
+            # without it
+            "buffer_cost_eur_yr": (
+                sum(cost_breakdown["temporary_storage"].values()) if cost_breakdown["temporary_storage"] else None
             ),
         },
         "storage_timeseries": load_storage_timeseries(h5_path),
