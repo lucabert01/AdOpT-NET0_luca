@@ -58,6 +58,7 @@ for scenario_name, objective, carbon_tax in SCENARIOS:
     out_dir = Path(f"ccs_chain_results/{run_key}")
     out_dir.mkdir(parents=True, exist_ok=True)
     m.OUT_DIR = out_dir
+    m.FIG_TAG = run_key  # unique file names outside the scenario folder
 
     nodes_gdf = m.gpd.read_file(m.GIS_NODES)
     built_arcs = m.load_built_arcs(m.RESULTS_H5)

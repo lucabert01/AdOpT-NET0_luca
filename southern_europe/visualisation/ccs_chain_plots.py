@@ -3,14 +3,14 @@ Conference-ready visualizations for the CCS chain optimization case study.
 
 Produces five figures from a solved optimization_results.h5:
 
-  1. ccs_chain_network_map.png       - Italy map: built CO2 transport network
+  1. network_map.png       - Italy map: built CO2 transport network
                                         (pipeline/truck/railway), emitters colored
                                         by whether CCS was installed, transport
                                         hubs and the storage site.
-  1b. ccs_chain_network_map_sized_by_capacity.png - same map, but emitter bubble
+  1b. network_map_sized_by_capacity.png - same map, but emitter bubble
                                         area scales with technology capacity
                                         (design "size" field, t/h).
-  1c. ccs_chain_network_map_cost_factor.png - same built network + CCS status,
+  1c. network_map_cost_factor.png - same built network + CCS status,
                                         on the grayscale integrated cost-factor
                                         grid (as in cost_factor_grid_map_italy.py).
   1e. italy_cost_factor_emitters_storage.png/.pdf - input-data map: the same
@@ -21,7 +21,7 @@ Produces five figures from a solved optimization_results.h5:
       railway_network}.png/.pdf - input-data maps of the candidate arcs
                                         per transport mode / pipeline size
                                         class, same node styling as 1e.
-  1d. ccs_chain_network_map_trunk_highlight.png - one specific chain of built
+  1d. network_map_trunk_highlight.png - one specific chain of built
                                         arcs (default: the Piacenza -> Modena-H ->
                                         Ferrara -> Ravenna -> Casalborsetti
                                         -> Porto Corsini trunk) highlighted in bold
@@ -29,19 +29,19 @@ Produces five figures from a solved optimization_results.h5:
 
   All maps share the same base style (Italy fill/boundary, fixed lon/lat extent,
   axis labels) as routes_connection.py, via setup_base_map().
-  2. ccs_chain_emitter_zoom_<node>.png - captured vs. emitted CO2 for one
+  2. emitter_zoom_<node>.png - captured vs. emitted CO2 for one
                                         CCS-equipped waste-to-energy plant.
-  2b. ccs_chain_inflow_<node>.png     - hourly CO2 received at a node (e.g. a
+  2b. inflow_<node>.png     - hourly CO2 received at a node (e.g. a
                                         transport hub just upstream of storage),
                                         with the built inbound pipeline capacity
                                         as a reference line and the most
                                         significant sustained low-load period (if
                                         any) annotated -- see plot_node_inflow.
-  3. ccs_chain_cost_breakdown_per_tonne.png / _per_year.png
+  3. cost_breakdown_per_tonne.png / _per_year.png
                                       - levelized cost of capture/transport/storage,
                                         each split into capex, opex (fixed/variable),
                                         electricity and heat. Carbon tax excluded.
-  4. ccs_chain_summary_dashboard.png - headline numbers: CCS adoption, cost by
+  4. summary_dashboard.png - headline numbers: CCS adoption, cost by
                                         chain stage, transport-mode split.
 """
 
@@ -415,6 +415,16 @@ ROUTES = {
     "CO2Railway": path_files_gis / "routes_distances_railway.shp",
 }
 OUT_DIR = Path(__file__).resolve().parent
+
+# Appended to every figure/table file name, e.g. the scenario's run key set by
+# the _run_* drivers, so the files stay unique once copied out of their
+# scenario folder (e.g. into the paper)
+FIG_TAG = ""
+
+
+def out_path(name: str, ext: str = "png") -> Path:
+    """OUT_DIR/<name>_<FIG_TAG>.<ext> (no suffix while FIG_TAG is empty)."""
+    return OUT_DIR / f"{name}{'_' + FIG_TAG if FIG_TAG else ''}.{ext}"
 
 # Same map extent used throughout routes_connection.py, so every map in this
 # project reads as one consistent system.
@@ -1475,7 +1485,7 @@ def plot_main_map(built_arcs, nodes_gdf, ccs_df, summary):
     )
 
     fig.tight_layout(rect=[0, 0.09, 1, 1])
-    out_file = OUT_DIR / "ccs_chain_network_map.png"
+    out_file = out_path("network_map")
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")
@@ -1578,7 +1588,7 @@ def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
     )
 
     fig.tight_layout(rect=[0, 0.14, 1, 1])
-    out_file = OUT_DIR / "ccs_chain_network_map_sized_by_capacity.png"
+    out_file = out_path("network_map_sized_by_capacity")
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")
@@ -1673,7 +1683,7 @@ def plot_network_map_cost_factor(built_arcs, nodes_gdf, ccs_df, summary):
     )
 
     fig.tight_layout(rect=[0, 0.09, 1, 1])
-    out_file = OUT_DIR / "ccs_chain_network_map_cost_factor.png"
+    out_file = out_path("network_map_cost_factor")
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")
@@ -2017,7 +2027,7 @@ def plot_trunk_highlight(built_arcs, nodes_gdf, ccs_df, summary, trunk_path: lis
     )
 
     fig.tight_layout(rect=[0, 0.09, 1, 1])
-    out_file = OUT_DIR / "ccs_chain_network_map_trunk_highlight.png"
+    out_file = out_path("network_map_trunk_highlight")
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")
@@ -2101,7 +2111,7 @@ def plot_emitter_zoom(h5_path: Path, node_name: str = "SILLA 2", tech_name: str 
               fontsize=10.5, edgecolor=GRIDLINE)
 
     fig.tight_layout(rect=[0, 0.07, 1, 1])
-    out_file = OUT_DIR / f"ccs_chain_emitter_zoom_{node_name.replace(' ', '_')}.png"
+    out_file = out_path(f"emitter_zoom_{node_name.replace(' ', '_')}")
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")
@@ -2267,7 +2277,7 @@ def plot_node_inflow(h5_path: Path, node_name: str = "Eni S.p.A Casalborsetti"):
         ax.legend(loc="upper right", fontsize=9.5, frameon=True, edgecolor=GRIDLINE)
 
     fig.tight_layout()
-    out_file = OUT_DIR / f"ccs_chain_inflow_{node_name.replace(' ', '_').replace('.', '')}.png"
+    out_file = out_path(f"inflow_{node_name.replace(' ', '_').replace('.', '')}")
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}"
@@ -2365,7 +2375,7 @@ def plot_cost_breakdown(cost_breakdown: dict, per_tonne: bool = True):
 
     fig.tight_layout(rect=[0, 0.06, 1, 1])
     suffix = "per_tonne" if per_tonne else "per_year"
-    out_file = OUT_DIR / f"ccs_chain_cost_breakdown_{suffix}.png"
+    out_file = out_path(f"cost_breakdown_{suffix}")
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")
@@ -2407,7 +2417,7 @@ def plot_summary_dashboard(built_arcs: pd.DataFrame, ccs_df: pd.DataFrame, cost_
     ax.tick_params(axis="x", labelsize=9.5)
 
     # Panel B: cost breakdown by chain stage (carbon tax excluded -- see the
-    # dedicated ccs_chain_cost_breakdown_* figures for the component-level split)
+    # dedicated cost_breakdown_* figures for the component-level split)
     ax = axes[1]
     ax.set_facecolor(SURFACE)
     cats = list(STAGE_LABELS)
@@ -2457,7 +2467,7 @@ def plot_summary_dashboard(built_arcs: pd.DataFrame, ccs_df: pd.DataFrame, cost_
 
     fig.suptitle("CCS Chain Optimization — Summary", fontsize=16, weight="bold", y=1.05, color=INK_PRIMARY)
     fig.tight_layout()
-    out_file = OUT_DIR / "ccs_chain_summary_dashboard.png"
+    out_file = out_path("summary_dashboard")
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")

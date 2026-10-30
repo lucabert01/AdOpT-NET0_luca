@@ -40,10 +40,11 @@ for scenario_name, objective, carbon_tax in SCENARIOS:
     out_dir = Path(f"ccs_chain_results/{run_key}")
     out_dir.mkdir(parents=True, exist_ok=True)
     m.OUT_DIR = out_dir
+    m.FIG_TAG = run_key  # unique file names outside the scenario folder
 
     df, storage_node = m.build_emitter_cost_table(m.RESULTS_H5)
 
-    out_csv = out_dir / "ccs_chain_emitter_cost_ranking.csv"
+    out_csv = m.out_path("emitter_cost_ranking", "csv")
     df.to_csv(out_csv, index=False)
     print(f"Saved: {out_csv} ({len(df)} emitters)")
 

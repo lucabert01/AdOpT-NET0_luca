@@ -26,6 +26,7 @@ for scenario, h5_rel in RUNS.items():
     out_dir = Path(f"ccs_chain_results/{scenario}")
     out_dir.mkdir(parents=True, exist_ok=True)
     m.OUT_DIR = out_dir
+    m.FIG_TAG = scenario  # unique file names outside the scenario folder
 
     nodes_gdf = m.gpd.read_file(m.GIS_NODES)
     built_arcs = m.load_built_arcs(m.RESULTS_H5)

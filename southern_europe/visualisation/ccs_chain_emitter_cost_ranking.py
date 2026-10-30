@@ -87,8 +87,8 @@ whose raw claims already sum under 100%, are unaffected (normalization
 factor is 1).
 
 Output:
-  - ccs_chain_emitter_cost_ranking.png  (ranked stacked-bar chart)
-  - ccs_chain_emitter_cost_ranking.csv  (per-emitter table backing the chart)
+  - emitter_cost_ranking.png  (ranked stacked-bar chart)
+  - emitter_cost_ranking.csv  (per-emitter table backing the chart)
 """
 
 import h5py
@@ -127,6 +127,16 @@ RESULTS_H5 = Path(
     "../Results_CCSchainOptimization/mea/20260820183756_emissions_minC_mea-1/optimization_results.h5"
 )
 OUT_DIR = Path(__file__).resolve().parent
+
+# Appended to every figure/table file name, e.g. the scenario's run key set by
+# the _run_* drivers, so the files stay unique once copied out of their
+# scenario folder (e.g. into the paper)
+FIG_TAG = ""
+
+
+def out_path(name: str, ext: str = "png") -> Path:
+    """OUT_DIR/<name>_<FIG_TAG>.<ext> (no suffix while FIG_TAG is empty)."""
+    return OUT_DIR / f"{name}{'_' + FIG_TAG if FIG_TAG else ''}.{ext}"
 
 STAGE_COLORS = {
     "Capture": "#4a3aa7",
@@ -732,7 +742,7 @@ def plot_emitter_cost_ranking(df: pd.DataFrame, storage_node: str):
     )
 
     fig.tight_layout()
-    out_file = OUT_DIR / "ccs_chain_emitter_cost_ranking.png"
+    out_file = out_path("emitter_cost_ranking")
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")
@@ -878,7 +888,7 @@ def plot_macc(df: pd.DataFrame, storage_node: str):
     )
 
     fig.tight_layout()
-    out_file = OUT_DIR / "ccs_chain_emitter_macc.png"
+    out_file = out_path("emitter_macc")
     fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
     plt.close(fig)
     print(f"Saved: {out_file}")
@@ -887,7 +897,7 @@ def plot_macc(df: pd.DataFrame, storage_node: str):
 def main():
     df, storage_node = build_emitter_cost_table(RESULTS_H5)
 
-    out_csv = OUT_DIR / "ccs_chain_emitter_cost_ranking.csv"
+    out_csv = out_path("emitter_cost_ranking", "csv")
     df.to_csv(out_csv, index=False)
     print(f"Saved: {out_csv} ({len(df)} emitters)")
 

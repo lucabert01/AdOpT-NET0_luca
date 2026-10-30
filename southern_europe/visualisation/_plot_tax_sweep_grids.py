@@ -20,11 +20,11 @@ scenarios are shown separately rather than as one grid.
 
 Reuses ccs_chain_plots._draw_ccs_network_on_ax and
 ccs_chain_emitter_cost_ranking._draw_macc_on_ax -- the exact same drawing
-code the single-scenario ccs_chain_network_map.png / ccs_chain_emitter_macc.png
+code the single-scenario network_map_<scenario>.png / emitter_macc_<scenario>.png
 figures use -- so these panels are pixel-for-pixel consistent with those.
 
-Output: ccs_chain_results/scenario_comparison/ccs_chain_{network_map,macc}_
-tax_sweep.{png,pdf} (2x2 grid) and ccs_chain_{network_map,macc}_tax_sweep_
+Output: ccs_chain_results/scenario_comparison/{network_map,macc}_
+tax_sweep.{png,pdf} (2x2 grid) and {network_map,macc}_tax_sweep_
 <scenario>.{png,pdf} (one per panel) -- PDF for the paper (vector), PNG for
 quick previewing.
 """
@@ -131,7 +131,7 @@ def plot_tax_sweep_maps(nodes_gdf, panels):
     m.add_split_map_legend(fig, all_real_df, y=0.085, x_left=0.3, x_right=0.7, fontsize=12, ncol=3)
 
     fig.tight_layout(rect=[0, 0.09, 1, 1])
-    _save_fig(fig, "ccs_chain_network_map_tax_sweep", m.SURFACE)
+    _save_fig(fig, "network_map_tax_sweep", m.SURFACE)
     plt.close(fig)
 
     # --- one figure per scenario ---
@@ -141,7 +141,7 @@ def plot_tax_sweep_maps(nodes_gdf, panels):
         real_df = _draw_map_panel(ax, panel, nodes_gdf, italy)
         m.add_split_map_legend(ax, real_df, y=-0.1)
         fig.tight_layout()
-        _save_fig(fig, f"ccs_chain_network_map_tax_sweep_{panel['slug']}", m.SURFACE)
+        _save_fig(fig, f"network_map_tax_sweep_{panel['slug']}", m.SURFACE)
         plt.close(fig)
 
 
@@ -183,7 +183,7 @@ def plot_tax_sweep_macc(panels):
     )
 
     fig.tight_layout(rect=[0, 0.08, 1, 1])
-    _save_fig(fig, "ccs_chain_macc_tax_sweep", cr.SURFACE)
+    _save_fig(fig, "macc_tax_sweep", cr.SURFACE)
     plt.close(fig)
 
     # --- one figure per scenario, same shared axis limits as the grid ---
@@ -198,7 +198,7 @@ def plot_tax_sweep_macc(panels):
             edgecolor=cr.GRIDLINE, title="Sector", title_fontsize=11,
         )
         fig.tight_layout()
-        _save_fig(fig, f"ccs_chain_macc_tax_sweep_{panel['slug']}", cr.SURFACE)
+        _save_fig(fig, f"macc_tax_sweep_{panel['slug']}", cr.SURFACE)
         plt.close(fig)
 
 
