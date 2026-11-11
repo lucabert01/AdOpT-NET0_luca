@@ -95,11 +95,9 @@ import h5py
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
 from pathlib import Path
 
-import cmcrameri.cm as cmc
-
+import figure_style as fs
 from ccs_chain_plots import (
     classify_capture_family,
     captured_co2_operation_key,
@@ -110,9 +108,8 @@ from ccs_chain_plots import (
     INK_SECONDARY,
     GRIDLINE,
     SURFACE,
-    MODE_COLORS,
-    STORAGE_COLOR,
-    TEMPORARY_STORAGE_COLOR,
+    STAGE_COLORS_NEUTRAL,
+    save_figure,
     is_temporary_storage,
     _load_node_sectors,
     sector_display_label,
@@ -138,29 +135,17 @@ def out_path(name: str, ext: str = "png") -> Path:
     """OUT_DIR/<name>_<FIG_TAG>.<ext> (no suffix while FIG_TAG is empty)."""
     return OUT_DIR / f"{name}{'_' + FIG_TAG if FIG_TAG else ''}.{ext}"
 
-STAGE_COLORS = {
-    "Capture": "#4a3aa7",
-    "Transport": MODE_COLORS["CO2_Pipeline"],
-    "Storage": STORAGE_COLOR,
-    "Temporary storage": TEMPORARY_STORAGE_COLOR,
-}
+# Chain stages are not sectors -> neutral greys (colour is reserved for sector)
+STAGE_COLORS = dict(STAGE_COLORS_NEUTRAL)
 
 SECTOR_ORDER = ["Cement", "Waste", "Refining", "Lime", "FertilizersCombustion", "FertilizersSMR", "Other"]
-# FertilizersCombustion and FertilizersSMR are two technologies at the SAME
-# physical fertilizer complex (see Ferrara in ccs_chain_plots.py's
-# _load_node_sectors) -- one color group ("Fertilizers"), not two, so the
-# MACC/ranking charts read them as one sector at a glance; per-bar
-# annotations (see FERTILIZER_BAR_NOTE / plot_macc) carry the SMR-vs-not
-# distinction instead of color.
-_COLOR_GROUPS = ["Cement", "Waste", "Refining", "Lime", "Fertilizers", "Other"]
-_BATLOW = dict(zip(_COLOR_GROUPS, [cmc.batlow(x) for x in np.linspace(0, 1, len(_COLOR_GROUPS))]))
-_SECTOR_TO_COLOR_GROUP = {
-    "FertilizersCombustion": "Fertilizers", "FertilizersSMR": "Fertilizers",
-}
-SECTOR_COLORS = {s: _BATLOW[_SECTOR_TO_COLOR_GROUP.get(s, s)] for s in SECTOR_ORDER}
-# Legend label for a sector -- collapses the two fertilizer sectors to one
-# shared "Fertilizers" legend entry, since they now share a color.
-SECTOR_LEGEND_LABEL = {s: sector_display_label(_SECTOR_TO_COLOR_GROUP.get(s, s)) for s in SECTOR_ORDER}
+# Sector colours come from figure_style.SECTOR_COLORS -- the same colours as
+# every map. FertilizersCombustion and FertilizersSMR are two technologies at
+# the SAME physical fertilizer complex (Ferrara) -> one colour ("Fertilizers");
+# per-bar annotations (FERTILIZER_BAR_NOTE) carry the SMR-vs-not distinction.
+SECTOR_COLORS = {s: fs.sector_color(s) for s in SECTOR_ORDER}
+# Legend label: the two fertilizer sectors share one "Fertilizers" entry.
+SECTOR_LEGEND_LABEL = {s: fs.sector_label(s) for s in SECTOR_ORDER}
 # Per-bar annotation clarifying WHICH fertilizer technology a bar is, since
 # color no longer does (see above) -- keyed by the `sector` column value.
 FERTILIZER_BAR_NOTE = {
@@ -168,11 +153,7 @@ FERTILIZER_BAR_NOTE = {
     "FertilizersCombustion": "Non-SMR emissions",
 }
 
-# Below this annual-tonnes / (peak-rate x 8760h) ratio, an emitter is flagged
-# on the MACC plot as running at a low load factor - it reserves pipeline
-# capacity sized for its peak rate but rarely uses all of it, so it pays a
-# capacity-share transport cost spread over comparatively few actual tonnes.
-LOW_CAPACITY_FACTOR_THRESHOLD = 0.65
+# (capacity_factor is still exported in the CSV; it is no longer drawn on the MACC)
 
 
 def _sector_from_tech(tech_name: str) -> str:
@@ -653,8 +634,8 @@ def has_temporary_storage(df: pd.DataFrame) -> bool:
 def cost_axis_label(df: pd.DataFrame) -> str:
     """Axis label listing the cost stages summed into total_eur_per_t."""
     if has_temporary_storage(df):
-        return "€/t CO$_2$ (storage + temp. storage + transport + capture)"
-    return "€/t CO$_2$ (storage + transport + capture)"
+        return "€/tCO$_2$ (storage + temp. storage + transport + capture)"
+    return "€/tCO$_2$ (storage + transport + capture)"
 
 
 # ============================================================
@@ -693,7 +674,8 @@ def plot_emitter_cost_ranking(df: pd.DataFrame, storage_node: str):
     stage_cols += [("Transport", "transport_eur_per_t"), ("Capture", "capture_eur_per_t")]
     for stage, col in stage_cols:
         vals = plot_df[col].to_numpy()
-        ax.barh(y, vals, left=left, color=STAGE_COLORS[stage], label=stage, height=0.68, zorder=3)
+        ax.barh(y, vals, left=left, color=STAGE_COLORS[stage], label=stage, height=0.68, zorder=3,
+                edgecolor=SURFACE, linewidth=0.6)
         left += vals
 
     for i, total in enumerate(plot_df["total_eur_per_t"]):
@@ -710,7 +692,7 @@ def plot_emitter_cost_ranking(df: pd.DataFrame, storage_node: str):
 
     ax.set_xlabel(cost_axis_label(df), fontsize=11)
     ax.set_title(
-        f"Emitter Cost Ranking — Levelized €/t CO$_2$ to {storage_node}",
+        f"Emitter cost ranking — cost of carbon avoided (€/tCO$_2$) to {storage_node}",
         fontsize=14, weight="bold", color=INK_PRIMARY,
     )
 
@@ -732,7 +714,7 @@ def plot_emitter_cost_ranking(df: pd.DataFrame, storage_node: str):
     weighted_avg = np.average(df["total_eur_per_t"], weights=df["captured_annual_t"])
     kpi_text = (
         f"{n} emitters with CCS running\n"
-        f"{df['captured_annual_t'].sum():,.0f} t/yr captured\n"
+        f"{df['captured_annual_t'].sum():,.0f} t/y captured\n"
         f"Capture-weighted average: €{weighted_avg:,.0f}/t"
     )
     ax.text(
@@ -742,94 +724,66 @@ def plot_emitter_cost_ranking(df: pd.DataFrame, storage_node: str):
     )
 
     fig.tight_layout()
-    out_file = out_path("emitter_cost_ranking")
-    fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
+    save_figure(fig, out_path("emitter_cost_ranking"))
     plt.close(fig)
-    print(f"Saved: {out_file}")
 
 
-def _draw_macc_on_ax(ax, df: pd.DataFrame, *, annotate_fertilizers: bool = True):
+def sector_patch_handles(df: pd.DataFrame) -> list:
+    """Sector colour key for the sectors present in df (fertilizer
+    sub-sectors share one entry), in canonical figure_style order."""
+    return fs.sector_handles(set(df["sector"]), kind="patch")
+
+
+def _draw_macc_on_ax(ax, df: pd.DataFrame, *, annotate_fertilizers: bool = True,
+                     carbon_tax: float | None = None):
     """
-    Draws the MACC bars (+ low-capacity-factor hatching + optional per-bar
-    fertilizer callouts) onto an existing ax -- the shared core of plot_macc,
-    factored out so a multi-panel figure (see
-    plot_technology_selection_tax_sweep_macc) can reuse the exact same
-    drawing logic per subplot instead of each panel creating its own figure,
-    legend and title.
+    Draws the MACC bars (+ optional per-bar fertilizer callouts and CO2-tax
+    reference line) onto an existing ax -- the shared core of plot_macc and
+    the tax-sweep panels.
+
+    Bars: sorted by ascending total €/t, width = annual captured Mt, height =
+    levelized €/t, colour = sector (figure_style.SECTOR_COLORS -- the same
+    colours as the maps), separated by a thin white gap.
 
     :param annotate_fertilizers: set False in a multi-panel grid where the
-        fertilizer callout arrows from 4 cramped subplots would collide --
-        the sector color still distinguishes fertilizers from everything
-        else, just not SMR from non-SMR within that one sector.
-    :return: (legend_handles, low_cf_mask) -- legend_handles is every sector
-        patch actually present in df (+ the low-capacity-factor hatch patch
-        if any), for the caller to merge across panels into one shared
-        legend; low_cf_mask is this panel's boolean low-capacity-factor mask
-        in plot_df order.
+        fertilizer callout arrows would collide.
+    :param carbon_tax: if given, drawn as a dashed horizontal line (€/t).
+    :return: legend handles (sector patches present in df, + the tax line).
     """
     plot_df = df.sort_values("total_eur_per_t").reset_index(drop=True)
-    n = len(plot_df)
     captured_mt = (plot_df["captured_annual_t"] / 1e6).to_numpy()
     left = np.concatenate([[0.0], np.cumsum(captured_mt)[:-1]])
     heights = plot_df["total_eur_per_t"].to_numpy()
 
-    # Low-capacity-factor bars get a hatch instead of a text callout -- with
-    # dozens of technologies in the technology-selection scenarios (vs. a
-    # handful in the single-family runs this was designed for), one arrow
-    # per flagged bar stops being readable (arrows/labels for 20-30 bars
-    # overlap into an unreadable tangle). A hatch scales to any count and
-    # keeps the exact number available in the CSV / row-count callouts for
-    # anyone who needs it.
-    low_cf_mask = (plot_df["capacity_factor"] < LOW_CAPACITY_FACTOR_THRESHOLD).to_numpy()
-    for i, row in plot_df.iterrows():
-        ax.bar(
-            left[i], heights[i], width=captured_mt[i], align="edge",
-            color=SECTOR_COLORS[row["sector"]], edgecolor="white", linewidth=0.5, zorder=3,
-            hatch="////" if low_cf_mask[i] else None,
-        )
+    ax.bar(left, heights, width=captured_mt, align="edge",
+           color=[SECTOR_COLORS[s] for s in plot_df["sector"]],
+           edgecolor=SURFACE, linewidth=0.3, zorder=3)
 
-    # De-duplicated by legend label, not sector, so FertilizersCombustion and
-    # FertilizersSMR (same color, see SECTOR_COLORS) collapse to one
-    # "Fertilizers" swatch instead of two identical-looking entries.
-    seen_labels = set()
-    legend_handles = []
-    for s in SECTOR_ORDER:
-        label = SECTOR_LEGEND_LABEL[s]
-        if s not in set(plot_df["sector"]) or label in seen_labels:
-            continue
-        seen_labels.add(label)
-        legend_handles.append(Patch(facecolor=SECTOR_COLORS[s], edgecolor="white", label=label))
-    if low_cf_mask.any():
-        legend_handles.append(Patch(
-            facecolor="none", edgecolor=INK_SECONDARY, hatch="////",
-            label=f"Capacity factor < {LOW_CAPACITY_FACTOR_THRESHOLD:.0%} ({int(low_cf_mask.sum())} of {n})",
-        ))
+    legend_handles = sector_patch_handles(plot_df)
+    if carbon_tax is not None:
+        ax.axhline(carbon_tax, color=INK_PRIMARY, linestyle=(0, (4, 2)), linewidth=0.8, zorder=5)
+        legend_handles.append(plt.Line2D([0], [0], color=INK_PRIMARY, linestyle=(0, (4, 2)), linewidth=0.8,
+                                         label="CO$_2$ tax"))
 
     y_top = heights.max()
     if annotate_fertilizers:
-        # --- per-bar callouts: which fertilizer technology a bar is, since
-        # color alone no longer distinguishes FertilizersCombustion from
-        # FertilizersSMR (see SECTOR_COLORS) -- ordered left-to-right and
-        # stacked upward so nearby bars' callouts don't collide.
+        # per-bar callouts: which fertilizer technology a bar is, since colour
+        # alone does not distinguish FertilizersCombustion from FertilizersSMR
         notes = {
             i: [FERTILIZER_BAR_NOTE[plot_df.loc[i, "sector"]]]
             for i in plot_df.index if plot_df.loc[i, "sector"] in FERTILIZER_BAR_NOTE
         }
         note_idx = sorted(notes, key=lambda i: left[i])
-
         x_total = left[-1] + captured_mt[-1]
-        # Text anchored a little right of the y-axis (these are always the
-        # cheapest/leftmost bars) so it doesn't sit on top of the tick labels.
         text_x = max(x_total * 0.035, captured_mt[note_idx].max() / 2 if len(note_idx) else 0)
         for rank, i in enumerate(note_idx):
-            cx = left[i] + captured_mt[i] / 2
-            cy = heights[i]
             ax.annotate(
                 "\n".join(notes[i]),
-                xy=(cx, cy), xycoords="data",
+                xy=(left[i] + captured_mt[i] / 2, heights[i]), xycoords="data",
                 xytext=(text_x, y_top * 1.10 + rank * y_top * 0.09), textcoords="data",
-                ha="left", va="bottom", fontsize=9.5, color=INK_PRIMARY,
-                arrowprops=dict(arrowstyle="-|>", color=INK_SECONDARY, lw=1.3, connectionstyle="arc3,rad=0.15"),
+                ha="left", va="bottom", fontsize=fs.TICK_SIZE, color=INK_PRIMARY,
+                arrowprops=dict(arrowstyle="-|>", color=INK_SECONDARY, lw=0.6, mutation_scale=6,
+                                connectionstyle="arc3,rad=0.15"),
                 zorder=6,
             )
         ax.set_ylim(0, y_top * (1.16 + max(0, len(note_idx) - 1) * 0.09))
@@ -837,61 +791,36 @@ def _draw_macc_on_ax(ax, df: pd.DataFrame, *, annotate_fertilizers: bool = True)
         ax.set_ylim(0, y_top * 1.1)
 
     ax.set_xlim(0, left[-1] + captured_mt[-1])
+    style_value_axes(ax)
+    return legend_handles
 
+
+def style_value_axes(ax, grid_axis: str = "y"):
+    """Recessive axes for value charts: no top/right spine, light grid behind."""
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color(GRIDLINE)
-    ax.spines["bottom"].set_color(GRIDLINE)
-    ax.tick_params(colors=INK_SECONDARY)
-    ax.grid(axis="y", alpha=0.6, linestyle="--", linewidth=0.5, color=GRIDLINE, zorder=0)
+    ax.spines["left"].set_color(fs.SPINE)
+    ax.spines["bottom"].set_color(fs.SPINE)
+    ax.grid(axis=grid_axis, linestyle="-", linewidth=0.4, color=GRIDLINE, zorder=0)
     ax.set_axisbelow(True)
 
-    return legend_handles, low_cf_mask
 
-
-def plot_macc(df: pd.DataFrame, storage_node: str):
+def plot_macc(df: pd.DataFrame, storage_node: str, carbon_tax: float | None = None):
     """
-    A MACC-style (marginal abatement cost curve) view of the same per-emitter
-    costs: bars sorted left-to-right by ascending total €/t, bar WIDTH is that
-    emitter's own annual captured tonnes (so cheap, high-volume tonnes read as
-    wide-and-low, expensive/small ones as narrow-and-tall), bar HEIGHT is
-    total €/t, and color is sector rather than cost stage - individual
-    emitter names are dropped, this is about the shape of the system-wide
-    cost curve, not any one plant.
-
-    Emitters running at a low load factor (annual tonnes far below what
-    their own peak captured rate x 8760h would allow) are flagged - see
-    module docstring: they still pay their full nameplate share of every
-    downstream arc's cost, so a low load factor inflates their €/t just like
-    an oversized capture unit would.
+    MACC-style (marginal abatement cost curve) view of the per-emitter
+    costs: bars sorted left-to-right by ascending total €/t, bar WIDTH =
+    that emitter's annual captured tonnes, bar HEIGHT = levelized €/t,
+    colour = sector (same colours as the maps). Optional CO2-tax line.
     """
-    fig, ax = plt.subplots(figsize=(13, 7.5))
-    fig.patch.set_facecolor(SURFACE)
-    ax.set_facecolor(SURFACE)
-
-    legend_handles, _ = _draw_macc_on_ax(ax, df)
-
-    # upper right, not left -- the cheapest (leftmost, shortest) bars are
-    # exactly where the fertilizer callouts below sit, and MACC bars rise
-    # left-to-right, so the top-right corner is the one reliably empty
-    # region regardless of how many bars this run has.
-    ax.legend(
-        handles=legend_handles, loc="upper right", frameon=True, fontsize=10.5,
-        framealpha=0.95, edgecolor=GRIDLINE, title="Sector", title_fontsize=10.5,
-    )
-
-    ax.set_xlabel("Cumulative CO$_2$ captured (Mt/yr)", fontsize=11)
-    ax.set_ylabel(cost_axis_label(df), fontsize=11)
-    ax.set_title(
-        f"CO$_2$ Capture Cost Curve — {storage_node}",
-        fontsize=14, weight="bold", color=INK_PRIMARY,
-    )
-
+    fig, ax = plt.subplots(figsize=(fs.FULL_WIDTH_IN, 3.4))
+    legend_handles = _draw_macc_on_ax(ax, df, carbon_tax=carbon_tax)
+    ax.set_xlabel(fs.CAPTURED_LABEL)
+    ax.set_ylabel(fs.COST_LABEL)
+    ax.legend(handles=legend_handles, loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False,
+              title="Sector", alignment="left")
     fig.tight_layout()
-    out_file = out_path("emitter_macc")
-    fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=SURFACE, pad_inches=0.2)
+    save_figure(fig, out_path("emitter_macc"))
     plt.close(fig)
-    print(f"Saved: {out_file}")
 
 
 def main():

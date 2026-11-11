@@ -1,256 +1,352 @@
 """
-Ad-hoc driver: builds two paper-ready 2x2 panel figures for the
-"technology_selection" CO2-tax sweep in main_italy.py's SCENARIOS --
-cost-minimizing at carbon_tax = 150/200/250 EUR/t plus the emissions-
-minimizing run -- one figure of the built network maps, one of the MACC
-(marginal abatement cost curve) charts.
+Ad-hoc driver: paper figures for the "technology_selection" CO2-tax sweep in
+main_italy.py's SCENARIOS -- cost-minimizing at carbon_tax = 150/200/250
+EUR/t plus the emissions-minimizing run (scenario order and labels:
+figure_style.SCENARIOS).
 
-No panel title/figure title is added (the paper's own caption covers that);
-each panel instead carries a small in-axes annotation ("CO2 tax = 150 EUR/t"
-etc.) plus that scenario's total captured CO2 (and, on the maps, the
-fraction of baseline emissions avoided). A single legend, built from the
-union of what's present across all four scenarios, is shared by the whole
-figure rather than repeated per panel. Axis labels are only drawn on the
-outer panels (latitude/y on the left column, longitude/x on the bottom row),
-so the right column's y label doesn't run into the left column's panels.
+  network_map_tax_sweep   2x2 maps of the built network. Colour = sector,
+                          shape = capture technology, marker area = the
+                          emitter's total annual CO2 emissions, line style =
+                          transport mode (neutral grey). Scales shared by all
+                          four panels. Scenario (CO2 tax) and KPIs (% of
+                          baseline emissions avoided, Mt/yr captured) as a
+                          note in each map's upper-left corner; one shared
+                          legend.
+  macc_tax_sweep          2x2 MACCs, bars coloured by sector, CO2 tax as a
+                          dashed line in each tax panel, shared axes.
+  capture_by_technology_tax_sweep
+                          captured CO2 per capture technology (rows) for each
+                          scenario (panels), bars stacked by sector colour --
+                          technology is a position, never a colour.
 
-Each panel is also saved as its own single-panel figure
-(..._tax_sweep_<scenario>.{png,pdf}, own legend), for when the four
-scenarios are shown separately rather than as one grid.
+Each map/MACC panel is also saved on its own (..._tax_sweep_<slug>), and
+the hourly CO2 received at Eni S.p.A Casalborsetti (just upstream of
+storage) is plotted per scenario (inflow_Eni_SpA_Casalborsetti_<slug>).
+Every figure is saved as PNG and PDF (figure_style.save_figure), drawn at
+final print size (7.2 in wide).
 
 Reuses ccs_chain_plots._draw_ccs_network_on_ax and
-ccs_chain_emitter_cost_ranking._draw_macc_on_ax -- the exact same drawing
-code the single-scenario network_map_<scenario>.png / emitter_macc_<scenario>.png
-figures use -- so these panels are pixel-for-pixel consistent with those.
-
-Output: ccs_chain_results/scenario_comparison/{network_map,macc}_
-tax_sweep.{png,pdf} (2x2 grid) and {network_map,macc}_tax_sweep_
-<scenario>.{png,pdf} (one per panel) -- PDF for the paper (vector), PNG for
-quick previewing.
+ccs_chain_emitter_cost_ranking._draw_macc_on_ax, the same drawing code as
+the single-scenario figures, so the panels are consistent with those.
 """
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 
 import ccs_chain_plots as m
 import ccs_chain_emitter_cost_ranking as cr
+import figure_style as fs
 
 OUT_DIR = Path("ccs_chain_results/scenario_comparison")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 SCENARIO_NAME = "technology_selection"
 
-# (label, objective, carbon_tax) -- carbon_tax=None for the emissions-
-# minimizing run, which doesn't vary carbon_tax (see find_run_h5's docstring).
-PANELS = [
-    ("CO$_2$ tax = 150 €/t", "costs", 150),
-    ("CO$_2$ tax = 200 €/t", "costs", 200),
-    ("CO$_2$ tax = 250 €/t", "costs", 250),
-    ("Emissions-minimizing", "emissions_minC", None),
-]
-
 # Fixed x-axis extent (Mt/yr) shared by every MACC panel, so bar widths are
 # directly comparable across scenarios. Widened automatically if any panel's
 # total capture exceeds it.
 MACC_XMAX_MT = 15
 
-
-def _save_fig(fig, stem: str, facecolor: str):
-    """Saves fig as both PNG (raster, dpi=300) and PDF (vector) under
-    OUT_DIR/<stem>.{png,pdf} -- the PDF is what actually goes in the paper,
-    the PNG is for quick previewing."""
-    for ext in ("png", "pdf"):
-        out_file = OUT_DIR / f"{stem}.{ext}"
-        fig.savefig(out_file, dpi=300, bbox_inches="tight", facecolor=facecolor, pad_inches=0.2)
-        print(f"Saved: {out_file}")
+# --- 2x2 map layout (inches) ---
+MAP_LEFT_IN, MAP_RIGHT_IN, MAP_COL_GAP_IN = 0.36, 0.04, 0.10
+TOP_IN = 0.04         # margin above the top row (scenario labels sit inside the maps)
+ROW_GAP_IN = 0.06
+XTICK_IN = 0.17       # longitude tick labels under the bottom row
+LEGEND_IN = 1.0
 
 
 def _load_panel_data():
-    """Resolves each PANELS entry to its h5 and pre-loads everything both
-    figures need from it, so each h5 is only read once."""
+    """Resolves each scenario to its h5 and pre-loads everything the figures
+    need from it, so each h5 is only read once."""
     nodes_gdf = m.gpd.read_file(m.GIS_NODES)
     panels = []
-    for label, objective, carbon_tax in PANELS:
+    for letter, (slug, objective, carbon_tax, label) in zip(fs.PANEL_LETTERS, fs.SCENARIOS):
         h5_path = m.find_run_h5(SCENARIO_NAME, objective, carbon_tax=carbon_tax)
-        built_arcs = m.load_built_arcs(h5_path)
-        built_arcs = m.attach_route_geometries(built_arcs, nodes_gdf)
+        built_arcs = m.attach_route_geometries(m.load_built_arcs(h5_path), nodes_gdf)
         ccs_df = m.load_ccs_status(h5_path)
         macc_df, storage_node = cr.build_emitter_cost_table(h5_path)
+        summary = m.load_summary(h5_path)
+        real_df = m.real_emitters_df(ccs_df)
         panels.append({
-            "label": label,
-            "slug": f"tax{carbon_tax}" if carbon_tax is not None else objective,
-            "h5_path": h5_path,
-            "built_arcs": built_arcs,
-            "ccs_df": ccs_df,
-            "summary": m.load_summary(h5_path),
-            "macc_df": macc_df,
-            "storage_node": storage_node,
+            "letter": letter, "label": label, "slug": slug, "carbon_tax": carbon_tax,
+            "h5_path": h5_path, "built_arcs": built_arcs, "ccs_df": ccs_df, "real_df": real_df,
+            "summary": summary, "macc_df": macc_df, "storage_node": storage_node,
+            "captured_mt": real_df["captured_annual"].sum() / 1e6,
+            "avoided": m.fraction_avoided(summary["emissions_pos"]),
         })
         print(f"Loaded {label!r} ({SCENARIO_NAME}, {objective}, carbon_tax={carbon_tax}) <- {h5_path}")
     return nodes_gdf, panels
 
 
-def _draw_map_panel(ax, panel, nodes_gdf, italy):
-    """One scenario's built network on ax, with its label/KPI annotation."""
-    ax.set_facecolor(m.SURFACE)
-    m.setup_base_map(ax, italy, "")  # no per-panel title -- caption covers it
-    real_df = m._draw_ccs_network_on_ax(ax, panel["built_arcs"], nodes_gdf, panel["ccs_df"])
+def _panel_title(ax, panel, *, y=1.03):
+    """'a  CO2 tax 150 €/t' above a panel: bold letter, plain scenario label."""
+    ax.text(0.0, y, panel["letter"], transform=ax.transAxes, ha="left", va="bottom",
+            fontsize=fs.PANEL_TITLE_SIZE + 0.5, fontweight="bold", color=fs.INK_PRIMARY)
+    # offset in points, so the gap after the letter is the same at any panel width
+    ax.annotate(panel["label"], xy=(0.0, y), xycoords="axes fraction", xytext=(8.5, 0),
+                textcoords="offset points", ha="left", va="bottom",
+                fontsize=fs.PANEL_TITLE_SIZE, color=fs.INK_PRIMARY)
 
-    total_capture_t = real_df["captured_annual"].sum()
-    ax.text(
-        0.02, 0.98,
-        f"{panel['label']}\n{total_capture_t / 1e6:.2f} Mt/yr CO$_2$ captured\n"
-        f"{m.fraction_avoided(panel['summary']['emissions_pos']):.1%} of baseline emissions avoided",
-        transform=ax.transAxes, fontsize=12, color=m.INK_PRIMARY,
-        va="top", ha="left",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor=m.GRIDLINE, alpha=0.92),
-    )
-    return real_df
+
+# ============================================================
+# Network maps
+# ============================================================
+def _map_grid_axes():
+    """2x2 map axes placed in inches so every panel has the exact
+    equal-aspect height of MAP_BOUNDS (no dead space), plus the legend band."""
+    lon = m.MAP_BOUNDS["maxx"] - m.MAP_BOUNDS["minx"]
+    lat = m.MAP_BOUNDS["maxy"] - m.MAP_BOUNDS["miny"]
+    W = fs.FULL_WIDTH_IN
+    pw = (W - MAP_LEFT_IN - MAP_RIGHT_IN - MAP_COL_GAP_IN) / 2
+    ph = pw * lat / lon
+    H = TOP_IN + ph + ROW_GAP_IN + ph + XTICK_IN + LEGEND_IN
+    fig = plt.figure(figsize=(W, H))
+    axes = np.empty((2, 2), dtype=object)
+    for r in range(2):
+        top = TOP_IN + r * (ph + ROW_GAP_IN)
+        for c in range(2):
+            left = MAP_LEFT_IN + c * (pw + MAP_COL_GAP_IN)
+            axes[r, c] = fig.add_axes([left / W, 1 - (top + ph) / H, pw / W, ph / H])
+    legend_box = (MAP_LEFT_IN / W, 0.0, 1 - (MAP_LEFT_IN + MAP_RIGHT_IN) / W, (LEGEND_IN - 0.08) / H)
+    return fig, axes, legend_box
+
+
+def _map_note(ax, panel, *, size: float = fs.PANEL_TITLE_SIZE):
+    """Note in the map's upper-left corner (outside Italy, plain white):
+    bold panel letter + scenario (CO2 tax). The KPIs -- % of baseline
+    emissions avoided (fraction_avoided) and Mt/yr captured -- go in a
+    black-framed box in the upper-right corner."""
+    backing = dict(facecolor=fs.SURFACE, edgecolor="none", pad=0.4, alpha=0.7)
+    ax.annotate(panel["letter"], xy=(0, 1), xycoords="axes fraction", xytext=(3.5, -3),
+                textcoords="offset points", ha="left", va="top", fontsize=size + 0.5,
+                fontweight="bold", color=fs.INK_PRIMARY, zorder=30, bbox=backing)
+    ax.annotate(panel["label"], xy=(0, 1), xycoords="axes fraction", xytext=(3.5 + size * 1.25, -3),
+                textcoords="offset points", ha="left", va="top", fontsize=size,
+                color=fs.INK_PRIMARY, zorder=30, bbox=backing)
+    m.kpi_box(ax, panel["avoided"], panel["captured_mt"], fontsize=size - 1.0)
 
 
 def plot_tax_sweep_maps(nodes_gdf, panels):
     italy = m.gpd.read_file(m.ITALY_SHP)
+    # shared scales across all panels: line width (built capacity) and marker area (emissions)
+    ref = m.reference_capacity(*[p["built_arcs"] for p in panels])
+    e_ref = m.emission_reference(*[p["real_df"] for p in panels])
 
-    # Height chosen to match MAP_BOUNDS's own aspect ratio (7.5deg lon x
-    # 3.5deg lat per panel, aspect="equal" via setup_base_map) -- otherwise
-    # each axes box is taller than its equal-aspect content needs, and
-    # tight_layout can't reclaim that dead space since it's resolved at draw
-    # time, after layout (leaves a large blank band between the two rows).
-    fig, axes = plt.subplots(2, 2, figsize=(19, 11.2), gridspec_kw=dict(hspace=0.12, wspace=0.08))
-    fig.patch.set_facecolor(m.SURFACE)
+    fig, axes, (lx, ly, lw, lh) = _map_grid_axes()
+    for (r, c), panel in zip([(0, 0), (0, 1), (1, 0), (1, 1)], panels):
+        ax = axes[r, c]
+        m.setup_base_map(ax, italy, lon_labels=(r == 1), lat_labels=(c == 0))
+        m._draw_ccs_network_on_ax(ax, panel["built_arcs"], nodes_gdf, panel["ccs_df"], ref,
+                                  emission_ref_t=e_ref, s_range=m.EMITTER_S_RANGE_PANEL)
+        _map_note(ax, panel, size=fs.PANEL_TITLE_SIZE - 0.5)
 
-    real_dfs = [_draw_map_panel(ax, panel, nodes_gdf, italy) for ax, panel in zip(axes.flat, panels)]
-    _outer_labels_only(axes)
-
-    # Union across all four panels so the shared legend covers every family/
-    # status that appears in ANY of them, not just the first panel's.
-    all_real_df = pd.concat(real_dfs, ignore_index=True)
-    m.add_split_map_legend(fig, all_real_df, y=0.085, x_left=0.3, x_right=0.7, fontsize=12, ncol=3)
-
-    fig.tight_layout(rect=[0, 0.09, 1, 1])
-    _save_fig(fig, "network_map_tax_sweep", m.SURFACE)
+    all_real = pd.concat([p["real_df"] for p in panels], ignore_index=True)
+    modes = set().union(*[set(p["built_arcs"]["mode"]) for p in panels])
+    legend_ax = fig.add_axes([lx, ly, lw, lh])
+    legend_ax.axis("off")
+    _sweep_legend(legend_ax, all_real, modes, e_ref)
+    fs.save_figure(fig, OUT_DIR / "network_map_tax_sweep")
     plt.close(fig)
 
-    # --- one figure per scenario ---
+    # --- one figure per scenario (same scales as the grid) ---
     for panel in panels:
-        fig, ax = plt.subplots(figsize=(12.5, 8))
-        fig.patch.set_facecolor(m.SURFACE)
-        real_df = _draw_map_panel(ax, panel, nodes_gdf, italy)
-        m.add_split_map_legend(ax, real_df, y=-0.1)
-        fig.tight_layout()
-        _save_fig(fig, f"network_map_tax_sweep_{panel['slug']}", m.SURFACE)
+        fig, ax, lax = m.map_figure(legend_in=1.0, top_in=0.04)
+        m.setup_base_map(ax, italy)
+        m._draw_ccs_network_on_ax(ax, panel["built_arcs"], nodes_gdf, panel["ccs_df"], ref,
+                                  emission_ref_t=e_ref, s_range=m.EMITTER_S_RANGE_FULL)
+        _map_note(ax, panel, size=fs.PANEL_TITLE_SIZE + 1)
+        m.add_map_legend(lax, panel["real_df"], modes=modes, emission_ref_t=e_ref,
+                         s_range=m.EMITTER_S_RANGE_FULL)
+        fs.save_figure(fig, OUT_DIR / f"network_map_tax_sweep_{panel['slug']}")
         plt.close(fig)
 
 
-def _outer_labels_only(axes):
-    """Keeps the x label on the bottom row and the y label on the left column
-    of a 2x2 grid only -- the right column's y label would otherwise sit in
-    the narrow gap between columns, on top of the left column's panels."""
-    for ax in axes[:, 1]:
-        ax.set_ylabel("")
-    for ax in axes[0, :]:
-        ax.set_xlabel("")
+def _sweep_legend(lax, all_real, modes, e_ref):
+    """Shared map legend: Sector (3x2) over Capture technology (3x2) on the
+    left; Transport over Infrastructure in the middle; marker-size key
+    (annual CO2 emissions, same area function as the panels) on the right."""
+    sectors = m._present_sectors(all_real)
+    fams = m._present_families(all_real)
+    has_no = bool((~all_real["ccs_installed"]).any())
+    size_keys = fs.size_handles(e_ref, lambda v: m.emitter_area(v, e_ref, m.EMITTER_S_RANGE_PANEL))
+    blocks = [
+        ("Sector (colour)", fs.sector_handles(sectors), 3, (0.0, 1.0), {}),
+        ("Capture technology (shape)", fs.technology_handles(fams, include_no_capture=has_no), 3,
+         (0.0, 0.47), {}),
+        ("Transport", fs.mode_handles(modes), 1, (0.565, 1.0), {}),
+        ("Infrastructure", fs.node_handles(), 1, (0.565, 0.47), {}),
+        ("Annual CO$_2$ emissions (size)", size_keys, 1, (0.78, 1.0), {"labelspacing": 0.7}),
+    ]
+    for title, handles, ncol, (x, y), kw in blocks:
+        leg = fs.legend_block(lax, handles, title, loc="upper left", bbox=(x, y), ncol=ncol,
+                              bbox_transform=lax.transAxes, columnspacing=0.9, **kw)
+        lax.add_artist(leg)
 
-def plot_tax_sweep_macc(panels):
-    fig, axes = plt.subplots(2, 2, figsize=(19, 11), gridspec_kw=dict(hspace=0.22, wspace=0.1))
-    fig.patch.set_facecolor(cr.SURFACE)
 
+# ============================================================
+# MACCs
+# ============================================================
+def _macc_limits(panels):
     max_capture_mt = max(p["macc_df"]["captured_annual_t"].sum() / 1e6 for p in panels)
     if max_capture_mt > MACC_XMAX_MT:
         print(f"Warning: max capture {max_capture_mt:.2f} Mt/yr exceeds MACC_XMAX_MT={MACC_XMAX_MT}; widening x-axis")
     x_max = max(MACC_XMAX_MT, max_capture_mt)
+    # shared y: tallest bar or tax line + 10% headroom, rounded up to 50 €/t
+    max_cost = max(max(p["macc_df"]["total_eur_per_t"].max(), p["carbon_tax"] or 0) for p in panels)
+    y_max = np.ceil(max_cost * 1.1 / 50) * 50
+    return x_max, y_max
 
-    # Shared y-axis too: tallest bar across all panels + 10% headroom, rounded
-    # up to the next 25 €/t so the top tick is a clean number.
-    max_cost = max(p["macc_df"]["total_eur_per_t"].max() for p in panels)
-    y_max = np.ceil(max_cost * 1.1 / 25) * 25
 
-    all_low_cf = False
+def _draw_macc_panel(ax, panel, x_max, y_max):
+    """One scenario's MACC on ax: sector-coloured bars, dashed CO2-tax line
+    (direct-labelled) in tax panels. Returns the legend handles."""
+    handles = cr._draw_macc_on_ax(ax, panel["macc_df"], annotate_fertilizers=False,
+                                  carbon_tax=panel["carbon_tax"])
+    ax.set_xlim(0, x_max)
+    ax.set_ylim(0, y_max)
+    ax.set_yticks(np.arange(0, y_max + 1, 50))
+    if panel["carbon_tax"] is not None:
+        # left end: the cheapest bars sit far below the tax, so the label never
+        # collides with a bar (the right end is where bars approach the tax)
+        ax.text(x_max * 0.012, panel["carbon_tax"] + y_max * 0.015, f"CO$_2$ tax {panel['carbon_tax']} €/tCO$_2$",
+                ha="left", va="bottom", fontsize=fs.TICK_SIZE, color=fs.INK_PRIMARY, zorder=6,
+                bbox=dict(facecolor=fs.SURFACE, edgecolor="none", pad=0.6))
+    return handles
+
+
+def plot_tax_sweep_macc(panels):
+    x_max, y_max = _macc_limits(panels)
+    fig, axes = plt.subplots(2, 2, figsize=(fs.FULL_WIDTH_IN, 4.1), sharex=True, sharey=True)
     for ax, panel in zip(axes.flat, panels):
-        low_cf_mask = _draw_macc_panel(ax, panel, x_max, y_max)
-        all_low_cf = all_low_cf or low_cf_mask.any()
-    _outer_labels_only(axes)
+        _draw_macc_panel(ax, panel, x_max, y_max)
+        _panel_title(ax, panel)
+    for ax in axes[0, :]:
+        ax.tick_params(labelbottom=False)
+    fig.supxlabel(fs.CAPTURED_LABEL, fontsize=fs.LABEL_SIZE, y=0.075)
+    fig.supylabel(fs.COST_LABEL, fontsize=fs.LABEL_SIZE, x=0.012)
 
-    all_macc_df = pd.concat([p["macc_df"] for p in panels], ignore_index=True)
-    legend_handles = _sector_legend_handles(all_macc_df, all_low_cf)
-    fig.legend(
-        handles=legend_handles, loc="lower center", bbox_to_anchor=(0.5, 0.0),
-        ncol=len(legend_handles), frameon=True, fontsize=11.5, framealpha=0.95,
-        edgecolor=cr.GRIDLINE, title="Sector", title_fontsize=11.5,
-    )
-
-    fig.tight_layout(rect=[0, 0.08, 1, 1])
-    _save_fig(fig, "macc_tax_sweep", cr.SURFACE)
+    all_macc = pd.concat([p["macc_df"] for p in panels], ignore_index=True)
+    handles = cr.sector_patch_handles(all_macc) + [
+        plt.Line2D([0], [0], color=fs.INK_PRIMARY, linestyle=(0, (4, 2)), linewidth=0.8, label="CO$_2$ tax")]
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.53, 0.0), ncol=len(handles),
+               frameon=False, handlelength=1.3, handletextpad=0.45, columnspacing=1.1)
+    fig.subplots_adjust(left=0.085, right=0.99, top=0.95, bottom=0.155, hspace=0.32, wspace=0.06)
+    fs.save_figure(fig, OUT_DIR / "macc_tax_sweep")
     plt.close(fig)
 
     # --- one figure per scenario, same shared axis limits as the grid ---
     for panel in panels:
-        fig, ax = plt.subplots(figsize=(11, 6.5))
-        fig.patch.set_facecolor(cr.SURFACE)
-        low_cf_mask = _draw_macc_panel(ax, panel, x_max, y_max)
-        legend_handles = _sector_legend_handles(panel["macc_df"], low_cf_mask.any())
-        ax.legend(
-            handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.13),
-            ncol=min(len(legend_handles), 4), frameon=True, fontsize=11, framealpha=0.95,
-            edgecolor=cr.GRIDLINE, title="Sector", title_fontsize=11,
-        )
+        fig, ax = plt.subplots(figsize=(fs.FULL_WIDTH_IN, 2.9))
+        handles = _draw_macc_panel(ax, panel, x_max, y_max)
+        _panel_title(ax, panel)
+        ax.set_xlabel(fs.CAPTURED_LABEL)
+        ax.set_ylabel(fs.COST_LABEL)
+        ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False,
+                  title="Sector", alignment="left")
         fig.tight_layout()
-        _save_fig(fig, f"macc_tax_sweep_{panel['slug']}", cr.SURFACE)
+        fs.save_figure(fig, OUT_DIR / f"macc_tax_sweep_{panel['slug']}")
         plt.close(fig)
 
 
-def _draw_macc_panel(ax, panel, x_max, y_max):
-    """One scenario's MACC on ax, with its label/KPI annotation; returns the
-    panel's low-capacity-factor mask."""
-    ax.set_facecolor(cr.SURFACE)
-    df = panel["macc_df"]
-    # annotate_fertilizers=False: 4 cramped panels have no room for the
-    # per-bar callout arrows without them overlapping -- sector color
-    # (still shared, canonical across every panel) is enough here.
-    _, low_cf_mask = cr._draw_macc_on_ax(ax, df, annotate_fertilizers=False)
-    ax.set_xlim(0, x_max)
-    ax.set_ylim(0, y_max)
-
-    ax.set_xlabel("Cumulative CO$_2$ captured (Mt/yr)", fontsize=10.5)
-    ax.set_ylabel("€/t CO$_2$", fontsize=10.5)
-
-    total_capture_mt = df["captured_annual_t"].sum() / 1e6
-    ax.text(
-        0.02, 0.98, f"{panel['label']}\n{total_capture_mt:.2f} Mt/yr CO$_2$ captured",
-        transform=ax.transAxes, fontsize=12, color=cr.INK_PRIMARY,
-        va="top", ha="left",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor=cr.GRIDLINE, alpha=0.92),
-    )
-    return low_cf_mask
-
-
-def _sector_legend_handles(macc_df, low_cf: bool) -> list:
-    """Sector patches for the sectors present in macc_df (sector_display_label
-    already renders "Other" as "Industrial cluster of Ravenna", same as every
-    other plot -- see ccs_chain_plots.py), plus the low-capacity-factor hatch."""
-    seen_labels = set()
-    legend_handles = []
-    for s in cr.SECTOR_ORDER:
-        label = cr.SECTOR_LEGEND_LABEL[s]
-        if s not in set(macc_df["sector"]) or label in seen_labels:
+# ============================================================
+# Captured CO2 by capture technology
+# ============================================================
+def capture_by_technology_table(panels) -> pd.DataFrame:
+    """Mt/yr captured per (scenario, capture technology, sector), from every
+    capture-classified technology row of load_ccs_status -- its own family
+    and its own captured tonnes, so the totals reconcile exactly with the
+    maps' real_emitters_df sums (see _real_emitter_rows' docstring)."""
+    rows = []
+    for p in panels:
+        df = p["ccs_df"]
+        if df.empty:
             continue
-        seen_labels.add(label)
-        legend_handles.append(Patch(facecolor=cr.SECTOR_COLORS[s], edgecolor="white", label=label))
-    if low_cf:
-        legend_handles.append(Patch(
-            facecolor="none", edgecolor=cr.INK_SECONDARY, hatch="////",
-            label=f"Capacity factor < {cr.LOW_CAPACITY_FACTOR_THRESHOLD:.0%}",
-        ))
-    return legend_handles
+        for _, r in df.iterrows():
+            rows.append({"scenario": p["slug"], "family": r["family"],
+                         "sector": m._row_sector(r), "captured_mt": r["captured_annual"] / 1e6})
+    out = pd.DataFrame(rows).groupby(["scenario", "family", "sector"], as_index=False)["captured_mt"].sum()
+    for p in panels:  # sanity: same total as the maps
+        tot = out.loc[out["scenario"] == p["slug"], "captured_mt"].sum()
+        assert abs(tot - p["captured_mt"]) < 1e-6, (p["slug"], tot, p["captured_mt"])
+    return out
+
+
+def plot_capture_by_technology(panels):
+    table = capture_by_technology_table(panels)
+    table.to_csv(OUT_DIR / "capture_by_technology_tax_sweep.csv", index=False)
+    print(f"Saved: {OUT_DIR / 'capture_by_technology_tax_sweep.csv'}")
+
+    families = list(fs.FAMILY_ORDER)
+    y = np.arange(len(families))[::-1]
+    totals = table.groupby(["scenario", "family"])["captured_mt"].sum()
+    x_max = np.ceil(totals.max() * 1.22 / 2) * 2
+
+    fig, axes = plt.subplots(1, len(panels), figsize=(fs.FULL_WIDTH_IN, 2.05), sharey=True)
+    for ax, panel in zip(axes, panels):
+        sub = table[table["scenario"] == panel["slug"]]
+        left = np.zeros(len(families))
+        for sector in fs.SECTOR_ORDER:
+            vals = np.array([sub.loc[(sub["family"] == f) & (sub["sector"] == sector), "captured_mt"].sum()
+                             for f in families])
+            if vals.sum() <= 0:
+                continue
+            ax.barh(y, vals, left=left, height=0.62, color=fs.SECTOR_COLORS[sector],
+                    edgecolor=fs.SURFACE, linewidth=0.4, zorder=3)
+            left += vals
+        for yi, tot in zip(y, left):
+            if tot > 0:
+                ax.text(tot + x_max * 0.02, yi, f"{tot:.1f}" if tot >= 0.05 else "<0.1", va="center",
+                        ha="left", fontsize=fs.TICK_SIZE, color=fs.INK_PRIMARY)
+        ax.set_xlim(0, x_max)
+        cr.style_value_axes(ax, grid_axis="x")
+        ax.tick_params(axis="y", length=0)
+        _panel_title(ax, panel, y=1.04)
+
+    # technology labels with the same shape glyph as the maps (shape only)
+    axes[0].set_yticks(y)
+    axes[0].set_yticklabels([fs.FAMILY_SHORT_LABELS[f] for f in families])
+    axes[0].tick_params(axis="y", pad=11)
+    for yi, f in zip(y, families):
+        axes[0].scatter(-0.075, yi, marker=fs.FAMILY_MARKERS[f], s=16 * fs.FAMILY_MARKER_SCALE[f],
+                        facecolors=fs.TECH_GLYPH_FACE, edgecolors=fs.MARK_EDGE, linewidths=0.6,
+                        transform=axes[0].get_yaxis_transform(), clip_on=False, zorder=5)
+    axes[0].set_ylim(-0.6, len(families) - 0.4)
+    fig.supxlabel("CO$_2$ captured (Mt/y)", fontsize=fs.LABEL_SIZE, y=0.125)
+    fig.legend(handles=fs.sector_handles(set(table["sector"]), kind="patch"), loc="lower center",
+               bbox_to_anchor=(0.56, 0.0), ncol=6, frameon=False, handlelength=1.2, handletextpad=0.4,
+               columnspacing=1.0)
+    fig.subplots_adjust(left=0.17, right=0.985, top=0.88, bottom=0.27, wspace=0.12)
+    fs.save_figure(fig, OUT_DIR / "capture_by_technology_tax_sweep")
+    plt.close(fig)
+
+
+# ============================================================
+# Hourly CO2 received upstream of storage, per scenario
+# ============================================================
+INFLOW_NODE = "Eni S.p.A Casalborsetti"
+
+
+def plot_inflow_per_scenario(panels, node_name: str = INFLOW_NODE):
+    """ccs_chain_plots.plot_node_inflow for each scenario, written to
+    OUT_DIR as inflow_<node>_<slug>.{png,pdf}."""
+    saved = (m.OUT_DIR, m.FIG_TAG)
+    try:
+        m.OUT_DIR = OUT_DIR
+        for panel in panels:
+            m.FIG_TAG = panel["slug"]
+            m.plot_node_inflow(panel["h5_path"], node_name=node_name)
+    finally:
+        m.OUT_DIR, m.FIG_TAG = saved
 
 
 def main():
     nodes_gdf, panels = _load_panel_data()
     plot_tax_sweep_maps(nodes_gdf, panels)
     plot_tax_sweep_macc(panels)
+    plot_capture_by_technology(panels)
+    plot_inflow_per_scenario(panels)
 
 
 if __name__ == "__main__":
