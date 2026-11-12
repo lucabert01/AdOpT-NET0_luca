@@ -9,7 +9,7 @@
     "comment": "CAPEX is a piecewise function of CaL design capacity (var_size_cal, t CO2/h captured), interpolated from wasteCaL_sheet.xlsx by design_co2_concentration. opex_variable_cal [EUR/t CO2 captured] is a single blended rate covering RDF cost, CaL electricity revenue (negative), and any other variable cost",
     "capex_model": 1,
     "unit_capex": 0,
-    "opex_variable_cal": -23,
+    "opex_variable_cal": -16.1,
     "opex_fixed": 0.065,
     "discount_rate": 0.1,
     "lifetime": 25,

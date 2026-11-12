@@ -24,7 +24,7 @@
       ]
     },
     "other_economics": {
-      "comment": "opex_var_oxy and opex_var_MEA are placeholders (0) -- no source data was available for these; replace with real EUR/tonne CO2 (or relevant unit) variable opex figures before solving with this technology.",
+      "comment": "opex_var_oxy inlcudes the cost of extra coal at coal price of 15 euro/MWh",
       "unit_capex_MEA": 1717286,
       "piecewise_capex_MEA": {
         "bp_x": [
