@@ -1839,13 +1839,34 @@ NODE_METRICS_SHEET_BY_MODE = {"CO2_Pipeline": "pipeline", "CO2Truck": "truck", "
 PIPELINE_CLASS_CONNECTIONS = path_data_case_study / "network_capex_metrics/pipeline_size_class_connections.xlsx"
 
 
+def _excluded_pipeline_routes() -> list:
+    """main_italy.py's EXCLUDED_PIPELINE_ROUTES, read from its source (importing
+    main_italy.py runs its whole setup)."""
+    import ast
+    tree = ast.parse((Path(__file__).resolve().parent.parent / "main_italy.py").read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "EXCLUDED_PIPELINE_ROUTES" for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise ValueError("EXCLUDED_PIPELINE_ROUTES not found in main_italy.py")
+
+
 def _candidate_connection_matrix(mode: str, size_class: str | None = None) -> pd.DataFrame:
     """node_id x node_id matrix of the arcs the optimizer may build for one
     transport mode (>0 = allowed, directed), exactly as main_italy.py reads
-    it: node_metrics_paper.xlsx's per-mode sheet, and for a pipeline size
-    class additionally masked by pipeline_size_class_connections.xlsx via
-    the same load_pipeline_class_connection_matrix main_italy.py uses."""
+    it: node_metrics_paper.xlsx's per-mode sheet, for pipelines without
+    main_italy.py's EXCLUDED_PIPELINE_ROUTES (both directions), and for a
+    pipeline size class additionally masked by
+    pipeline_size_class_connections.xlsx via the same
+    load_pipeline_class_connection_matrix main_italy.py uses."""
     matrix = pd.read_excel(NODE_METRICS_PAPER, index_col=0, sheet_name=NODE_METRICS_SHEET_BY_MODE[mode])
+    if mode == "CO2_Pipeline":
+        nodes = _load_input_nodes().drop_duplicates("node_id")
+        name_to_id = dict(zip(nodes["node_name"].str.strip(), nodes["node_id"]))
+        for name_a, name_b in _excluded_pipeline_routes():
+            id_a, id_b = name_to_id[name_a], name_to_id[name_b]
+            matrix.at[id_a, id_b] = 0
+            matrix.at[id_b, id_a] = 0
     if size_class is None:
         return matrix
     import contextlib, io, sys
