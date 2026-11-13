@@ -31,8 +31,8 @@ italy = gpd.read_file(path_files_gis / "italy_WGS1984.shp")  # italy boundary
 nodes_selected = gpd.read_file(path_files_gis / "all_nodes_italy.shp")
 routes_pipeline = gpd.read_file(path_files_gis / "routes_distances_pipeline.shp")
 network_pipeline = pd.read_excel(path_files_grids / "node_metrics_paper.xlsx", index_col=0, sheet_name='pipeline')
-fishnet = gpd.read_file(path_files_gis / "fishnet_italy_5km.shp").reset_index().rename(
-    columns={"index": "GRID_OID"})
+fishnet = gpd.read_file(path_files_gis / "fishnet_italy_5km.shp")
+fishnet["GRID_OID"] = fishnet.index + 1  # 1-based ArcGIS object ID of the raster tables
 soil_data = pd.read_csv(path_files_grids / "soil_type_grids_italy.csv")
 anthro_data = pd.read_csv(path_files_grids / "anthropisation_grids_italy.csv")
 morpho_data = pd.read_csv(path_files_grids / "morphological_feature_grids_italy.csv")

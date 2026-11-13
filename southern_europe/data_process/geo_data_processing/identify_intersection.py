@@ -64,8 +64,11 @@ except Exception as e:
 
 print("="*50)
 
-# Add ID column to fishnet since it doesn't have one
-fishnet['grid_id'] = fishnet.index
+# The fishnet has no ID column. The grid cells of the raster tables
+# (morphological/soil_type/anthropisation_grids_italy.csv) are identified by GRID_OID,
+# the 1-based ArcGIS object ID of the fishnet, i.e. row index + 1 (with + 1 every
+# GRID_OID of those tables lies on Italian land, without it hundreds lie at sea).
+fishnet['grid_id'] = fishnet.index + 1
 
 print("Geographic data loaded successfully!")
 print(f"Routes: {len(route)} features")
@@ -76,19 +79,14 @@ print(f"Fishnet: {len(fishnet)} grids")
 # Run intersection analysis
 intersection_results = analyze_route_grid_intersections(route, fishnet)
 
-# routes_distances_pipeline.shp's own "Name" attribute still carries this node's
-# older/longer name from before it was renamed in node_metrics_paper.xlsx -- without
-# this alias, every route touching it (including its arc to Ferrara) falls back to a
-# garbled literal sheet name instead of "{id1}_{id2}" (see create_node_name_to_id_mapping's
-# docstring).
-ROUTE_NAME_ALIASES = {
-    "HERAMBIENTE S.R.L.  - IMPIANTO DI TERMOVALORIZZAZIONE RIFIUTI NON PERICOLOSI":
-        "HERAMBIENTE S.R.L.  - Termovalorizzatore",
-}
+# Sheet names "{id1}_{id2}" come from each route's "Node" attribute (the two node_ids
+# of the route), not from its "Name": some names do not match the node names in
+# node_metrics_paper.xlsx (the five routes to Venezia Marghera Scalo, node 38, are
+# named "... - Ravenna", which is node 37).
+sheet_names = {row["Name"]: row["Node"].replace(",", "_") for _, row in route.iterrows()}
 
-# Export results - FIXED: Now passing network_nodes parameter!
 output_file = path_data_case_study / "geographical_feature/route_grid_intersections.xlsx"
-export_to_excel(intersection_results, output_file, network_nodes, name_aliases=ROUTE_NAME_ALIASES)
+export_to_excel(intersection_results, output_file, network_nodes, sheet_names=sheet_names)
 
 #----- Summary statistics -----#
 

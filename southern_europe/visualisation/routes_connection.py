@@ -425,8 +425,8 @@ railway_directions = get_route_directionality_fixed(routes_railway, network_rail
 # ============================================================
 COST_FACTOR_PIPELINE_CATEGORY = 300
 
-fishnet_cost = gpd.read_file(path_files_gis / "fishnet_italy_5km.shp").reset_index().rename(
-    columns={"index": "GRID_OID"})
+fishnet_cost = gpd.read_file(path_files_gis / "fishnet_italy_5km.shp")
+fishnet_cost["GRID_OID"] = fishnet_cost.index + 1  # 1-based ArcGIS object ID of the raster tables
 soil_data = pd.read_csv(path_files_grids / "soil_type_grids_italy.csv")
 anthro_data = pd.read_csv(path_files_grids / "anthropisation_grids_italy.csv")
 morpho_data = pd.read_csv(path_files_grids / "morphological_feature_grids_italy.csv")

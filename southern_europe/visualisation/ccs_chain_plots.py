@@ -450,8 +450,8 @@ def map_figure(width_in: float = fs.FULL_WIDTH_IN, legend_in: float = 1.0, top_i
 def compute_cost_factor_grid(italy: gpd.GeoDataFrame, category: float = COST_FACTOR_PIPELINE_CATEGORY):
     """Integrated cost factor fishnet grid, same calculation as
     cost_factor_grid_map_italy.py / routes_connection.py."""
-    fishnet = gpd.read_file(path_files_gis / "fishnet_italy_5km.shp").reset_index().rename(
-        columns={"index": "GRID_OID"})
+    fishnet = gpd.read_file(path_files_gis / "fishnet_italy_5km.shp")
+    fishnet["GRID_OID"] = fishnet.index + 1  # 1-based ArcGIS object ID of the raster tables
     soil_data = pd.read_csv(path_files_grids / "soil_type_grids_italy.csv")
     anthro_data = pd.read_csv(path_files_grids / "anthropisation_grids_italy.csv")
     morpho_data = pd.read_csv(path_files_grids / "morphological_feature_grids_italy.csv")

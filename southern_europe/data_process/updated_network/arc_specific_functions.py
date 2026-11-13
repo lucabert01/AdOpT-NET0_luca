@@ -658,13 +658,19 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore",
         evaluation_points=10
     )
 
-    # Add geographical data using shared function
-    if pipeline_name in data_dict['intersection_data']:
-        intersected_grids = data_dict['intersection_data'][pipeline_name]['intersected_grids']
-        intersected_proportions = data_dict['intersection_data'][pipeline_name]['intersected_proportions']
-    else:
-        intersected_grids = []
-        intersected_proportions = []
+    # Add geographical data using shared function. A route is drawn once, so an arc
+    # in the opposite direction of the drawn route ("{to}_{from}" sheet) crosses the
+    # same grid cells.
+    intersected_grids, intersected_proportions = [], []
+    for route_name in (pipeline_name, f"{to_node}_{from_node}"):
+        route = data_dict['intersection_data'].get(route_name)
+        if route and route['intersected_grids']:
+            intersected_grids = route['intersected_grids']
+            intersected_proportions = route['intersected_proportions']
+            break
+    if not intersected_grids:
+        print(f"      ⚠️  No route grid cells for arc {from_node} → {to_node}: "
+              f"no geographical cost factor")
 
     enhanced_options = add_geographical_options(
         base_options,

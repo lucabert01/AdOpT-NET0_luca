@@ -73,7 +73,10 @@ def compute_gammas_for_size_class(size_class, fixed_range_kg_s, data_dict, possi
                                    output_dir, dashboard_overrides_path):
     """
     Compute gamma1/gamma2 for every arc for one pipeline size class and save
-    to capex_defined_per_arc_{size_class}.xlsx.
+    to capex_defined_per_arc_{size_class}.xlsx and
+    gamma_defined_per_arc_pipeline_{size_class}.xlsx. Arcs added by
+    add_pipeline_arcs.py are not in routes_distances_pipeline.shp: run that
+    script again afterwards.
 
     Args:
         size_class: "small" | "medium" | "large" (used for the output filename)
@@ -121,9 +124,13 @@ def compute_gammas_for_size_class(size_class, fixed_range_kg_s, data_dict, possi
         print(f"   Gamma1: min={v1.min():,.0f}, max={v1.max():,.0f}, mean={v1.mean():,.0f} EUR")
         print(f"   Gamma2: min={v2.min():.3f}, max={v2.max():.3f}, mean={v2.mean():.3f} EUR/(t/h)")
 
-    output_file = output_dir / f"capex_defined_per_arc_{size_class}.xlsx"
-    save_to_excel(gamma1_matrix, gamma2_matrix, gamma3_matrix, gamma4_matrix, filename=str(output_file))
-    print(f"📁 Saved: {output_file.absolute()}")
+    # main_italy.py reads gamma_defined_per_arc_pipeline_{size_class}.xlsx, the
+    # same matrices under another name
+    for file_name in [f"capex_defined_per_arc_{size_class}.xlsx",
+                      f"gamma_defined_per_arc_pipeline_{size_class}.xlsx"]:
+        output_file = output_dir / file_name
+        save_to_excel(gamma1_matrix, gamma2_matrix, gamma3_matrix, gamma4_matrix, filename=str(output_file))
+        print(f"📁 Saved: {output_file.absolute()}")
 
     return output_file
 
@@ -159,7 +166,10 @@ def main():
         print("\n🔄 Loading intersection data...")
         intersection_file_path = Path("../../italy_data/geographical_feature/route_grid_intersections.xlsx")
         possible_arcs = get_all_possible_arcs(data_dict['network_pipeline'])
-        pipeline_names = [f"{from_node}_{to_node}" for from_node, to_node in possible_arcs]
+        # Both directions: an arc can use the route drawn the other way
+        # (see calculate_arc_gammas)
+        pipeline_names = sorted({name for from_node, to_node in possible_arcs
+                                 for name in (f"{from_node}_{to_node}", f"{to_node}_{from_node}")})
         print(f"   Found {len(possible_arcs)} possible arcs")
 
         data_dict['intersection_data'] = load_intersection_data(intersection_file_path, pipeline_names)

@@ -41,6 +41,14 @@ from data_process.utilities.defined_functions import (
 # limit.
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+# The progress messages contain emoji. When the output is redirected to a log file
+# (e.g. an unattended run on the server), Windows Python writes it in the console
+# code page (cp1252), which cannot encode them and raises UnicodeEncodeError.
+import sys
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 
 #----- Scenario parameterization (shared across all runs) -----#
 ref_year = 2024
@@ -65,6 +73,35 @@ pipeline_size_class_max_capacity_t_h = {
     "CO2_Pipeline_small": 97.2,
     "CO2_Pipeline_medium": 450.0,
     "CO2_Pipeline_large": 2000.0,
+}
+# Pipeline routes that may never be built, as (node_name, node_name) pairs from the
+# 'nodes' sheet of node_metrics_file. Each pair is removed in both directions from
+# the 'pipeline' sheet right after it is read, before the per-size-class
+# connection matrices are derived from it, so it applies to all three pipeline
+# size classes. Truck and railway connections are not affected.
+EXCLUDED_PIPELINE_ROUTES = [
+    ("MONSELICE cement plant", "Ravenna"),
+    ("MONSELICE cement plant", "Eni S.p.A Casalborsetti"),
+    ("Impianto di Termovalorizzazione di San Lazzaro (PD)", "Ravenna"),
+    ("Impianto di Termovalorizzazione di San Lazzaro (PD)", "Eni S.p.A Casalborsetti"),
+    ("FRULLO ENERGIA AMBIENTE S.R.L.", "Ravenna"),
+    ("FRULLO ENERGIA AMBIENTE S.R.L.", "Eni S.p.A Casalborsetti"),
+]
+# Pipeline arcs that are not in routes_distances_pipeline.shp (e.g. Monselice ->
+# Ferrara) are added to the pipeline data by
+# data_process/updated_network/add_pipeline_arcs.py.
+# Minimum capacity (t/h) of pipeline arcs, as {(from node_name, to node_name): t/h}.
+# The sum of the sizes of the small, medium and large pipeline on the arc must reach
+# it (see enforce_minimum_pipeline_capacity). The values are the capacity of a
+# pipe of the given outer diameter under this work's gas-phase assumptions (40 bar
+# node pressure, segments down to 15 bar, at most 20 m/s, 15 degC, booster stations
+# at least 40 km apart), computed by data_process/updated_network/
+# add_pipeline_arcs.py::gas_pipeline_capacity_kg_s. Both arcs are added to the
+# pipeline data by that script.
+MINIMUM_PIPELINE_CAPACITY_T_H = {
+    ("Ferrara", "Eni S.p.A Casalborsetti"): 1399.1,  # 36 inch, 65.1 km
+    # half the capacity of a 26 inch pipe over 120.8 km (759.2 t/h)
+    ("Italcementi di Rezzato", "Ferrara"): 379.6,
 }
 default_carbon_tax = 250  # euro per tonne CO2 -- used by any scenario in SCENARIOS
                            # that doesn't set its own "carbon_tax" (see run_scenario)
@@ -153,7 +190,7 @@ SCENARIOS = [
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
-     "carbon_tax": 150},
+     "carbon_tax": 175},
     # tax 250 runs before tax 200 so that tax 200 can start from its solution
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
@@ -188,9 +225,9 @@ SCENARIOS = [
     # injection capacity in every hour), with a temporary CO2 buffer storage
     # offered at the Casalborsetti hub to absorb the mismatch between capture and
     # injection. Both at a CO2 tax of 200 EUR/t.
-    # c_inj (85% minimum) starts from the full solution of its own previous run:
-    # same model, only the buffer's size_max was raised, so that solution is
-    # still feasible.
+    # c_inj (85% minimum) starts from the design of technology_selection at tax 200
+    # (same technology choice and tax, run earlier in this list): its operation has
+    # no injection band or buffer storage, so only the design is taken over.
     {"name": "c_inj",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
@@ -198,7 +235,8 @@ SCENARIOS = [
      "carbon_tax": 200,
      "injection_rate_tolerance": 0.15,
      "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"],
-     "warmstart": "tax200_costs_c_inj"},
+     "warmstart": "tax200_costs_technology_selection",
+     "warmstart_design_only": True},
     # c_inj_min95 (95% minimum) runs after c_inj and starts from its design: its
     # operation (85% band) does not fit the narrower band.
     {"name": "c_inj_min95",
@@ -215,7 +253,7 @@ SCENARIOS = [
 # Names of the SCENARIOS entries to run when the script is started without
 # command-line arguments (e.g. with the IDE's Run button). Set to None to run all
 # of SCENARIOS. Command-line arguments (`python main_italy.py <name> ...`) override it.
-RUN_SCENARIOS = ["c_inj", "c_inj_min95"]
+RUN_SCENARIOS = None
 
 # Technology (filename under italy_data/technologies/) used for the temporary CO2
 # buffer storage added at a scenario's "temporary_storage_nodes"
@@ -370,6 +408,101 @@ def enforce_single_cement_technology(m: "adopt.ModelHub", period: str = "period1
         model.set_cement_dual_nodes, rule=_hybrid_limit
     )
     return dual_nodes
+
+
+def enforce_minimum_pipeline_capacity(m: "adopt.ModelHub", min_capacities: dict,
+                                      period: str = "period1") -> list:
+    """
+    For each (node_from, node_to) arc in min_capacities, the summed size of all
+    pipeline size classes (CO2_Pipeline_small/medium/large) on that arc must be at
+    least the given capacity in t/h. A size above 0 already forces the class's
+    installation binary to 1 (dis_installation), so the arc is built.
+
+    Added to the live model between construct_balances() and solve(), like
+    enforce_single_cement_technology.
+
+    :param m: a ModelHub with construct_model() and construct_balances() called
+    :param dict min_capacities: {(node_from, node_to): minimum capacity in t/h}
+    :param period: investment period name
+    :return: list of (node_from, node_to, capacity, size classes) applied
+    """
+    if not min_capacities:
+        return []
+    model = m.model[m.info_solving_algorithms["aggregation_model"]]
+    b_period = model.periods[period]
+    pipelines = [f"CO2_Pipeline_{size_class}" for size_class in PIPELINE_SIZE_CLASSES]
+
+    model.const_minimum_pipeline_capacity = pyo.ConstraintList()
+    applied = []
+    for (node_from, node_to), capacity in min_capacities.items():
+        arcs = {
+            netw: b_period.network_block[netw].arc_block[node_from, node_to]
+            for netw in pipelines
+            if netw in b_period.network_block
+            and (node_from, node_to) in b_period.network_block[netw].set_arcs
+        }
+        if not arcs:
+            raise ValueError(
+                f"Minimum pipeline capacity: no pipeline arc {node_from} -> {node_to} in "
+                f"the model (run data_process/updated_network/add_pipeline_arcs.py)"
+            )
+        max_capacity = sum(pyo.value(arc.para_size_max) for arc in arcs.values())
+        if max_capacity < capacity:
+            raise ValueError(
+                f"Minimum pipeline capacity {capacity} t/h on {node_from} -> {node_to} "
+                f"exceeds the summed size_max of its pipeline classes ({max_capacity} t/h)"
+            )
+        model.const_minimum_pipeline_capacity.add(
+            sum(arc.var_size for arc in arcs.values()) >= capacity
+        )
+        applied.append((node_from, node_to, capacity, list(arcs)))
+    return applied
+
+
+def remove_pipeline_routes(network_pipeline: pd.DataFrame, network_location: pd.DataFrame,
+                           routes: list) -> pd.DataFrame:
+    """
+    Sets the pipeline distance of each (node_name, node_name) pair in routes to 0, in
+    both directions. network_pipeline is the node_id-indexed 'pipeline' sheet
+    (0 = no connection, >0 = distance), network_location the 'nodes' sheet
+    (node_id index, stripped node_name). The connection matrices of the three
+    pipeline size classes are built from this matrix, and adopt_net0 only creates
+    an arc where the connection matrix is 1, so a zeroed route can never be built.
+    """
+    name_to_id = {name: node_id for node_id, name in network_location["node_name"].items()}
+    network_pipeline = network_pipeline.copy()
+    for name_a, name_b in routes:
+        missing = [name for name in (name_a, name_b) if name not in name_to_id]
+        if missing:
+            raise ValueError(f"Excluded pipeline route {name_a} - {name_b}: node(s) "
+                             f"{missing} not found in {node_metrics_file}")
+        id_a, id_b = name_to_id[name_a], name_to_id[name_b]
+        was_connected = network_pipeline.at[id_a, id_b] > 0 or network_pipeline.at[id_b, id_a] > 0
+        network_pipeline.at[id_a, id_b] = 0
+        network_pipeline.at[id_b, id_a] = 0
+        print(f"  Pipeline route removed: {name_a} <-> {name_b}"
+              f"{'' if was_connected else ' (was not connected)'}")
+    return network_pipeline
+
+
+def check_pipeline_capex(network_pipeline: pd.DataFrame, path_network_capex: Path):
+    """
+    Raises if a pipeline arc of the node_id-indexed 'pipeline' sheet has no capex
+    (gamma1 and gamma2 both 0) in a size class's
+    gamma_defined_per_arc_pipeline_{size}.xlsx: it would be free to build. This
+    happens e.g. when pipeline_capex_per_arc_calculator.py is rerun after
+    add_pipeline_arcs.py without running add_pipeline_arcs.py again.
+    """
+    arcs = [(a, b) for a in network_pipeline.index for b in network_pipeline.columns
+            if network_pipeline.at[a, b] > 0]
+    for size_class in PIPELINE_SIZE_CLASSES:
+        gamma_file = path_network_capex / f"gamma_defined_per_arc_pipeline_{size_class}.xlsx"
+        gamma1 = pd.read_excel(gamma_file, sheet_name="gamma1", index_col=0)
+        gamma2 = pd.read_excel(gamma_file, sheet_name="gamma2", index_col=0)
+        free = [(a, b) for a, b in arcs if gamma1.at[a, b] <= 0 and gamma2.at[a, b] <= 0]
+        if free:
+            raise ValueError(f"Pipeline arcs without capex in {gamma_file} (node_id from -> to): "
+                             f"{free}. Run data_process/updated_network/add_pipeline_arcs.py.")
 
 
 def add_new_technology_to_nodes(input_data_path: Path, tech_name: str, nodes: list,
@@ -729,6 +862,12 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     network_emission_flux['node_name'] = network_emission_flux['node_name'].str.strip()
 
     node_names = network_location['node_name'].unique().tolist()
+
+    # Remove the excluded pipeline routes before the size-class matrices are
+    # derived from network_pipeline (see "Add networks" below)
+    network_pipeline = remove_pipeline_routes(network_pipeline, network_location,
+                                              EXCLUDED_PIPELINE_ROUTES)
+    check_pipeline_capex(network_pipeline, path_files_network_capex)
 
     # Print all node names to spot any remaining issues
     print("All node names after stripping:")
@@ -1121,6 +1260,10 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
             f"  Enforced cement MEA-retrofit / oxyfuel-hybrid exclusivity at "
             f"{len(dual_cement_nodes)} node(s): {dual_cement_nodes}"
         )
+    for node_from, node_to, capacity, size_classes in enforce_minimum_pipeline_capacity(
+            m, MINIMUM_PIPELINE_CAPACITY_T_H):
+        print(f"  Minimum pipeline capacity {node_from} -> {node_to}: {capacity} t/h "
+              f"(sum of {size_classes})")
     if warmstart in WARMSTART_DESIGNS:
         solve_warmstart_design(m, warmstart)
     elif warmstart:

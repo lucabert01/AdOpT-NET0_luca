@@ -209,7 +209,7 @@ def convert_route_name_to_node_ids(route_name, name_to_id_mapping):
         return route_name.replace(' ', '_').replace('-', '_')[:31]
 
 
-def export_to_excel(results_dict, output_path, nodes_df=None, name_aliases=None):
+def export_to_excel(results_dict, output_path, nodes_df=None, name_aliases=None, sheet_names=None):
     """
     Export intersection results to Excel file with separate sheets for each route.
 
@@ -223,6 +223,9 @@ def export_to_excel(results_dict, output_path, nodes_df=None, name_aliases=None)
         DataFrame containing node information for creating node ID-based sheet names
     name_aliases : dict, optional
         Forwarded to create_node_name_to_id_mapping() -- see its docstring.
+    sheet_names : dict, optional
+        {route name: sheet name}. Routes in it get that sheet name instead of one
+        derived from the route name.
     """
 
     if not results_dict:
@@ -250,7 +253,9 @@ def export_to_excel(results_dict, output_path, nodes_df=None, name_aliases=None)
         for route_name, route_df in results_dict.items():
 
             # Determine sheet name
-            if name_to_id_mapping is not None:
+            if sheet_names is not None and route_name in sheet_names:
+                sheet_name = sheet_names[route_name]
+            elif name_to_id_mapping is not None:
                 # Use node IDs for sheet name
                 print(f"  Converting route to node IDs...")
                 sheet_name = convert_route_name_to_node_ids(route_name, name_to_id_mapping)
