@@ -404,9 +404,14 @@ def assign_mea_technology(network_emission_flux, path_data_case_study, co2_conce
 
     # Add column for MEA technology if it doesn't exist
     network_emission_flux['mea_technology'] = None
+    mea_col = network_emission_flux.columns.get_loc('mea_technology')
 
-    # Process each row in the network_emission_flux DataFrame
-    for idx, row in network_emission_flux.iterrows():
+    # Process each row in the network_emission_flux DataFrame. Rows are addressed by
+    # POSITION, not by index label: node_id is not unique (e.g. Piacenza hosts Waste +
+    # Cement, Ferrara hosts Waste + FertilizersCombustion + FertilizersSMR), and
+    # .at[node_id, ...] would write to every row sharing that node_id, so the last
+    # emitter processed would overwrite the MEA scale of the others.
+    for pos, (_, row) in enumerate(network_emission_flux.iterrows()):
         node_type = row['node_type']
 
         # Skip non-emitter nodes (Storage and Transport), and FertilizersSMR --
@@ -449,7 +454,7 @@ def assign_mea_technology(network_emission_flux, path_data_case_study, co2_conce
 
         # Store the suitable MEA technology in the mea_technology column
         mea_tech_path = str(path_data_case_study / f"technologies/CCSTechnologies/MEA_{suitable_mea}.json")
-        network_emission_flux.at[idx, 'mea_technology'] = mea_tech_path
+        network_emission_flux.iat[pos, mea_col] = mea_tech_path
 
     return network_emission_flux
 

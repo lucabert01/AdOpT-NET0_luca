@@ -30,7 +30,7 @@
     ],
     "capture_rate": 0.9,
     "eta" : {
-      "electricity": 0.937,
+      "electricity": 0.0937,
       "heat": -0.6068
     },
     "omega" : {
