@@ -1,0 +1,108 @@
+
+Gurobi 13.0.3 (win64) logging started Thu Nov 19 16:39:10 2026
+
+Set parameter LogFile to value "Results_CCSchainOptimization\technology_selection\20261119163905_tax250_emissions_minC_technology_selection-1\solver_log.txt"
+Set parameter TimeLimit to value 194400
+Set parameter MIPGap to value 0.015
+Set parameter MIPFocus to value 0
+Set parameter Threads to value 0
+Set parameter NodefileStart to value 60
+Set parameter Method to value -1
+Set parameter Heuristics to value 0.05
+Set parameter Presolve to value -1
+Set parameter BranchDir to value 0
+Set parameter LPWarmStart to value 0
+Set parameter IntFeasTol to value 1e-05
+Set parameter FeasibilityTol to value 1e-06
+Set parameter Cuts to value -1
+Set parameter NumericFocus to value 0
+Gurobi Optimizer version 13.0.3 build v13.0.3rc0 (win64 - Windows Server 2019.0 (17763.2))
+
+CPU model: Intel(R) Xeon(R) Silver 4210 CPU @ 2.20GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 40 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  194400
+MIPGap  0.015
+LPWarmStart  0
+NodefileStart  60
+
+Optimize a model with 1645826 rows, 1574625 columns and 3780793 nonzeros (Min)
+Model fingerprint: 0x37e5763b
+Model has 1 linear objective coefficients
+Model has 46 SOS constraints
+Variable types: 1568157 continuous, 6468 integer (6468 binary)
+Coefficient statistics:
+  Matrix range     [1e-03, 1e+08]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 3e+10]
+  RHS range        [9e-01, 4e+07]
+Warning: Model contains large bounds
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+
+User MIP start did not produce a new incumbent solution
+User MIP start violates constraint x2282327 by 81.520676348
+Processed MIP start in 2.98 seconds (0.83 work units)
+
+Presolve removed 1416824 rows and 1384070 columns
+Presolve time: 3.17s
+Presolved: 229002 rows, 190555 columns, 650222 nonzeros
+Variable types: 187144 continuous, 3411 integer (3411 binary)
+Performing another presolve...
+Presolve removed 193595 rows and 90926 columns
+Presolve time: 3.09s
+Performing another presolve...
+Presolve removed 4157 rows and 59251 columns
+Presolve time: 1.11s
+Deterministic concurrent LP optimizer: primal and dual simplex
+Showing primal log only...
+
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0   -1.0548462e+06   5.340868e+05   1.968165e+10     20s
+   35253    5.7508440e+06   4.299422e+01   1.593842e+07     20s
+   35447    5.6735270e+06   0.000000e+00   6.212015e+06     20s
+Concurrent spin time: 0.08s
+
+Solved with dual simplex
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+   13469    1.5438159e+06   0.000000e+00   0.000000e+00     20s
+
+Root relaxation: objective 1.543816e+06, 13469 iterations, 1.03 seconds (0.44 work units)
+Total elapsed time = 20.50s (DegenMoves)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 1543815.90    0   52          - 1543815.90      -     -   21s
+     0     0 1543815.90    0   57          - 1543815.90      -     -   21s
+H    0     0                    1835255.7662 1543815.90  15.9%     -   21s
+H    0     0                    1689396.3347 1543815.90  8.62%     -   21s
+H    0     0                    1619373.8752 1543815.90  4.67%     -   22s
+     0     0 1591566.13    0   50 1619373.88 1591566.13  1.72%     -   23s
+     0     0          -    0      1619373.88 1595100.79  1.50%     -   24s
+
+Cutting planes:
+  Learned: 206
+  Cover: 5
+  Implied bound: 894
+  Clique: 2
+  RLT: 1388
+  Relax-and-lift: 92
+  BQP: 2204
+  PSD: 107
+
+Explored 1 nodes (15154 simplex iterations) in 24.75 seconds (6.82 work units)
+Thread count was 32 (of 40 available processors)
+
+Solution count 3: 1.61937e+06 1.6894e+06 1.83526e+06 
+
+Optimal solution found (tolerance 1.50e-02)
+Warning: max constraint violation (1.3177e-05) exceeds tolerance
+Best objective 1.619373875230e+06, best bound 1.595100785541e+06, gap 1.4989%
