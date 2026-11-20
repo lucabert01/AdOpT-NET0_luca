@@ -212,13 +212,17 @@ SCENARIOS = [
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "emissions_minC",
      "warmstart": "tax200_costs_technology_selection"},
-    # Same cement choice, but waste is forced to calcium looping only (no MEA-retrofit
-    # alternative) -- isolates the effect of removing waste's own technology choice
-    # while keeping cement's choice active. Emissions-minimizing only (no cost/tax
-    # sweep requested for this variant).
+    # Same cement choice, but waste has no MEA-retrofit option: each waste plant
+    # either keeps running its existing WasteToEnergyEmitter UNABATED (its MEA
+    # retrofit is disabled via "ccs_retrofit_disabled", see disable_ccs_retrofit) or
+    # processes its waste in a new calcium-looping plant. Without the unabated
+    # option, CaL was forced at every waste plant even where it captured very little
+    # because the transport infrastructure was saturated. Emissions-minimizing only
+    # (no cost/tax sweep requested for this variant).
     {"name": "technology_selection_wasteCaL",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
-     "tech_for_waste": ["WasteCaL_CCS"],
+     "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
+     "ccs_retrofit_disabled": ["WasteToEnergyEmitter"],
      "objective": "emissions_minC"},
     # Same choice set as technology_selection, but the permanent storage sink must
     # inject at a near-constant rate (between 85% resp. 95% and 100% of its
@@ -250,10 +254,20 @@ SCENARIOS = [
      "warmstart_design_only": True},
 ]
 
-# Names of the SCENARIOS entries to run when the script is started without
-# command-line arguments (e.g. with the IDE's Run button). Set to None to run all
-# of SCENARIOS. Command-line arguments (`python main_italy.py <name> ...`) override it.
-RUN_SCENARIOS = None
+# SCENARIOS entries to run when the script is started without command-line
+# arguments (e.g. with the IDE's Run button). Each item is either a scenario "name"
+# (runs every entry with that name) or a case name
+# "tax{carbon_tax}_{objective}_{name}" (runs only that one entry, see scenario_case_name).
+# Set to None to run all of SCENARIOS. Command-line arguments
+# (`python main_italy.py <name or case name> ...`) override it.
+# Order of execution always follows SCENARIOS (c_inj before c_inj_min95, which
+# warm starts from it).
+RUN_SCENARIOS = [
+    "tax175_costs_technology_selection",
+    "technology_selection_wasteCaL",
+    "c_inj",
+    "c_inj_min95",
+]
 
 # Technology (filename under italy_data/technologies/) used for the temporary CO2
 # buffer storage added at a scenario's "temporary_storage_nodes"
@@ -549,6 +563,30 @@ def set_constant_injection(input_data_path: Path, injection_rate_tolerance: floa
         print(f"  Constant injection (tolerance {injection_rate_tolerance}) set in {tech_file}")
 
 
+def disable_ccs_retrofit(input_data_path: Path, tech_names: list, period: str = "period1"):
+    """
+    Disables the generic MEA retrofit (Performance.ccs.possible = 0) in every node's
+    copy of the given technologies' JSONs, so they can only run unabated. Must be
+    called after update_emitter_ccs_references, which sets possible = 1. Edits the
+    case-study copies only, so the source JSONs in italy_data stay unchanged.
+    """
+    for tech_name in tech_names:
+        tech_files = list((input_data_path / period / "node_data").glob(
+            f"*/technology_data/{tech_name}.json"
+        ))
+        if not tech_files:
+            raise FileNotFoundError(f"No {tech_name}.json found under {input_data_path}")
+        for tech_file in tech_files:
+            with open(tech_file, "r") as f:
+                tec_data = json.load(f)
+            if "ccs" not in tec_data.get("Performance", {}):
+                continue
+            tec_data["Performance"]["ccs"]["possible"] = 0
+            with open(tech_file, "w") as f:
+                json.dump(tec_data, f, indent=2)
+        print(f"  CCS retrofit disabled for {tech_name} at {len(tech_files)} node(s)")
+
+
 def _all_variables(model):
     """All variables of the model, including the GDP indicator binaries on Disjuncts."""
     return model.component_data_objects(pyo.Var, descend_into=(pyo.Block, gdp.Disjunct))
@@ -752,7 +790,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
                   injection_rate_tolerance: float = None,
                   temporary_storage_nodes: list = None,
                   warmstart: str = None, warmstart_design_only: bool = False,
-                  gurobi_parameters: dict = None):
+                  gurobi_parameters: dict = None, ccs_retrofit_disabled: list = None):
     """
     Runs the full CCS-chain data-preparation + optimization pipeline for one
     emitter-technology scenario (a choice of cement and waste technology).
@@ -795,6 +833,9 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         that run's design (see load_warmstart_values).
     :param dict gurobi_parameters: extra Gurobi parameters for this scenario, added
         on top of gurobi_extra_parameters.
+    :param list ccs_retrofit_disabled: technology names (e.g. ["WasteToEnergyEmitter"])
+        whose MEA retrofit is disabled, so they can only run unabated (see
+        disable_ccs_retrofit).
     """
     if carbon_tax is None:
         carbon_tax = default_carbon_tax
@@ -983,6 +1024,9 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
 
     # Update CCS references in emitter technologies to match determined MEA sizes
     update_emitter_ccs_references(input_data_path, network_emission_flux, technology_selection, co2_concentration_by_type)
+
+    if ccs_retrofit_disabled:
+        disable_ccs_retrofit(input_data_path, ccs_retrofit_disabled)
 
     # CementHybridCCS.json's fixed clinker capacity (Performance.size_is_fixed == 1,
     # pinning its capex to a real, unavoidable investment) is only correct when it's
@@ -1275,18 +1319,29 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
 if __name__ == "__main__":
     import sys
 
-    # Optional CLI filter: `python main_italy.py technology_selection [other_name ...]`
-    # runs only the named scenario(s). Without arguments, RUN_SCENARIOS is used
-    # (or the full SCENARIOS list if RUN_SCENARIOS is None).
+    def scenario_case_name(s):
+        tax = s.get("carbon_tax", default_carbon_tax)
+        return f"tax{tax}_{s.get('objective', 'costs')}_{s['name']}"
+
+    # Optional CLI filter: `python main_italy.py technology_selection [other ...]`
+    # runs only the named scenario(s); each argument is a scenario name or a case
+    # name (see RUN_SCENARIOS). Without arguments, RUN_SCENARIOS is used (or the
+    # full SCENARIOS list if RUN_SCENARIOS is None).
     requested_names = sys.argv[1:] or RUN_SCENARIOS
     scenarios_to_run = (
-        [s for s in SCENARIOS if s["name"] in requested_names] if requested_names else SCENARIOS
+        [s for s in SCENARIOS
+         if s["name"] in requested_names or scenario_case_name(s) in requested_names]
+        if requested_names else SCENARIOS
     )
     if requested_names:
-        missing = set(requested_names) - {s["name"] for s in scenarios_to_run}
+        known = ({s["name"] for s in SCENARIOS}
+                 | {scenario_case_name(s) for s in SCENARIOS})
+        missing = set(requested_names) - known
         if missing:
             raise ValueError(f"Unknown scenario name(s): {sorted(missing)}. "
-                              f"Available: {[s['name'] for s in SCENARIOS]}")
+                              f"Available: {sorted(known)}")
+    print("### Scenarios to run:\n  "
+          + "\n  ".join(scenario_case_name(s) for s in scenarios_to_run), flush=True)
 
     # A failing scenario (data error, solver crash, ...) is logged and skipped so
     # an unattended batch run still gets through the remaining scenarios; the
@@ -1312,6 +1367,7 @@ if __name__ == "__main__":
                 warmstart=scenario.get("warmstart"),
                 warmstart_design_only=scenario.get("warmstart_design_only", False),
                 gurobi_parameters=scenario.get("gurobi_parameters"),
+                ccs_retrofit_disabled=scenario.get("ccs_retrofit_disabled"),
             )
         except Exception:
             traceback.print_exc()
