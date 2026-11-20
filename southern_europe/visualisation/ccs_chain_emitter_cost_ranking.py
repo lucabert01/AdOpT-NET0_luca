@@ -113,6 +113,7 @@ from ccs_chain_plots import (
     is_temporary_storage,
     _load_node_sectors,
     sector_display_label,
+    load_baseline_emissions_by_emitter,
 )
 
 # ============================================================
@@ -625,6 +626,50 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
         return df, storage_node
 
 
+def add_avoided_columns(df: pd.DataFrame, h5_path: Path) -> pd.DataFrame:
+    """
+    Adds per-emitter avoided CO2 and cost per tonne avoided to a
+    build_emitter_cost_table frame:
+      - baseline_t:       the emitter's emissions before capture, from the
+                          source data (ccs_chain_plots.load_baseline_emissions_by_emitter,
+                          the same baseline as fraction_avoided)
+      - emitted_t:        CO2 the emitter still emits in this run -- annual
+                          emissions_pos summed over EVERY technology of the
+                          emitter's sector at its node (all capture candidates)
+      - avoided_annual_t: baseline_t - emitted_t
+      - total_eur_per_t_avoided: total_eur_per_t x captured / avoided, i.e.
+                          the same total chain cost per tonne avoided.
+    Captured and avoided differ when a capture technology makes extra CO2:
+    WasteCaL_CCS burns RDF in the calciner (0.336 t RDF x 1.649 tCO2/t RDF =
+    0.554 t extra CO2 per t captured, so ~0.45 t avoided per t captured), and
+    CementHybridCCS emits more per tonne of clinker than the CementEmitter
+    reference.
+    """
+    baseline = load_baseline_emissions_by_emitter()
+    base_lookup = {(n, s): e for n, s, e in baseline[["node_name", "node_type", "annual_emission"]].itertuples(index=False)}
+    with h5py.File(h5_path, "r") as f:
+        seq = f["k_means_specs"]["period1"]["sequence"][()]
+        op = f["operation"]["technology_operation"]["period1"]
+        emitted = {}
+        for node_name in op.keys():
+            for tech in op[node_name].keys():
+                if "emissions_pos" not in op[node_name][tech] or "Storage" in tech:
+                    continue
+                key = (node_name.strip(), _sector_from_tech(tech))
+                emitted[key] = emitted.get(key, 0.0) + float(op[node_name][tech]["emissions_pos"][()][seq - 1].sum())
+
+    out = df.copy()
+    keys = list(zip(out["node"].str.strip(), out["sector"]))
+    missing = [k for k in keys if k not in base_lookup]
+    if missing:
+        raise KeyError(f"No baseline emissions for emitter(s) {missing}")
+    out["baseline_t"] = [base_lookup[k] for k in keys]
+    out["emitted_t"] = [emitted.get(k, 0.0) for k in keys]
+    out["avoided_annual_t"] = out["baseline_t"] - out["emitted_t"]
+    out["total_eur_per_t_avoided"] = out["total_eur_per_t"] * out["captured_annual_t"] / out["avoided_annual_t"]
+    return out
+
+
 def has_temporary_storage(df: pd.DataFrame) -> bool:
     """True for constant_injection runs, whose total_eur_per_t includes the
     temporary storage cost (see build_emitter_cost_table)."""
@@ -696,13 +741,7 @@ def plot_emitter_cost_ranking(df: pd.DataFrame, storage_node: str):
         fontsize=14, weight="bold", color=INK_PRIMARY,
     )
 
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color(GRIDLINE)
-    ax.spines["bottom"].set_color(GRIDLINE)
-    ax.tick_params(colors=INK_SECONDARY)
-    ax.grid(axis="x", alpha=0.6, linestyle="--", linewidth=0.5, color=GRIDLINE, zorder=0)
-    ax.set_axisbelow(True)
+    style_value_axes(ax)
     # Both sit in the guaranteed bar-free right-hand padding column (see
     # set_xlim above), stacked vertically - safe regardless of which bar
     # happens to be longest for this particular run.
@@ -735,7 +774,8 @@ def sector_patch_handles(df: pd.DataFrame) -> list:
 
 
 def _draw_macc_on_ax(ax, df: pd.DataFrame, *, annotate_fertilizers: bool = True,
-                     carbon_tax: float | None = None):
+                     carbon_tax: float | None = None, alpha: float = 1.0, zorder: float = 3,
+                     width_col: str = "captured_annual_t", height_col: str = "total_eur_per_t"):
     """
     Draws the MACC bars (+ optional per-bar fertilizer callouts and CO2-tax
     reference line) onto an existing ax -- the shared core of plot_macc and
@@ -748,16 +788,21 @@ def _draw_macc_on_ax(ax, df: pd.DataFrame, *, annotate_fertilizers: bool = True,
     :param annotate_fertilizers: set False in a multi-panel grid where the
         fertilizer callout arrows would collide.
     :param carbon_tax: if given, drawn as a dashed horizontal line (€/t).
+    :param alpha, zorder: bar transparency/stacking, e.g. to draw a second,
+        lighter MACC behind the main one.
+    :param width_col, height_col: bar width (t/yr) and height (€/t) columns --
+        the default is per tonne captured; pass "avoided_annual_t" and
+        "total_eur_per_t_avoided" (see add_avoided_columns) for per tonne avoided.
     :return: legend handles (sector patches present in df, + the tax line).
     """
-    plot_df = df.sort_values("total_eur_per_t").reset_index(drop=True)
-    captured_mt = (plot_df["captured_annual_t"] / 1e6).to_numpy()
+    plot_df = df.sort_values(height_col).reset_index(drop=True)
+    captured_mt = (plot_df[width_col] / 1e6).to_numpy()
     left = np.concatenate([[0.0], np.cumsum(captured_mt)[:-1]])
-    heights = plot_df["total_eur_per_t"].to_numpy()
+    heights = plot_df[height_col].to_numpy()
 
     ax.bar(left, heights, width=captured_mt, align="edge",
            color=[SECTOR_COLORS[s] for s in plot_df["sector"]],
-           edgecolor=SURFACE, linewidth=0.3, zorder=3)
+           edgecolor=SURFACE, linewidth=0.3, alpha=alpha, zorder=zorder)
 
     legend_handles = sector_patch_handles(plot_df)
     if carbon_tax is not None:
@@ -796,12 +841,15 @@ def _draw_macc_on_ax(ax, df: pd.DataFrame, *, annotate_fertilizers: bool = True,
 
 
 def style_value_axes(ax, grid_axis: str = "y"):
-    """Recessive axes for value charts: no top/right spine, light grid behind."""
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color(fs.SPINE)
-    ax.spines["bottom"].set_color(fs.SPINE)
-    ax.grid(axis=grid_axis, linestyle="-", linewidth=0.4, color=GRIDLINE, zorder=0)
+    """Axes for value charts (MACCs, bar charts): full black box frame, no
+    grid -- same frame as the hourly figures (ccs_chain_plots.style_timeseries_axes).
+    grid_axis is kept for existing callers and ignored."""
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color("black")
+        spine.set_linewidth(0.8)
+    ax.tick_params(axis="both", colors="black", width=0.8)
+    ax.grid(False)
     ax.set_axisbelow(True)
 
 

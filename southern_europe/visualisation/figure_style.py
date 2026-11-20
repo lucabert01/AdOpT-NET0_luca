@@ -162,12 +162,13 @@ STORAGE_STYLE = dict(marker="*", facecolor="#1a1a1a", edgecolor="#ffffff", linew
 # (slug, objective, carbon_tax, panel title)
 SCENARIOS = [
     ("tax150", "costs", 150, "CO$_2$ tax 150 €/tCO$_2$"),
+    ("tax175", "costs", 175, "CO$_2$ tax 175 €/tCO$_2$"),
     ("tax200", "costs", 200, "CO$_2$ tax 200 €/tCO$_2$"),
     ("tax250", "costs", 250, "CO$_2$ tax 250 €/tCO$_2$"),
     ("emissions_minC", "emissions_minC", None, "Emissions-minimizing"),
 ]
 PANEL_LETTERS = "abcdefgh"
-SCENARIO_SHORT_LABELS = {"tax150": "150 €/tCO$_2$", "tax200": "200 €/tCO$_2$", "tax250": "250 €/tCO$_2$",
+SCENARIO_SHORT_LABELS = {"tax150": "150 €/tCO$_2$", "tax175": "175 €/tCO$_2$", "tax200": "200 €/tCO$_2$", "tax250": "250 €/tCO$_2$",
                          "emissions_minC": "Emis.-min."}
 
 # ------------------------------------------------------------------
@@ -184,6 +185,7 @@ PANEL_TITLE_SIZE = 8
 # label text
 COST_LABEL = "Cost of carbon avoided (€/tCO$_2$)"
 CAPTURED_LABEL = "Cumulative CO$_2$ captured (Mt/y)"
+AVOIDED_LABEL = "Cumulative CO$_2$ avoided (Mt/y)"
 
 
 def apply_rc():

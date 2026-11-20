@@ -1,8 +1,9 @@
 """
 Ad-hoc driver: paper figures for the "technology_selection" CO2-tax sweep in
-main_italy.py's SCENARIOS -- cost-minimizing at carbon_tax = 150/200/250
+main_italy.py's SCENARIOS -- cost-minimizing at carbon_tax = 150/175/200/250
 EUR/t plus the emissions-minimizing run (scenario order and labels:
-figure_style.SCENARIOS).
+figure_style.SCENARIOS; which of them are grid panels: MAP_PANEL_SLUGS,
+MACC_PANEL_SLUGS).
 
   network_map_tax_sweep   2x2 maps of the built network. Colour = sector,
                           shape = capture technology, marker area = the
@@ -38,6 +39,7 @@ import pandas as pd
 import ccs_chain_plots as m
 import ccs_chain_emitter_cost_ranking as cr
 import figure_style as fs
+import _plot_abatement_cost_vs_fraction as abt
 
 OUT_DIR = Path("ccs_chain_results/scenario_comparison")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -48,6 +50,27 @@ SCENARIO_NAME = "technology_selection"
 # directly comparable across scenarios. Widened automatically if any panel's
 # total capture exceeds it.
 MACC_XMAX_MT = 15
+
+# network_map_tax_sweep: scenarios (fs.SCENARIOS slugs) shown as the 2x2 map
+# panels a-d; every scenario in fs.SCENARIOS still gets its own standalone map
+MAP_PANEL_SLUGS = ["tax175", "tax200", "tax250", "emissions_minC"]
+# macc_tax_sweep: scenarios (fs.SCENARIOS slugs) shown as MACC panels a-c;
+# panel d is the cost-of-CO2-avoided scatter (_plot_abatement_cost_vs_fraction)
+MACC_PANEL_SLUGS = ["tax175", "tax200", "emissions_minC"]
+# MACC drawn light behind a panel's own MACC, {panel slug: background}:
+#  - emissions-minimizing: same choice set but every waste-to-energy plant
+#    forced to calcium looping (a separate scenario, loaded from its h5)
+#  - CO2 tax 200: the CO2 tax 250 run (one of the sweep's own panels)
+WASTE_CAL_MACC_SCENARIO = ("technology_selection_wasteCaL", "emissions_minC")
+BACKGROUND_MACC_ALPHA = 0.3
+BACKGROUND_MACC_NOTES = {"emissions_minC": "if all WtE install CaL",
+                         "tax200": "CO$_2$ tax 250 €/t"}
+# MACC bars: width = captured Mt/yr (x axis stays CO2 captured), height =
+# chain cost per tonne AVOIDED (see
+# ccs_chain_emitter_cost_ranking.add_avoided_columns), consistent with panel
+# d's cost of CO2 avoided
+MACC_WIDTH_COL = "captured_annual_t"
+MACC_HEIGHT_COL = "total_eur_per_t_avoided"
 
 # --- 2x2 map layout (inches) ---
 MAP_LEFT_IN, MAP_RIGHT_IN, MAP_COL_GAP_IN = 0.36, 0.04, 0.10
@@ -67,6 +90,7 @@ def _load_panel_data():
         built_arcs = m.attach_route_geometries(m.load_built_arcs(h5_path), nodes_gdf)
         ccs_df = m.load_ccs_status(h5_path)
         macc_df, storage_node = cr.build_emitter_cost_table(h5_path)
+        macc_df = cr.add_avoided_columns(macc_df, h5_path)
         summary = m.load_summary(h5_path)
         real_df = m.real_emitters_df(ccs_df)
         panels.append({
@@ -130,19 +154,22 @@ def _map_note(ax, panel, *, size: float = fs.PANEL_TITLE_SIZE):
 
 def plot_tax_sweep_maps(nodes_gdf, panels):
     italy = m.gpd.read_file(m.ITALY_SHP)
-    # shared scales across all panels: line width (built capacity) and marker area (emissions)
+    # shared scales across all panels (grid and standalone maps): line width
+    # (peak flow) and marker area (emissions)
     ref = m.reference_capacity(*[p["built_arcs"] for p in panels])
     e_ref = m.emission_reference(*[p["real_df"] for p in panels])
 
+    grid_panels = [{**p, "letter": letter} for letter, slug in zip(fs.PANEL_LETTERS, MAP_PANEL_SLUGS)
+                   for p in panels if p["slug"] == slug]
     fig, axes, (lx, ly, lw, lh) = _map_grid_axes()
-    for (r, c), panel in zip([(0, 0), (0, 1), (1, 0), (1, 1)], panels):
+    for (r, c), panel in zip([(0, 0), (0, 1), (1, 0), (1, 1)], grid_panels):
         ax = axes[r, c]
         m.setup_base_map(ax, italy, lon_labels=(r == 1), lat_labels=(c == 0))
         m._draw_ccs_network_on_ax(ax, panel["built_arcs"], nodes_gdf, panel["ccs_df"], ref,
                                   emission_ref_t=e_ref, s_range=m.EMITTER_S_RANGE_PANEL)
         _map_note(ax, panel, size=fs.PANEL_TITLE_SIZE - 0.5)
 
-    all_real = pd.concat([p["real_df"] for p in panels], ignore_index=True)
+    all_real = pd.concat([p["real_df"] for p in grid_panels], ignore_index=True)
     modes = set().union(*[set(p["built_arcs"]["mode"]) for p in panels])
     legend_ax = fig.add_axes([lx, ly, lw, lh])
     legend_ax.axis("off")
@@ -189,12 +216,12 @@ def _sweep_legend(lax, all_real, modes, e_ref):
 # MACCs
 # ============================================================
 def _macc_limits(panels):
-    max_capture_mt = max(p["macc_df"]["captured_annual_t"].sum() / 1e6 for p in panels)
+    max_capture_mt = max(p["macc_df"][MACC_WIDTH_COL].sum() / 1e6 for p in panels)
     if max_capture_mt > MACC_XMAX_MT:
         print(f"Warning: max capture {max_capture_mt:.2f} Mt/yr exceeds MACC_XMAX_MT={MACC_XMAX_MT}; widening x-axis")
     x_max = max(MACC_XMAX_MT, max_capture_mt)
     # shared y: tallest bar or tax line + 10% headroom, rounded up to 50 €/t
-    max_cost = max(max(p["macc_df"]["total_eur_per_t"].max(), p["carbon_tax"] or 0) for p in panels)
+    max_cost = max(max(p["macc_df"][MACC_HEIGHT_COL].max(), p["carbon_tax"] or 0) for p in panels)
     y_max = np.ceil(max_cost * 1.1 / 50) * 50
     return x_max, y_max
 
@@ -203,6 +230,7 @@ def _draw_macc_panel(ax, panel, x_max, y_max):
     """One scenario's MACC on ax: sector-coloured bars, dashed CO2-tax line
     (direct-labelled) in tax panels. Returns the legend handles."""
     handles = cr._draw_macc_on_ax(ax, panel["macc_df"], annotate_fertilizers=False,
+                                  width_col=MACC_WIDTH_COL, height_col=MACC_HEIGHT_COL,
                                   carbon_tax=panel["carbon_tax"])
     ax.set_xlim(0, x_max)
     ax.set_ylim(0, y_max)
@@ -210,35 +238,77 @@ def _draw_macc_panel(ax, panel, x_max, y_max):
     if panel["carbon_tax"] is not None:
         # left end: the cheapest bars sit far below the tax, so the label never
         # collides with a bar (the right end is where bars approach the tax)
-        ax.text(x_max * 0.012, panel["carbon_tax"] + y_max * 0.015, f"CO$_2$ tax {panel['carbon_tax']} €/tCO$_2$",
+        ax.text(x_max * 0.012, panel["carbon_tax"] + y_max * 0.015, "CO$_2$ tax",
                 ha="left", va="bottom", fontsize=fs.TICK_SIZE, color=fs.INK_PRIMARY, zorder=6,
                 bbox=dict(facecolor=fs.SURFACE, edgecolor="none", pad=0.6))
     return handles
 
 
-def plot_tax_sweep_macc(panels):
-    x_max, y_max = _macc_limits(panels)
-    fig, axes = plt.subplots(2, 2, figsize=(fs.FULL_WIDTH_IN, 4.1), sharex=True, sharey=True)
-    for ax, panel in zip(axes.flat, panels):
-        _draw_macc_panel(ax, panel, x_max, y_max)
-        _panel_title(ax, panel)
-    for ax in axes[0, :]:
-        ax.tick_params(labelbottom=False)
-    fig.supxlabel(fs.CAPTURED_LABEL, fontsize=fs.LABEL_SIZE, y=0.075)
-    fig.supylabel(fs.COST_LABEL, fontsize=fs.LABEL_SIZE, x=0.012)
+def _draw_background_macc(ax, background, note, y_max):
+    """A background scenario's MACC (see BACKGROUND_MACC_NOTES), light and
+    behind the panel's own MACC (only where it extends beyond / above the
+    main bars is it visible), with `note` pointing at its tail. Bars taller
+    than y_max are clipped by the axis limits."""
+    df = background["macc_df"]
+    cr._draw_macc_on_ax(ax, df, annotate_fertilizers=False, alpha=BACKGROUND_MACC_ALPHA, zorder=2,
+                        width_col=MACC_WIDTH_COL, height_col=MACC_HEIGHT_COL)
+    # point at the part of the curve sticking out to the right of the main MACC
+    plot_df = df.sort_values(MACC_HEIGHT_COL)
+    x_right = plot_df[MACC_WIDTH_COL].cumsum().to_numpy() / 1e6
+    x_target = x_right[-1] - 0.6
+    i = int(np.searchsorted(x_right, x_target))
+    y_target = min(plot_df[MACC_HEIGHT_COL].iloc[i], y_max)
+    ax.annotate(note,
+                xy=(x_target, y_target), xycoords="data",
+                xytext=(x_target - 2.0, y_max * 0.94), textcoords="data", ha="right", va="center",
+                fontsize=fs.TICK_SIZE, color=fs.INK_SECONDARY, zorder=6,
+                arrowprops=dict(arrowstyle="-", color=fs.INK_SECONDARY, lw=0.5, shrinkA=1, shrinkB=1))
 
-    all_macc = pd.concat([p["macc_df"] for p in panels], ignore_index=True)
+
+def plot_tax_sweep_macc(panels, backgrounds, abatement_res):
+    """2x2 grid: a/b/c = MACCs of the panels whose slug is in MACC_PANEL_SLUGS
+    (CO2 tax 175 and 200 €/t, emissions-minimizing), each with its
+    background MACC (backgrounds, {panel slug: background}) drawn light
+    behind it -- the CO2 tax 250 run behind 200, the waste-CaL-only scenario
+    behind emissions-minimizing; d = cost of CO2 avoided vs % of baseline
+    emissions avoided (_plot_abatement_cost_vs_fraction)."""
+    macc_panels = [p for slug in MACC_PANEL_SLUGS for p in panels if p["slug"] == slug]
+    # x covers the background MACCs too (they capture more); y only the panels'
+    # own MACCs -- the waste-CaL background's last few tiny emitters cost up to
+    # ~1,750 €/t and would flatten everything else, so its tail is clipped at the top
+    x_max = _macc_limits(macc_panels + list(backgrounds.values()))[0]
+    y_max = _macc_limits(macc_panels)[1]
+    fig, axes = plt.subplots(2, 2, figsize=(fs.FULL_WIDTH_IN, 4.4))
+    for letter, ax, panel in zip(fs.PANEL_LETTERS, axes.flat, macc_panels):
+        if panel["slug"] in backgrounds:
+            _draw_background_macc(ax, backgrounds[panel["slug"]], BACKGROUND_MACC_NOTES[panel["slug"]], y_max)
+        _draw_macc_panel(ax, panel, x_max, y_max)
+        _panel_title(ax, {**panel, "letter": letter})
+        ax.set_xlabel(fs.CAPTURED_LABEL)
+    axes[0, 0].set_xlabel("")
+    axes[0, 0].tick_params(labelbottom=False)   # shares its x-axis with c below
+    axes[0, 1].tick_params(labelleft=False)     # shares its y-axis with a
+    for ax in axes[:, 0]:
+        ax.set_ylabel(fs.COST_LABEL)
+
+    ax_d = axes[1, 1]
+    abt.draw_abatement_on_ax(ax_d, abatement_res)
+    _panel_title(ax_d, {"letter": fs.PANEL_LETTERS[3], "label": "Cost of CO$_2$ avoided per scenario"})
+
+    all_macc = pd.concat([p["macc_df"] for p in macc_panels + list(backgrounds.values())], ignore_index=True)
     handles = cr.sector_patch_handles(all_macc) + [
         plt.Line2D([0], [0], color=fs.INK_PRIMARY, linestyle=(0, (4, 2)), linewidth=0.8, label="CO$_2$ tax")]
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.53, 0.0), ncol=len(handles),
                frameon=False, handlelength=1.3, handletextpad=0.45, columnspacing=1.1)
-    fig.subplots_adjust(left=0.085, right=0.99, top=0.95, bottom=0.155, hspace=0.32, wspace=0.06)
+    fig.subplots_adjust(left=0.085, right=0.99, top=0.95, bottom=0.17, hspace=0.42, wspace=0.28)
     fs.save_figure(fig, OUT_DIR / "macc_tax_sweep")
     plt.close(fig)
 
     # --- one figure per scenario, same shared axis limits as the grid ---
     for panel in panels:
         fig, ax = plt.subplots(figsize=(fs.FULL_WIDTH_IN, 2.9))
+        if panel["slug"] in backgrounds:
+            _draw_background_macc(ax, backgrounds[panel["slug"]], BACKGROUND_MACC_NOTES[panel["slug"]], y_max)
         handles = _draw_macc_panel(ax, panel, x_max, y_max)
         _panel_title(ax, panel)
         ax.set_xlabel(fs.CAPTURED_LABEL)
@@ -341,10 +411,23 @@ def plot_inflow_per_scenario(panels, node_name: str = INFLOW_NODE):
         m.OUT_DIR, m.FIG_TAG = saved
 
 
+def _load_background_maccs(panels):
+    """{panel slug: MACC data drawn light behind that panel's MACC} (see
+    BACKGROUND_MACC_NOTES)."""
+    scenario_name, objective = WASTE_CAL_MACC_SCENARIO
+    h5_path = m.find_run_h5(scenario_name, objective)
+    macc_df, _ = cr.build_emitter_cost_table(h5_path)
+    macc_df = cr.add_avoided_columns(macc_df, h5_path)
+    print(f"Loaded background MACC ({scenario_name}, {objective}) <- {h5_path}")
+    tax250 = next(p for p in panels if p["slug"] == "tax250")
+    return {"emissions_minC": {"macc_df": macc_df, "carbon_tax": None},
+            "tax200": {"macc_df": tax250["macc_df"], "carbon_tax": None}}
+
+
 def main():
     nodes_gdf, panels = _load_panel_data()
     plot_tax_sweep_maps(nodes_gdf, panels)
-    plot_tax_sweep_macc(panels)
+    plot_tax_sweep_macc(panels, _load_background_maccs(panels), abt.collect())
     plot_capture_by_technology(panels)
     plot_inflow_per_scenario(panels)
 

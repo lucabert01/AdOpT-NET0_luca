@@ -616,16 +616,23 @@ def draw_storage(ax, x, y, s=STORAGE_S, zorder=25, **override):
                edgecolors=style["edgecolor"], linewidths=style["linewidth"], zorder=zorder)
 
 
-def route_linewidth(size_t_h: float, ref_capacity_t_h: float) -> float:
-    """Line width (pt) proportional to built capacity, one scale for all modes."""
-    return fs.LW_MIN + fs.LW_SPAN * size_t_h / ref_capacity_t_h
+def route_linewidth(peak_flow_t_h: float, ref_capacity_t_h: float) -> float:
+    """Line width (pt) proportional to the arc's peak hourly flow, one scale
+    for all modes. Peak flow rather than built size: a pipe built at its size
+    class's minimum (e.g. a large pipe at 450 t/h carrying 173 t/h) would
+    otherwise look wider than the arc downstream that carries its flow."""
+    return fs.LW_MIN + fs.LW_SPAN * peak_flow_t_h / ref_capacity_t_h
+
+
+# Lines at least this wide (pt) get a white arrowhead drawn inside the line.
+WIDE_ROUTE_LW = 1.6
 
 
 def draw_routes(ax, built_arcs: pd.DataFrame, name_to_point: dict, ref_capacity_t_h: float,
                 arrows: bool = True, skip_pairs=frozenset(), color: str = fs.MODE_COLOR,
                 zorder: float = 5, lw_override: float | None = None):
-    """Built arcs in neutral grey: line style = mode, width = capacity (t/h)
-    on one shared scale (ref_capacity_t_h), small arrowhead = flow direction.
+    """Built arcs in neutral grey: line style = mode, width = peak hourly flow
+    (t/h) on one shared scale (ref_capacity_t_h), small arrowhead = flow direction.
     Truck/rail first so pipelines (usually dominant) sit on top."""
     for mode in ["CO2Truck", "CO2Railway", "CO2_Pipeline"]:
         sub = built_arcs[built_arcs["mode"] == mode]
@@ -635,19 +642,25 @@ def draw_routes(ax, built_arcs: pd.DataFrame, name_to_point: dict, ref_capacity_
                 continue
             from_point = name_to_point.get(r["from"])
             coords = _oriented_coords(geom, from_point) if from_point else list(geom.coords)
-            lw = lw_override if lw_override is not None else route_linewidth(r["size"], ref_capacity_t_h)
+            lw = lw_override if lw_override is not None else route_linewidth(r["peak_flow"], ref_capacity_t_h)
             xs, ys = zip(*coords)
             ax.plot(xs, ys, color=color, linewidth=lw, linestyle=MODE_LINESTYLES[mode],
                     solid_capstyle="round", dash_capstyle="butt", zorder=zorder)
             if arrows:
-                _draw_arrow(ax, coords, color, 0.55, zorder=zorder + 0.5,
-                            mutation_scale=4.5 + 1.0 * lw, lw=0.5)
+                if lw >= WIDE_ROUTE_LW:
+                    # a dark arrowhead vanishes into a wide line: draw it
+                    # white, inside the line (head width 0.4*scale = 0.8*lw)
+                    _draw_arrow(ax, coords, "white", 0.55, zorder=zorder + 0.5,
+                                mutation_scale=2.0 * lw, lw=0.3)
+                else:
+                    _draw_arrow(ax, coords, color, 0.55, zorder=zorder + 0.5,
+                                mutation_scale=4.5 + 1.0 * lw, lw=0.5)
 
 
 def reference_capacity(*built_arcs_frames) -> float:
-    """Largest built arc capacity (t/h) across the given frames -- the line
+    """Largest arc peak hourly flow (t/h) across the given frames -- the line
     width reference, shared by all panels of one figure."""
-    sizes = [df["size"].max() for df in built_arcs_frames if len(df)]
+    sizes = [df["peak_flow"].max() for df in built_arcs_frames if len(df)]
     return float(max(sizes)) if sizes else 1.0
 
 
@@ -736,6 +749,23 @@ def load_baseline_emissions_t() -> float:
     """
     global _BASELINE_EMISSIONS_T
     if _BASELINE_EMISSIONS_T is None:
+        _BASELINE_EMISSIONS_T = float(load_baseline_emissions_by_emitter()["annual_emission"].sum())
+    return _BASELINE_EMISSIONS_T
+
+
+_BASELINE_BY_EMITTER: pd.DataFrame | None = None
+
+
+def load_baseline_emissions_by_emitter() -> pd.DataFrame:
+    """
+    Per real emitter (node_name, node_type = sector, e.g. Piacenza appears
+    twice: Cement and Waste) annual CO2 emissions (t/yr) before any capture --
+    the per-emitter breakdown of load_baseline_emissions_t (see there for
+    where the numbers come from). Columns: node_name, node_type,
+    annual_emission.
+    """
+    global _BASELINE_BY_EMITTER
+    if _BASELINE_BY_EMITTER is None:
         spec = importlib.util.spec_from_file_location("_data_process_defined_functions", _DEFINED_FUNCTIONS_PATH)
         defined_functions = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(defined_functions)
@@ -745,8 +775,8 @@ def load_baseline_emissions_t() -> float:
         nodes["node_name"] = nodes["node_name"].str.strip()
         nodes = defined_functions.calculate_annual_emission_values(nodes, path_files_grids)
         emitters = nodes[~nodes["node_type"].isin(["Transport", "Storage"])]
-        _BASELINE_EMISSIONS_T = float(emitters["annual_emission"].sum())
-    return _BASELINE_EMISSIONS_T
+        _BASELINE_BY_EMITTER = emitters[["node_name", "node_type", "annual_emission"]].reset_index(drop=True)
+    return _BASELINE_BY_EMITTER
 
 
 def fraction_avoided(emissions_pos_t: float) -> float:
@@ -858,8 +888,9 @@ def _real_emitter_rows(ccs_df: pd.DataFrame, node_name: str) -> pd.DataFrame:
 
     Uses node_metrics_paper.xlsx as ground truth (_load_node_sectors): a
     node it lists only one sector for (the common case) collapses
-    unconditionally to a single marker, keeping whichever technology has the
-    larger total_emissions as the DISPLAYED one (shape/family/tech label),
+    unconditionally to a single marker, keeping the technology that captures
+    the most CO2 (or, with no capture at all, the one with the larger
+    total_emissions) as the DISPLAYED one (shape/family/tech label),
     while installed/captured_annual/total_emissions on the returned row are
     SUMMED across every candidate that collapsed into it.
 
@@ -885,7 +916,18 @@ def _real_emitter_rows(ccs_df: pd.DataFrame, node_name: str) -> pd.DataFrame:
         return rows
 
     def _collapse(group: pd.DataFrame) -> pd.DataFrame:
-        winner = group.loc[[group["total_emissions"].idxmax()]].copy()
+        # Displayed technology = the one that actually captures (largest
+        # captured_annual among installed candidates). Picking by
+        # total_emissions instead showed e.g. Piacenza/Tavernola as MEA
+        # whenever most of the plant's output stayed on the uncaptured
+        # CementEmitter_existing route while all capture ran through
+        # CementHybridCCS. Only with no capture at all fall back to the
+        # largest emitter.
+        installed = group[group["ccs_installed"]]
+        if len(installed):
+            winner = installed.loc[[installed["captured_annual"].idxmax()]].copy()
+        else:
+            winner = group.loc[[group["total_emissions"].idxmax()]].copy()
         winner["ccs_installed"] = bool(group["ccs_installed"].any())
         winner["captured_annual"] = group["captured_annual"].sum()
         winner["total_emissions"] = group["total_emissions"].sum()
@@ -984,6 +1026,13 @@ def load_built_arcs(h5_path: Path) -> pd.DataFrame:
     clustering. Comparing the two without expanding total_flow via
     k_means_specs/sequence first makes a fully-utilized arc look like it is
     carrying a tiny fraction of a node's real output.
+
+    "peak_flow" is the largest hourly flow (t/h) on the arc. The max over the
+    clustered representative hours equals the max over the full year, since
+    the full year only repeats those hours. The maps scale line width by it.
+    "_flow_h" holds the clustered hourly flow, used only to sum parallel
+    segments hour by hour in _merge_parallel_pipeline_segments; it is
+    dropped there.
     """
     rows = []
     with h5py.File(h5_path, "r") as f:
@@ -1003,6 +1052,7 @@ def load_built_arcs(h5_path: Path) -> pd.DataFrame:
                         "size": float(g["size"][()]),
                         "total_flow": float(flow_clustered[seq - 1].sum()),
                         "capex": float(g["capex"][()]),
+                        "_flow_h": np.asarray(flow_clustered, dtype=float).ravel(),
                     }
                 )
     df = pd.DataFrame(rows)
@@ -1027,16 +1077,22 @@ def _merge_parallel_pipeline_segments(df: pd.DataFrame) -> pd.DataFrame:
     built corridor. Different modes on the same corridor (e.g. a truck route
     riding alongside a pipeline) are a separate phenomenon and are not
     merged here -- each is its own physically distinct built asset.
+
+    peak_flow of a merged corridor is the max of the hour-by-hour SUM of its
+    segments' flows (not the sum of each segment's own peak, which can fall
+    in different hours).
     """
+    cols = ["network", "mode", "from", "to", "size", "total_flow", "peak_flow", "capex"]
     if df.empty:
-        return df
+        return pd.DataFrame(columns=cols)
     merged = df.groupby(["mode", "from", "to"], as_index=False).agg(
         network=("network", lambda s: "+".join(sorted(set(s)))),
         size=("size", "sum"),
         total_flow=("total_flow", "sum"),
         capex=("capex", "sum"),
+        peak_flow=("_flow_h", lambda s: float(np.sum(np.vstack(list(s)), axis=0).max())),
     )
-    return merged[["network", "mode", "from", "to", "size", "total_flow", "capex"]]
+    return merged[cols]
 
 
 def load_ccs_status(h5_path: Path) -> pd.DataFrame:
@@ -1454,6 +1510,17 @@ def attach_route_geometries(built_arcs: pd.DataFrame, nodes_gdf: gpd.GeoDataFram
                 geom = LineString([p1, p2])
         geometries.append(geom)
 
+    # VERNASCA cement plant -> Piacenza's route deliberately ends at a tie-in on
+    # the Piacenza -> TERMOVALORIZZATORE - PAIP pipeline, not at Piacenza. When
+    # that pipeline is not built, draw a straight line to Piacenza instead.
+    paip_built = ((built_arcs["from"] == "Piacenza")
+                  & (built_arcs["to"] == "TERMOVALORIZZATORE - PAIP")
+                  & (built_arcs["mode"] == "CO2_Pipeline")).any()
+    if not paip_built:
+        for i, (_, r) in enumerate(built_arcs.iterrows()):
+            if r["mode"] == "CO2_Pipeline" and {r["from"], r["to"]} == {"VERNASCA cement plant", "Piacenza"}:
+                geometries[i] = LineString([name_to_point[r["from"]], name_to_point[r["to"]]])
+
     built_arcs = built_arcs.copy()
     built_arcs["geometry"] = geometries
     return built_arcs
@@ -1528,7 +1595,7 @@ def _draw_ccs_network_on_ax(ax, built_arcs, nodes_gdf, ccs_df, ref_capacity_t_h:
                             emission_ref_t: float | None = None, s_range=EMITTER_S_RANGE_FULL):
     """
     Draws the built CO2 transport network (neutral grey; line style = mode,
-    width scaled by built capacity, ref_capacity_t_h) and the emitters
+    width scaled by peak hourly flow, ref_capacity_t_h) and the emitters
     (sector colour x capture-technology shape, area = total annual CO2
     emissions on the emission_ref_t scale) onto an existing ax -- the shared
     core of plot_main_map and the tax-sweep panels. Pass the same
@@ -1596,7 +1663,7 @@ def plot_map_sized_by_capacity(built_arcs, nodes_gdf, ccs_df, summary,
     """Same map as plot_main_map, but each emitter's marker area scales with
     its total annual emissions (captured + vented, t/year) instead of a fixed
     radius -- the true measure of plant scale (see load_ccs_status). Route
-    width scales with each arc's built capacity, as on every map."""
+    width scales with each arc's peak hourly flow, as on every map."""
     italy = gpd.read_file(ITALY_SHP)
     nodes_unique = nodes_gdf.drop_duplicates(subset="node_name")
     name_to_point = dict(zip(nodes_unique["node_name"], nodes_unique.geometry))
@@ -1751,6 +1818,12 @@ def _input_annual_emissions(nodes: pd.DataFrame) -> pd.DataFrame:
         return calculate_annual_emission_values(nodes, path_data_case_study / "geographical_feature")
 
 
+# Legend text of the input-data (methodology) maps: one full-width map, so a
+# larger font than fs.LEGEND_SIZE keeps the legend as prominent as the one under
+# the 2x2 result maps (network_map_tax_sweep)
+INPUT_LEGEND_SIZE = 8.2
+
+
 def add_input_legend(target, sectors, *, extra_columns=(), y=1.0, widths=(0.52, 0.22, 0.26)):
     """Legend for input-data maps: Sector (colour) | [extra columns] | Infrastructure."""
     columns = [("Sector (colour)", fs.sector_handles(sectors), 2), *extra_columns,
@@ -1759,7 +1832,8 @@ def add_input_legend(target, sectors, *, extra_columns=(), y=1.0, widths=(0.52, 
     x = 0.0
     for (title, handles, ncol), w in zip(columns, widths):
         leg = fs.legend_block(target, handles, title, loc="upper left", bbox=(x, y), ncol=ncol,
-                              bbox_transform=transform)
+                              bbox_transform=transform, fontsize=INPUT_LEGEND_SIZE,
+                              title_fontsize=INPUT_LEGEND_SIZE)
         if isinstance(target, plt.Axes):
             target.add_artist(leg)
         x += w
@@ -1769,7 +1843,7 @@ def plot_emitters_by_sector(out_name: str = "italy_emitters_by_sector"):
     """Input map: every emitter (circle, sector colour), the transport hubs
     and the CO2 storage site, on the plain base map."""
     italy = gpd.read_file(ITALY_SHP)
-    fig, ax, lax = map_figure(legend_in=0.62)
+    fig, ax, lax = map_figure(legend_in=0.72)
     setup_base_map(ax, italy)
     sectors = _draw_input_nodes(ax, _load_input_nodes())
     add_input_legend(lax, sectors, widths=(0.47, 0.53))
@@ -1785,7 +1859,7 @@ def plot_emitters_by_sector_sized(out_name: str = "italy_emitters_by_sector_size
     nodes = _input_annual_emissions(_load_input_nodes())
     per_group = nodes.groupby(["node_name", "group"])["annual_emission"].sum()
     e_ref = float(per_group.max())
-    fig, ax, lax = map_figure(legend_in=0.62)
+    fig, ax, lax = map_figure(legend_in=0.72)
     setup_base_map(ax, italy)
     sectors = _draw_input_nodes(ax, nodes, emission_ref_t=e_ref)
     size_keys = fs.size_handles(e_ref, lambda v: emitter_area(v, e_ref, EMITTER_S_RANGE_FULL))
@@ -1823,7 +1897,7 @@ def plot_cost_factor_input_map(out_name: str = "italy_cost_factor_emitters_stora
     mapped (see compute_cost_factor_grid)."""
     italy = gpd.read_file(ITALY_SHP)
     fishnet_clipped = compute_cost_factor_grid(italy, category)
-    fig, ax, lax = map_figure(width_in=fs.FULL_WIDTH_IN - 0.35, legend_in=0.62)
+    fig, ax, lax = map_figure(width_in=fs.FULL_WIDTH_IN - 0.35, legend_in=0.72)
     setup_base_map(ax, italy, land=None)
     draw_cost_factor_grid(ax, fig, fishnet_clipped)
     sectors = _draw_input_nodes(ax, _load_input_nodes())
@@ -1927,9 +2001,15 @@ def plot_candidate_network_map(mode: str, size_class: str | None = None, out_nam
     matrix.index = matrix.index.astype(int)
     matrix.columns = matrix.columns.astype(int)
     pair_to_geom = _route_geometries_by_pair(mode)
+    if mode == "CO2_Pipeline":
+        # VERNASCA cement plant -> Piacenza's route ends at a tie-in on the
+        # Piacenza -> PAIP pipeline (see attach_route_geometries); a candidate
+        # map has no built trunk to tie into, so draw it to the Piacenza node.
+        name_to_id = dict(zip(nodes["node_name"].str.strip(), nodes["node_id"].astype(int)))
+        pair_to_geom.pop(frozenset((name_to_id["VERNASCA cement plant"], name_to_id["Piacenza"])), None)
     color = fs.MODE_COLOR
 
-    fig, ax, lax = map_figure(legend_in=0.62)
+    fig, ax, lax = map_figure(legend_in=0.72)
     setup_base_map(ax, italy)
 
     n_arcs, drawn_pairs = 0, set()
@@ -2221,8 +2301,24 @@ def _month_phrase(ts) -> str:
     return f"{part} {ts.strftime('%b')}"
 
 
-def plot_node_inflow(h5_path: Path, node_name: str = "Eni S.p.A Casalborsetti"):
+def daily_average(hourly: np.ndarray) -> np.ndarray:
+    """Hourly series -> each day's mean, repeated over that day's 24 hours
+    (same length as the input, so it plots on the hour-of-year axis)."""
+    n_days = len(hourly) // 24
+    means = hourly[:n_days * 24].reshape(n_days, 24).mean(axis=1)
+    return np.concatenate([np.repeat(means, 24), hourly[n_days * 24:]])
+
+
+def plot_node_inflow(h5_path: Path, node_name: str = "Eni S.p.A Casalborsetti", direction: str = "inflow",
+                     daily: bool = False):
     """
+    daily=True plots daily averages (each day's mean held over its 24 hours,
+    see daily_average) and adds "_daily" to the file name.
+
+    direction="outflow" plots the CO2 LEAVING the node instead (network_outflow),
+    against the built pipeline capacity going OUT of it ('from' column), and
+    names the files outflow_<node>.
+
     CO2 arriving at a node via the network (network_inflow on the
     CO2captured carrier balance), as an hourly profile, with the built
     inbound pipeline capacity as a dashed reference line and EVERY sustained
@@ -2240,21 +2336,24 @@ def plot_node_inflow(h5_path: Path, node_name: str = "Eni S.p.A Casalborsetti"):
         seq = f["k_means_specs"]["period1"]["sequence"][()]
         inflow_clustered = f["operation"]["energy_balance"]["period1"][node_name][
             "CO2captured"
-        ]["network_inflow"][()]
+        ][f"network_{direction}"][()]
 
     inflow_full = inflow_clustered[seq - 1]
+    if daily:
+        inflow_full = daily_average(inflow_full)
     n = len(inflow_full)
     hours = np.arange(n)
 
     built_arcs = load_built_arcs(h5_path)
     inbound_pipeline = built_arcs[
-        (built_arcs["to"] == node_name) & (built_arcs["mode"] == "CO2_Pipeline")
+        (built_arcs["to" if direction == "inflow" else "from"] == node_name)
+        & (built_arcs["mode"] == "CO2_Pipeline")
     ]
     pipeline_capacity = float(inbound_pipeline["size"].sum()) if len(inbound_pipeline) else 0.0
 
     fig, ax = plt.subplots(figsize=fs.TS_SIZE_IN)
     ax.plot(hours, inflow_full, color=fs.TS_MAIN, linewidth=0.7, drawstyle="steps-post", zorder=3,
-            label="CO$_2$ received")
+            label="CO$_2$ received" if direction == "inflow" else "CO$_2$ injected")
     y_top = max(inflow_full.max(), pipeline_capacity) * 1.2
     ax.set_ylim(0, y_top)
     ax.set_xlim(0, hours[-1])
@@ -2306,14 +2405,14 @@ def plot_node_inflow(h5_path: Path, node_name: str = "Eni S.p.A Casalborsetti"):
                                             shrinkA=0, shrinkB=2, connectionstyle="arc3,rad=0.15"),
                             zorder=6)
 
-    ax.set_ylabel("CO$_2$ received (t/h)")
+    ax.set_ylabel("CO$_2$ received (t/h)" if direction == "inflow" else "CO$_2$ injected (t/h)")
     style_timeseries_axes(ax)
     ax.legend(loc="upper right", ncol=2, frameon=False, handlelength=1.6, borderaxespad=0.3, fontsize=fs.TS_LEGEND_SIZE)
     fig.tight_layout(pad=0.3)
-    out_file = out_path(f"inflow_{node_name.replace(' ', '_').replace('.', '')}")
+    out_file = out_path(f"{direction}_{node_name.replace(' ', '_').replace('.', '')}{'_daily' if daily else ''}")
     save_figure(fig, out_file)
     plt.close(fig)
-    print(f"Inflow {node_name}: " + (", ".join(
+    print(f"{direction.capitalize()} {node_name}: " + (", ".join(
         f"~{d['mean_load']:.0%} load for {d['n_hours'] / 24:.0f} days" for d in drops) or "no flagged drop"))
 
 
