@@ -191,18 +191,24 @@ SCENARIOS = [
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
      "carbon_tax": 175},
-    # tax 250 runs before tax 200 so that tax 200 can start from its solution
+    # tax 200 runs before tax 250 so that tax 250 can start from its solution. The
+    # cold-started tax 250 run (2026-11-17) stopped at the 1.5% gap on a two-trunk
+    # layout (west trunk via Piacenza-Modena plus Rezzato->Ferrara at the 450 t/h
+    # large-class minimum), ~EUR 8M/y worse than the single Brescia-Rezzato-Ferrara
+    # trunk of tax 200 / emissions-min. The tax 200 solution is feasible at tax 250
+    # (only the tax changes), so the full solution is used as MIP start.
+    # (tax 200 itself was last run, 2026-11-18, warm-started from tax 250.)
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
-     "carbon_tax": 250},
+     "carbon_tax": 200},
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
-     "carbon_tax": 200,
-     "warmstart": "tax250_costs_technology_selection"},
+     "carbon_tax": 250,
+     "warmstart": "tax200_costs_technology_selection"},
     # Same choice set, minimizing emissions directly -- the upper bound the cost
     # sweep above approaches as carbon_tax rises. carbon_tax doesn't affect an
     # emissions-only objective, so this one run at the default level stands in
@@ -263,10 +269,8 @@ SCENARIOS = [
 # Order of execution always follows SCENARIOS (c_inj before c_inj_min95, which
 # warm starts from it).
 RUN_SCENARIOS = [
-    "tax175_costs_technology_selection",
-    "technology_selection_wasteCaL",
-    "c_inj",
-    "c_inj_min95",
+    "tax250_costs_technology_selection",
+    "tax250_emissions_minC_technology_selection",
 ]
 
 # Technology (filename under italy_data/technologies/) used for the temporary CO2

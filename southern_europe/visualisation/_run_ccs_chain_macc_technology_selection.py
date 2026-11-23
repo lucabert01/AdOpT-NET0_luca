@@ -13,6 +13,7 @@ import ccs_chain_plots as plots
 # (main_italy.py's tax sweep); leave None for scenarios that don't vary it.
 SCENARIOS = [
     ("technology_selection", "costs", 150),
+    ("technology_selection", "costs", 175),
     ("technology_selection", "costs", 200),
     ("technology_selection", "costs", 250),
     ("technology_selection", "emissions_minC", None),

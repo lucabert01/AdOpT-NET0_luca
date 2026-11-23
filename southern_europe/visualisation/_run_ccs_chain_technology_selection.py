@@ -25,6 +25,7 @@ import ccs_chain_plots as m
 # None for scenarios that don't vary carbon_tax (emissions_minC runs).
 SCENARIOS = [
     ("technology_selection", "costs", 150),
+    ("technology_selection", "costs", 175),
     ("technology_selection", "costs", 200),
     ("technology_selection", "costs", 250),
     ("technology_selection", "emissions_minC", None),

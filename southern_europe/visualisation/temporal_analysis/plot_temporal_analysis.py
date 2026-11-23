@@ -15,8 +15,9 @@ written to this folder as PNG + PDF:
                                         of the injection capacity
   buffer_storage_size                   size of the temporary CO2 buffer storage
                                         (kt CO2) for Ref / 85 % / 95 %, with
-                                        Northern Lights' buffer (8 kt) as a
-                                        dashed reference line and, above each
+                                        Northern Lights (8.9 kt) and Rotterdam
+                                        liquid CO2 terminal (44 kt) buffers as
+                                        reference lines and, above each
                                         constant-injection bar, the increase in
                                         the cost of CO2 avoided vs. Ref (EUR/t)
 
@@ -51,7 +52,11 @@ import figure_style as fs  # noqa: E402
 CARBON_TAX = 200
 INFLOW_NODE = "Eni S.p.A Casalborsetti"
 EMITTER_NODE = "SILLA 2"
-NORTHERN_LIGHTS_BUFFER_KT = 8.0
+# Existing CO2 buffer storages drawn as reference lines: (label, kt CO2, line style)
+REFERENCE_BUFFERS_KT = [
+    ("Northern Lights", 8.9, (0, (4, 2))),
+    ("Rotterdam liquid CO$_2$\nterminal", 44.0, (0, (1.2, 1.2))),
+]
 
 # (key, scenario_name, legend/bar label, line style)
 CASES = [
@@ -142,7 +147,7 @@ def plot_inflow_comparison(h5_paths: dict):
 
 
 def plot_buffer_storage(h5_paths: dict):
-    """Buffer storage size per case, Northern Lights reference, and the
+    """Buffer storage size per case, existing-buffer reference lines, and the
     increase in cost of CO2 avoided vs. Ref above each constant-injection bar."""
     labels = [label for _, _, label, _ in CASES]
     sizes = {k: buffer_size_kt(p) if p is not None else None for k, p in h5_paths.items()}
@@ -154,7 +159,7 @@ def plot_buffer_storage(h5_paths: dict):
     fig, ax = plt.subplots(figsize=fs.TS_SIZE_IN)
     x = np.arange(len(CASES))
     known = [v for v in sizes.values() if v is not None]
-    y_top = max(known + [NORTHERN_LIGHTS_BUFFER_KT]) * 1.35
+    y_top = max(known + [kt for _, kt, _ in REFERENCE_BUFFERS_KT]) * 1.35
     for i, (key, _, _, _) in enumerate(CASES):
         if sizes[key] is None:
             ax.bar(x[i], y_top * 0.25, width=0.55, facecolor="none", edgecolor=fs.INK_MUTED,
@@ -174,9 +179,10 @@ def plot_buffer_storage(h5_paths: dict):
             ax.text(x[i] + 0.06, base + y_top * 0.06, f"{delta:+.1f} €/t", ha="left", va="center",
                     fontsize=fs.TS_ANNOT_SIZE, color=fs.INK_PRIMARY)
 
-    ax.axhline(NORTHERN_LIGHTS_BUFFER_KT, color=fs.TS_REFERENCE, linewidth=0.8, linestyle=(0, (4, 2)), zorder=4)
-    ax.text(-0.55, NORTHERN_LIGHTS_BUFFER_KT + y_top * 0.01, "Northern Lights (8 kt)", ha="left", va="bottom",
-            fontsize=fs.TS_ANNOT_SIZE, color=fs.INK_PRIMARY)
+    for name, kt, ls in REFERENCE_BUFFERS_KT:
+        ax.axhline(kt, color=fs.TS_REFERENCE, linewidth=0.8, linestyle=ls, zorder=4)
+        ax.text(-0.55, kt + y_top * 0.01, f"{name} ({kt:g} kt)", ha="left", va="bottom",
+                fontsize=fs.TS_ANNOT_SIZE, color=fs.INK_PRIMARY)
     ax.set_xticks(x, labels)
     ax.set_xlim(-0.6, len(CASES) - 0.4)
     ax.set_ylim(0, y_top)
