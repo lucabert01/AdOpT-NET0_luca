@@ -7,7 +7,7 @@
 #
 # Usage (from southern_europe\, with the project's Python environment active):
 #   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1
-#   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1 -MaxParallel 3 -Threads 12
+#   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1 -MaxParallel 2 -Threads 8
 #   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1 -MaxParallel 1 -Cases tax175_costs_technology_selection,tax200_costs_c_inj
 #   (several cases: comma-separated, no spaces)
 #
@@ -18,8 +18,8 @@
 # Output: logs\<case>.log (and <case>.err.log); the queue's own messages,
 # including each case's peak memory, go to logs\queue.log.
 param(
-    [int]$MaxParallel = 2,
-    [int]$Threads = 16,
+    [int]$MaxParallel = 4,
+    [int]$Threads = 4,
     [string]$Python = "python",
     [int]$StaggerSeconds = 120,
     [string[]]$Cases = @(

@@ -6,7 +6,7 @@
 # by the time it starts, it may pick up the new c_inj run's design).
 #
 # Usage (from southern_europe/, in the Python environment of the project):
-#   bash run_parallel.sh                                  # 2 at a time, 16 threads each
+#   bash run_parallel.sh                                  # 4 at a time, 4 threads each
 #   MAX_PARALLEL=3 THREADS=12 bash run_parallel.sh
 #   MAX_PARALLEL=1 bash run_parallel.sh tax175_costs_technology_selection
 #
@@ -20,8 +20,8 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-MAX_PARALLEL="${MAX_PARALLEL:-2}"
-THREADS="${THREADS:-16}"
+MAX_PARALLEL="${MAX_PARALLEL:-4}"
+THREADS="${THREADS:-4}"
 PYTHON="${PYTHON:-python}"
 CASES=("$@")
 if [ ${#CASES[@]} -eq 0 ]; then
