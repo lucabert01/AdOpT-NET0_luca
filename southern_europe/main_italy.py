@@ -140,9 +140,9 @@ REFERENCE_EMITTER_TECHNOLOGIES = {
 }
 
 #----- Multi-run scenario matrix -----#
-# Each entry's "name" becomes both the case-study working folder
-# (Italy_CaseStudy/<name>) and the results folder
-# (Results_CCSchainOptimization/<name>).
+# Each entry's "name" becomes the results folder
+# (Results_CCSchainOptimization/<name>); the case-study working folder is per case
+# (Italy_CaseStudy/tax{carbon_tax}_{objective}_{name}).
 #
 # NOTE: entries below are matched by FILENAME (via find_technology_file), not by the
 # JSON's own "tec_type" field -- for CementHybridCCS those happen to be the same
@@ -252,9 +252,10 @@ SCENARIOS = [
      "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"],
      "warmstart": "tax200_costs_c_inj",
      "warmstart_design_only": True},
-    # c_inj_min95 (95% minimum) has no earlier run of its own: it runs after c_inj
-    # and starts from the design of that (new) run. Its operation (85% band) does
-    # not fit the narrower band.
+    # c_inj_min95 (95% minimum) has no earlier run of its own: it starts from the
+    # design of the latest finished c_inj run -- the old one when all cases are
+    # started at once (run_parallel.sh), the new one when run after c_inj in
+    # sequence. The c_inj operation (85% band) does not fit the narrower band.
     {"name": "c_inj_min95",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
@@ -286,6 +287,11 @@ PERMANENT_STORAGE_TECHNOLOGY = "PermanentStorage_CO2_simple"
 # Further Gurobi parameters passed straight to the solver for every scenario (any
 # name from the Gurobi parameter documentation), e.g. {"Symmetry": 2, "DegenMoves": 0}
 gurobi_extra_parameters = {}
+# Number of Gurobi threads, from the GUROBI_THREADS environment variable (set by
+# run_parallel.sh when several cases run at once on the server). Unset: Gurobi's
+# default (up to 32 threads on the 40-core server).
+if os.environ.get("GUROBI_THREADS"):
+    gurobi_extra_parameters["Threads"] = int(os.environ["GUROBI_THREADS"])
 
 # Technology designs a scenario's fixed-design warm start can use (see
 # fix_warmstart_design): capture route for cement ("oxyfuel" hybrid or "mea"
@@ -802,7 +808,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     Runs the full CCS-chain data-preparation + optimization pipeline for one
     emitter-technology scenario (a choice of cement and waste technology).
 
-    Writes its case-study input data to Italy_CaseStudy/<scenario_name>/ and its
+    Writes its case-study input data to Italy_CaseStudy/<case name>/ and its
     results to Results_CCSchainOptimization/<scenario_name>/, so multiple scenarios
     can be run back to back without overwriting each other. Several scenarios may
     share the same scenario_name but differ in objective and/or carbon_tax (see
@@ -884,7 +890,10 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     result_path = f"./Results_CCSchainOptimization/{scenario_name}"
     Path(result_path).mkdir(parents=True, exist_ok=True)
     # Create input data path and optimisation templates
-    input_data_path = Path("Italy_CaseStudy") / scenario_name
+    # One folder per case (not per scenario name): the tax levels and objectives of
+    # one scenario name can then run in parallel without overwriting each other's
+    # input data.
+    input_data_path = Path("Italy_CaseStudy") / f"tax{carbon_tax}_{objective}_{scenario_name}"
     input_data_path.mkdir(parents=True, exist_ok=True)
     adopt.create_optimization_templates(input_data_path)
 
