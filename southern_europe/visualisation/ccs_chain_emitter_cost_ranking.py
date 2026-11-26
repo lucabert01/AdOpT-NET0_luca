@@ -626,6 +626,23 @@ def build_emitter_cost_table(h5_path: Path) -> tuple[pd.DataFrame, str]:
         return df, storage_node
 
 
+def emitted_by_emitter(h5_path: Path) -> dict:
+    """{(node, sector): annual CO2 still emitted (t/yr)} for every emitter in
+    the run -- emissions_pos summed over EVERY technology of the sector at
+    the node (all capture candidates), storage excluded."""
+    with h5py.File(h5_path, "r") as f:
+        seq = f["k_means_specs"]["period1"]["sequence"][()]
+        op = f["operation"]["technology_operation"]["period1"]
+        emitted = {}
+        for node_name in op.keys():
+            for tech in op[node_name].keys():
+                if "emissions_pos" not in op[node_name][tech] or "Storage" in tech:
+                    continue
+                key = (node_name.strip(), _sector_from_tech(tech))
+                emitted[key] = emitted.get(key, 0.0) + float(op[node_name][tech]["emissions_pos"][()][seq - 1].sum())
+    return emitted
+
+
 def add_avoided_columns(df: pd.DataFrame, h5_path: Path) -> pd.DataFrame:
     """
     Adds per-emitter avoided CO2 and cost per tonne avoided to a
@@ -647,16 +664,7 @@ def add_avoided_columns(df: pd.DataFrame, h5_path: Path) -> pd.DataFrame:
     """
     baseline = load_baseline_emissions_by_emitter()
     base_lookup = {(n, s): e for n, s, e in baseline[["node_name", "node_type", "annual_emission"]].itertuples(index=False)}
-    with h5py.File(h5_path, "r") as f:
-        seq = f["k_means_specs"]["period1"]["sequence"][()]
-        op = f["operation"]["technology_operation"]["period1"]
-        emitted = {}
-        for node_name in op.keys():
-            for tech in op[node_name].keys():
-                if "emissions_pos" not in op[node_name][tech] or "Storage" in tech:
-                    continue
-                key = (node_name.strip(), _sector_from_tech(tech))
-                emitted[key] = emitted.get(key, 0.0) + float(op[node_name][tech]["emissions_pos"][()][seq - 1].sum())
+    emitted = emitted_by_emitter(h5_path)
 
     out = df.copy()
     keys = list(zip(out["node"].str.strip(), out["sector"]))

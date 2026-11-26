@@ -599,7 +599,7 @@ def update_emitter_ccs_references(input_data_path, network_emission_flux, techno
                     tech_file_path = input_data_path / period / "node_data" / node / "technology_data" / f"{emitter_tech_name}.json"
 
                     if not tech_file_path.exists():
-                        print(f"  ❌ Technology file not found: {tech_file_path}")
+                        print(f"  Technology file not found: {tech_file_path}")
                         continue
 
                     # Read the technology file
@@ -609,7 +609,7 @@ def update_emitter_ccs_references(input_data_path, network_emission_flux, techno
                     # Technologies without a pre-existing "ccs" block (e.g. CementHybridCCS)
                     # manage their own capture internally -- don't force one onto them.
                     if "Performance" not in tech_data or "ccs" not in tech_data["Performance"]:
-                        print(f"  ⏭️  Skipped {emitter_tech_name} at {node} (no generic CCS retrofit block)")
+                        print(f"  Skipped {emitter_tech_name} at {node} (no generic CCS retrofit block)")
                         continue
 
                     # Update the CCS section with the determined MEA technology
@@ -624,7 +624,7 @@ def update_emitter_ccs_references(input_data_path, network_emission_flux, techno
                     with open(tech_file_path, 'w') as f:
                         json.dump(tech_data, f, indent=2)
 
-                    print(f"  ✅ Updated {emitter_tech_name} at {node} to use CCS: {mea_tech_name}")
+                    print(f"  Updated {emitter_tech_name} at {node} to use CCS: {mea_tech_name}")
 
     print("CCS reference updates completed.")
 
@@ -692,17 +692,17 @@ def load_sector_reference_values(path_files_technologies, reference_technologies
                 found.append((tech_name, value))
 
         if not found:
-            print(f"  ⚠️  Sector '{node_type}': no selected technology ({tech_names}) defines "
+            print(f"  Sector '{node_type}': no selected technology ({tech_names}) defines "
                   f"{field_label} -- omitted, caller's own default will apply")
             continue
 
         distinct_values = {v for _, v in found}
         if len(distinct_values) > 1:
-            print(f"  ⚠️  Sector '{node_type}': selected technologies disagree on {field_label}: "
+            print(f"  Sector '{node_type}': selected technologies disagree on {field_label}: "
                   f"{found} -- using {found[0][1]} (from {found[0][0]})")
 
         values[node_type] = found[0][1]
-        print(f"  ✅ Sector '{node_type}': {field_label} = {found[0][1]} (from {found[0][0]})")
+        print(f"  Sector '{node_type}': {field_label} = {found[0][1]} (from {found[0][0]})")
 
     return values
 
@@ -765,7 +765,7 @@ def update_cement_hybrid_ccs_capacities(input_data_path, network_emission_flux, 
                 input_data_path / period / "node_data" / node_name / "technology_data" / f"{tech_name}.json"
             )
             if not tech_file_path.exists():
-                print(f"  ⏭️  Skipped {node_name} ({tech_name}.json not selected/copied at this node)")
+                print(f"  Skipped {node_name} ({tech_name}.json not selected/copied at this node)")
                 continue
 
             with open(tech_file_path, "r") as f:
@@ -786,7 +786,7 @@ def update_cement_hybrid_ccs_capacities(input_data_path, network_emission_flux, 
             bp_x_oxy = tech_data["Economics"]["piecewise_capex"]["bp_x"]
             if prod_capacity_clinker > max(bp_x_oxy):
                 print(
-                    f"  ⚠️  {node_name}: prod_capacity_clinker={prod_capacity_clinker} t/h exceeds the "
+                    f"  {node_name}: prod_capacity_clinker={prod_capacity_clinker} t/h exceeds the "
                     f"oxyfuel piecewise capex curve's highest breakpoint ({max(bp_x_oxy)} t/h) -- capex "
                     f"for this node will be flat-extrapolated (underestimated) via np.interp. Consider "
                     f"extending cement_sheet.xlsx's capex_cpu_oxyfuel breakpoints."
@@ -797,7 +797,7 @@ def update_cement_hybrid_ccs_capacities(input_data_path, network_emission_flux, 
             with open(tech_file_path, "w") as f:
                 json.dump(tech_data, f, indent=2)
 
-            print(f"  ✅ {node_name}: prod_capacity_clinker = {prod_capacity_clinker} t/h")
+            print(f"  {node_name}: prod_capacity_clinker = {prod_capacity_clinker} t/h")
 
     print(f"{tech_name} capacity updates completed.")
 
@@ -859,7 +859,7 @@ def update_wastecal_ccs_capacities(input_data_path, network_emission_flux, tech_
                 input_data_path / period / "node_data" / node_name / "technology_data" / f"{tech_name}.json"
             )
             if not tech_file_path.exists():
-                print(f"  ⏭️  Skipped {node_name} ({tech_name}.json not selected/copied at this node)")
+                print(f"  Skipped {node_name} ({tech_name}.json not selected/copied at this node)")
                 continue
 
             with open(tech_file_path, "r") as f:
@@ -882,7 +882,7 @@ def update_wastecal_ccs_capacities(input_data_path, network_emission_flux, tech_
             with open(tech_file_path, "w") as f:
                 json.dump(tech_data, f, indent=2)
 
-            print(f"  ✅ {node_name}: prod_capacity_wte = {prod_capacity_wte} t/h")
+            print(f"  {node_name}: prod_capacity_wte = {prod_capacity_wte} t/h")
 
     print(f"{tech_name} capacity updates completed.")
 
@@ -946,7 +946,7 @@ def free_cement_hybrid_ccs_sizing(input_data_path, tech_name="CementHybridCCS"):
             with open(tech_file_path, "w") as f:
                 json.dump(tech_data, f, indent=2)
 
-            print(f"  ✅ {node_name}: {tech_name} Performance.size_is_fixed = 0 (free var_size, 0-"
+            print(f"  {node_name}: {tech_name} Performance.size_is_fixed = 0 (free var_size, 0-"
                   f"{tech_data.get('size_max')} t/h)")
 
     print(f"{tech_name} free-sizing update completed.")
@@ -968,9 +968,9 @@ def update_network_distance_matrix(input_data_path, network_data_dict, network_t
     template_distance = pd.read_csv(input_data_path / "period1" / "network_topology" / "new" / "distance.csv",
                                     sep=";", index_col=0)
 
-    print(f"🔍 DEBUG: Template distance matrix shape: {template_distance.shape}")
-    print(f"🔍 DEBUG: Template distance matrix columns: {list(template_distance.columns)}")
-    print(f"🔍 DEBUG: Template distance matrix index: {list(template_distance.index)}")
+    print(f"DEBUG: Template distance matrix shape: {template_distance.shape}")
+    print(f"DEBUG: Template distance matrix columns: {list(template_distance.columns)}")
+    print(f"DEBUG: Template distance matrix index: {list(template_distance.index)}")
 
     # Process each network type with its corresponding data
     for network_type in network_types:
@@ -991,9 +991,9 @@ def update_network_distance_matrix(input_data_path, network_data_dict, network_t
             print(f"Warning: No data found for network type {network_type}")
             continue
 
-        print(f"🔍 DEBUG: Processing {network_type} - Network data shape: {network_data.shape}")
-        print(f"🔍 DEBUG: Network data columns: {list(network_data.columns)}")
-        print(f"🔍 DEBUG: Network data index: {list(network_data.index)}")
+        print(f"DEBUG: Processing {network_type} - Network data shape: {network_data.shape}")
+        print(f"DEBUG: Network data columns: {list(network_data.columns)}")
+        print(f"DEBUG: Network data index: {list(network_data.index)}")
 
         # Create updated distance matrix
         updated_distance = template_distance.copy()
@@ -1001,7 +1001,7 @@ def update_network_distance_matrix(input_data_path, network_data_dict, network_t
         # FIXED: Ensure proper data alignment and matrix format
         # Check if dimensions match
         if template_distance.shape != network_data.shape:
-            print(f"❌ WARNING: Shape mismatch for {network_type}")
+            print(f"WARNING: Shape mismatch for {network_type}")
             print(f"  Template shape: {template_distance.shape}")
             print(f"  Network data shape: {network_data.shape}")
 
@@ -1011,10 +1011,10 @@ def update_network_distance_matrix(input_data_path, network_data_dict, network_t
                 network_data_aligned = network_data.reindex(index=template_distance.index,
                                                             columns=template_distance.columns,
                                                             fill_value=0.0)
-                print(f"  ✅ Successfully aligned network data for {network_type}")
+                print(f"  Successfully aligned network data for {network_type}")
                 network_data = network_data_aligned
             except Exception as e:
-                print(f"  ❌ Failed to align network data for {network_type}: {e}")
+                print(f"  Failed to align network data for {network_type}: {e}")
                 continue
 
         # Ensure all values are numeric and handle any string/object types
@@ -1031,13 +1031,13 @@ def update_network_distance_matrix(input_data_path, network_data_dict, network_t
 
             # FIXED: Ensure matrix has proper minimum dimensions (at least 1x1)
             if updated_distance.empty or updated_distance.shape[0] == 0 or updated_distance.shape[1] == 0:
-                print(f"❌ Error: Empty matrix for {network_type}")
+                print(f"Error: Empty matrix for {network_type}")
                 continue
 
-            print(f"✅ Successfully processed distance matrix for {network_type}: shape {updated_distance.shape}")
+            print(f"Successfully processed distance matrix for {network_type}: shape {updated_distance.shape}")
 
         except Exception as e:
-            print(f"❌ Error processing distance matrix for {network_type}: {e}")
+            print(f"Error processing distance matrix for {network_type}: {e}")
             continue
 
         # Save the updated distance matrix to the specific network type folder
@@ -1047,9 +1047,9 @@ def update_network_distance_matrix(input_data_path, network_data_dict, network_t
         try:
             updated_distance.to_csv(output_path, sep=";", float_format=f'%.{decimal_places}f',
                                     lineterminator='\n', encoding='utf-8')
-            print(f"✅ Successfully saved distance matrix for {network_type} to {output_path}")
+            print(f"Successfully saved distance matrix for {network_type} to {output_path}")
         except Exception as e:
-            print(f"❌ Error saving distance matrix for {network_type}: {e}")
+            print(f"Error saving distance matrix for {network_type}: {e}")
             continue
 
     return True
@@ -1099,7 +1099,7 @@ def load_pipeline_class_connection_matrix(overrides_path, size_class, base_pipel
         mask_df.index = mask_df.index.astype(int)
         mask_df.columns = mask_df.columns.astype(int)
     except Exception as e:
-        print(f"⚠️  Could not read pipeline class connection overrides for '{size_class}': {e}")
+        print(f"Could not read pipeline class connection overrides for '{size_class}': {e}")
         return result
 
     mask_aligned = mask_df.reindex(index=result.index, columns=result.columns, fill_value=1).fillna(1)
@@ -1109,7 +1109,7 @@ def load_pipeline_class_connection_matrix(overrides_path, size_class, base_pipel
         values = result.values.astype(float)
         values[disabled] = 0.0
         result.iloc[:, :] = values
-        print(f"🖊️  Pipeline class '{size_class}': {n_disabled} arc(s) disabled via connection overrides")
+        print(f"Pipeline class '{size_class}': {n_disabled} arc(s) disabled via connection overrides")
 
     return result
 
@@ -1129,7 +1129,7 @@ def update_network_connection_matrix(input_data_path, network_data_dict):
     template_connection = pd.read_csv(input_data_path / "period1" / "network_topology" / "new" / "connection.csv",
                                       sep=";", index_col=0)
 
-    print(f"🔍 DEBUG: Template connection matrix shape: {template_connection.shape}")
+    print(f"DEBUG: Template connection matrix shape: {template_connection.shape}")
 
     # Mapping from network data keys to network type folders. The three
     # pipeline size classes each get their own data key ('pipeline_small' /
@@ -1154,7 +1154,7 @@ def update_network_connection_matrix(input_data_path, network_data_dict):
             continue
 
         network_data = network_data_dict[data_key]
-        print(f"🔍 DEBUG: Processing connection matrix for {network_type}")
+        print(f"DEBUG: Processing connection matrix for {network_type}")
 
         # Create updated connection matrix for this network type
         updated_connection = template_connection.copy()
@@ -1163,7 +1163,7 @@ def update_network_connection_matrix(input_data_path, network_data_dict):
         try:
             # Check if dimensions match
             if template_connection.shape != network_data.shape:
-                print(f"❌ WARNING: Shape mismatch for {network_type} connection matrix")
+                print(f"WARNING: Shape mismatch for {network_type} connection matrix")
                 # Try to align the data
                 network_data_aligned = network_data.reindex(index=template_connection.index,
                                                             columns=template_connection.columns,
@@ -1178,13 +1178,13 @@ def update_network_connection_matrix(input_data_path, network_data_dict):
 
             # FIXED: Ensure matrix has proper minimum dimensions
             if updated_connection.empty or updated_connection.shape[0] == 0 or updated_connection.shape[1] == 0:
-                print(f"❌ Error: Empty connection matrix for {network_type}")
+                print(f"Error: Empty connection matrix for {network_type}")
                 continue
 
-            print(f"✅ Successfully processed connection matrix for {network_type}: shape {updated_connection.shape}")
+            print(f"Successfully processed connection matrix for {network_type}: shape {updated_connection.shape}")
 
         except Exception as e:
-            print(f"❌ Error processing connection matrix for {network_type}: {e}")
+            print(f"Error processing connection matrix for {network_type}: {e}")
             continue
 
         # Save the updated connection matrix to the specific network type folder
@@ -1194,9 +1194,9 @@ def update_network_connection_matrix(input_data_path, network_data_dict):
         # FIXED: Ensure proper CSV formatting
         try:
             updated_connection.to_csv(output_path, sep=";", lineterminator='\n', encoding='utf-8')
-            print(f"✅ Successfully saved connection matrix for {network_type} to {output_path}")
+            print(f"Successfully saved connection matrix for {network_type} to {output_path}")
         except Exception as e:
-            print(f"❌ Error saving connection matrix for {network_type}: {e}")
+            print(f"Error saving connection matrix for {network_type}: {e}")
             continue
 
     return True
@@ -1229,7 +1229,7 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
     template_size_max = pd.read_csv(input_data_path / "period1" / "network_topology" / "new" / "size_max_arcs.csv",
                                     sep=";", index_col=0)
 
-    print(f"🔍 PREDEFINED Network sizing:")
+    print(f"PREDEFINED Network sizing:")
     print(f"  Default transport capacity: {max_transport_capacity:.2f} tonnes/hour")
     if per_network_type_capacity:
         print(f"  Per-network-type overrides: {per_network_type_capacity}")
@@ -1257,7 +1257,7 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
         network_capacity = per_network_type_capacity.get(network_type, max_transport_capacity)
         network_data = network_data_dict[data_key]
 
-        print(f"🔍 Processing {network_type} with capacity {network_capacity:.2f} tonnes/hour")
+        print(f"Processing {network_type} with capacity {network_capacity:.2f} tonnes/hour")
 
         # Create updated size_max_arcs matrix for this network type
         updated_size_max = template_size_max.copy()
@@ -1265,7 +1265,7 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
         try:
             # Ensure proper data alignment
             if template_size_max.shape != network_data.shape:
-                print(f"❌ WARNING: Shape mismatch for {network_type} size_max matrix")
+                print(f"WARNING: Shape mismatch for {network_type} size_max matrix")
                 network_data_aligned = network_data.reindex(index=template_size_max.index,
                                                             columns=template_size_max.columns,
                                                             fill_value=0.0)
@@ -1290,13 +1290,13 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
 
             # Ensure matrix has proper minimum dimensions
             if updated_size_max.empty or updated_size_max.shape[0] == 0 or updated_size_max.shape[1] == 0:
-                print(f"❌ Error: Empty size_max matrix for {network_type}")
+                print(f"Error: Empty size_max matrix for {network_type}")
                 continue
 
-            print(f"✅ Successfully processed size_max matrix for {network_type}: shape {updated_size_max.shape}")
+            print(f"Successfully processed size_max matrix for {network_type}: shape {updated_size_max.shape}")
 
         except Exception as e:
-            print(f"❌ Error processing size_max matrix for {network_type}: {e}")
+            print(f"Error processing size_max matrix for {network_type}: {e}")
             continue
 
         # Save the updated size_max_arcs matrix to the specific network type folder
@@ -1306,12 +1306,12 @@ def update_network_size_max_arcs(input_data_path, network_data_dict, max_transpo
         try:
             updated_size_max.to_csv(output_path, sep=";", float_format='%.2f',
                                     lineterminator='\n', encoding='utf-8')
-            print(f"✅ Successfully saved size_max matrix for {network_type} to {output_path}")
+            print(f"Successfully saved size_max matrix for {network_type} to {output_path}")
         except Exception as e:
-            print(f"❌ Error saving size_max matrix for {network_type}: {e}")
+            print(f"Error saving size_max matrix for {network_type}: {e}")
             continue
 
-    print(f"\n✅ Network sizing complete (default {max_transport_capacity:.2f} t/h"
+    print(f"\nNetwork sizing complete (default {max_transport_capacity:.2f} t/h"
           f"{', per-type overrides: ' + str(per_network_type_capacity) if per_network_type_capacity else ''})")
 
     return True
@@ -1595,9 +1595,9 @@ def process_gamma_sheets_to_csv(path_files_network_capex, input_data_path, netwo
             gamma_df.index = new_index
 
             if missing_node_ids_cols:
-                print(f"  ⚠️  Warning: Could not map these column node_ids: {missing_node_ids_cols}")
+                print(f"  Warning: Could not map these column node_ids: {missing_node_ids_cols}")
             if missing_node_ids_idx:
-                print(f"  ⚠️  Warning: Could not map these index node_ids: {missing_node_ids_idx}")
+                print(f"  Warning: Could not map these index node_ids: {missing_node_ids_idx}")
 
             print(f"  Mapped columns (node_names): {list(gamma_df.columns)}")
             print(f"  Mapped index (node_names): {list(gamma_df.index)}")
@@ -1610,12 +1610,12 @@ def process_gamma_sheets_to_csv(path_files_network_capex, input_data_path, netwo
             missing_idx = expected_nodes - gamma_nodes_idx
 
             if missing_cols:
-                print(f"  ❌ Warning: Missing nodes in {sheet_name} columns: {missing_cols}")
+                print(f"  Warning: Missing nodes in {sheet_name} columns: {missing_cols}")
             if missing_idx:
-                print(f"  ❌ Warning: Missing nodes in {sheet_name} index: {missing_idx}")
+                print(f"  Warning: Missing nodes in {sheet_name} index: {missing_idx}")
 
             if not missing_cols and not missing_idx:
-                print(f"  ✅ All topology nodes found in {sheet_name}")
+                print(f"  All topology nodes found in {sheet_name}")
 
             # Store in dictionary
             gamma_data_dict[sheet_name] = gamma_df
@@ -1630,10 +1630,10 @@ def process_gamma_sheets_to_csv(path_files_network_capex, input_data_path, netwo
             # Use float_format to ensure 4 decimal places are shown
             gamma_df_formatted.to_csv(csv_output_path, sep=";", float_format="%.4f")
 
-            print(f"✅ Successfully processed {sheet_name}: {gamma_df.shape} -> {csv_output_path}")
+            print(f"Successfully processed {sheet_name}: {gamma_df.shape} -> {csv_output_path}")
 
         except Exception as e:
-            print(f"❌ Error processing sheet '{sheet_name}': {e}")
+            print(f"Error processing sheet '{sheet_name}': {e}")
             continue
 
     # Summary
@@ -1677,9 +1677,9 @@ def process_all_transport_modes_gamma(path_files_network_capex, input_data_path,
 
         if gamma_data is not None:
             all_gamma_data[mode] = gamma_data
-            print(f"✅ {mode.upper()} gamma processing completed successfully")
+            print(f"{mode.upper()} gamma processing completed successfully")
         else:
-            print(f"❌ {mode.upper()} gamma processing failed")
+            print(f"{mode.upper()} gamma processing failed")
 
     print(f"\n{'=' * 80}")
     print("SUMMARY OF ALL TRANSPORT MODES")
@@ -1782,7 +1782,7 @@ def load_climate_data_from_api_robust(folder_path: str | Path, dataset: str = "J
     print(f"Successfully processed {len(successful_nodes)} nodes: {successful_nodes}")
     if offshore_nodes:
         print(f"Failed to process {len(failed_nodes)} nodes: {failed_nodes}")
-        print(f"\n💡 Offshore nodes detected: {offshore_nodes}")
+        print(f"\nOffshore nodes detected: {offshore_nodes}")
         print(f"   This is expected behavior for offshore locations.")
         print(f"   The optimization can proceed without climate data for these nodes.")
 
@@ -1891,16 +1891,16 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
         if source == "real_data":
             annual_demand_tonnes = round(hourly_demand_array.sum(), 2)
             nodes_with_real_data.append(f"{node_name} ({node_type})")
-            print(f"  ✅ Real profile      | {node_name} ({carrier_name}): {annual_demand_tonnes:.2f} t/yr")
+            print(f"  Real profile      | {node_name} ({carrier_name}): {annual_demand_tonnes:.2f} t/yr")
 
         elif source == "synthetic_data":
             annual_demand_tonnes = round(hourly_demand_array.sum(), 2)
             nodes_with_synthetic_data.append(f"{node_name} ({node_type})")
-            print(f"  🔧 Synthetic profile | {node_name} ({carrier_name}): {annual_demand_tonnes:.2f} t/yr")
+            print(f"  Synthetic profile | {node_name} ({carrier_name}): {annual_demand_tonnes:.2f} t/yr")
         else:
             nodes_missing_profile.append(f"{node_name} ({node_type})")
             raise ValueError(
-                f"❌ No profile found for {node_name} ({carrier_name}). "
+                f"No profile found for {node_name} ({carrier_name}). "
                 f"Unsupported or missing source type: '{source}'."
             )
 
@@ -1918,7 +1918,7 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
                                     columns=['Demand'], carriers=[carrier_name], nodes=[node_name])
 
     # --- Summary ---
-    print(f"\n📊 CARRIER DATA UPDATE SUMMARY:")
+    print(f"\nCARRIER DATA UPDATE SUMMARY:")
     print(f"  Electricity import limit : {electricity_import_limit}")
     print(f"  Heat import limit        : {heat_import_limit}")
     print(f"  Elec. emission factor    : {co2_intensity_electricity} kg CO2/kWh")
@@ -1927,7 +1927,7 @@ def update_carrier_data(input_data_path, electricity_price_data, network_emissio
     print(f"  Nodes with real profiles      ({len(nodes_with_real_data):>2}): {nodes_with_real_data}")
     print(f"  Nodes with synthetic profiles ({len(nodes_with_synthetic_data):>2}): {nodes_with_synthetic_data}")
     if nodes_missing_profile:
-        print(f"  ⚠️  Nodes with NO profile     ({len(nodes_missing_profile):>2}): {nodes_missing_profile}")
+        print(f"  Nodes with NO profile     ({len(nodes_missing_profile):>2}): {nodes_missing_profile}")
 
     if node_demands_annual:
         print(f"\nAnnual demand by node (tonnes/year):")
@@ -1960,10 +1960,10 @@ def assign_ccs_technologies_debug(network_location, network_emission_flux, path_
     if technology_selection is None:
         technology_selection = DEFAULT_TECHNOLOGY_SELECTION
 
-    print("\n🔍 DEBUG: Starting assign_ccs_technologies with enhanced debugging...")
+    print("\nDEBUG: Starting assign_ccs_technologies with enhanced debugging...")
 
     # Debug input data
-    print(f"🔍 Input data summary:")
+    print(f"Input data summary:")
     print(f"  network_location shape: {network_location.shape}")
     print(f"  network_emission_flux shape: {network_emission_flux.shape}")
 
@@ -1975,7 +1975,7 @@ def assign_ccs_technologies_debug(network_location, network_emission_flux, path_
     print(f"  unique_nodes: {list(unique_nodes)}")
 
     for node_name in unique_nodes:
-        print(f"\n🔍 Processing node: {node_name}")
+        print(f"\nProcessing node: {node_name}")
 
         # Get all rows for this node
         node_rows = network_location[network_location['node_name'] == node_name]
@@ -2068,12 +2068,12 @@ def assign_ccs_technologies_debug(network_location, network_emission_flux, path_
             print(f"    new: {read_back.get('new', 'NOT_FOUND')}")
 
         except Exception as e:
-            print(f"  ❌ Error writing/reading Technologies.json: {e}")
-            print(f"  ❌ Error type: {type(e)}")
+            print(f"  Error writing/reading Technologies.json: {e}")
+            print(f"  Error type: {type(e)}")
             import traceback
             traceback.print_exc()
 
-    print("\n🔍 assign_ccs_technologies debugging completed")
+    print("\nassign_ccs_technologies debugging completed")
 
 
 # ===== Enhanced network matrix functions with debugging =====
@@ -2081,27 +2081,27 @@ def update_network_distance_matrix_debug(input_data_path, network_data_dict, net
     """
     Enhanced version with comprehensive debugging
     """
-    print("\n🔍 DEBUG: Starting distance matrix update with enhanced debugging...")
+    print("\nDEBUG: Starting distance matrix update with enhanced debugging...")
 
     # Load and inspect template
     template_path = input_data_path / "period1" / "network_topology" / "new" / "distance.csv"
-    print(f"🔍 Template path: {template_path}")
+    print(f"Template path: {template_path}")
 
     try:
         template_distance = pd.read_csv(template_path, sep=";", index_col=0)
-        print(f"🔍 Template loaded successfully:")
+        print(f"Template loaded successfully:")
         print(f"  Shape: {template_distance.shape}")
         print(f"  Index: {list(template_distance.index)}")
         print(f"  Columns: {list(template_distance.columns)}")
         print(f"  Dtypes: {template_distance.dtypes.unique()}")
         print(f"  Sample values: {template_distance.iloc[0:2, 0:2].values}")
     except Exception as e:
-        print(f"❌ Error loading template: {e}")
+        print(f"Error loading template: {e}")
         return False
 
     # Process each network type
     for network_type in network_types:
-        print(f"\n🔍 Processing network type: {network_type}")
+        print(f"\nProcessing network type: {network_type}")
 
         # Get network data. The three pipeline size classes each get their
         # own data key so a connection can be disabled for one class without
@@ -2122,15 +2122,15 @@ def update_network_distance_matrix_debug(input_data_path, network_data_dict, net
 
         data_key = data_mapping.get(network_type)
         if not data_key:
-            print(f"❌ No mapping for {network_type}")
+            print(f"No mapping for {network_type}")
             continue
 
         network_data = network_data_dict.get(data_key)
         if network_data is None:
-            print(f"❌ No data for {data_key}")
+            print(f"No data for {data_key}")
             continue
 
-        print(f"🔍 Network data inspection:")
+        print(f"Network data inspection:")
         print(f"  Shape: {network_data.shape}")
         print(f"  Index: {list(network_data.index)}")
         print(f"  Columns: {list(network_data.columns)}")
@@ -2141,7 +2141,7 @@ def update_network_distance_matrix_debug(input_data_path, network_data_dict, net
 
         # Check for data alignment issues
         if template_distance.shape != network_data.shape:
-            print(f"⚠️  Shape mismatch: template {template_distance.shape} vs data {network_data.shape}")
+            print(f"Shape mismatch: template {template_distance.shape} vs data {network_data.shape}")
 
             # Check index/column differences
             template_nodes = set(template_distance.index)
@@ -2178,7 +2178,7 @@ def update_network_distance_matrix_debug(input_data_path, network_data_dict, net
             updated_distance.iloc[:, :] = network_data_numeric.values
             updated_distance = updated_distance.round(decimal_places)
 
-            print(f"🔍 Final matrix for {network_type}:")
+            print(f"Final matrix for {network_type}:")
             print(f"  Shape: {updated_distance.shape}")
             print(f"  Dtypes: {updated_distance.dtypes.unique()}")
             print(f"  Sample values: {updated_distance.iloc[0:2, 0:2].values}")
@@ -2198,12 +2198,12 @@ def update_network_distance_matrix_debug(input_data_path, network_data_dict, net
             print(f"  Verification - saved file dtypes: {verification.dtypes.unique()}")
 
         except Exception as e:
-            print(f"❌ Error processing {network_type}: {e}")
+            print(f"Error processing {network_type}: {e}")
             import traceback
             traceback.print_exc()
             continue
 
-    print("\n🔍 Distance matrix debugging completed")
+    print("\nDistance matrix debugging completed")
     return True
 
 
@@ -2212,10 +2212,10 @@ def debug_raw_network_data(network_data_dict):
     """
     Debug the raw network data before processing
     """
-    print("\n🔍 DEBUG: Raw network data inspection...")
+    print("\nDEBUG: Raw network data inspection...")
 
     for data_type, data in network_data_dict.items():
-        print(f"\n📊 {data_type.upper()} network data:")
+        print(f"\n{data_type.upper()} network data:")
         print(f"  Type: {type(data)}")
         print(f"  Shape: {data.shape}")
         print(f"  Index type: {type(data.index[0]) if len(data.index) > 0 else 'Empty'}")
@@ -2239,7 +2239,7 @@ def debug_raw_network_data(network_data_dict):
         # Check for non-numeric data in supposedly numeric columns
         object_cols = data.select_dtypes(include=['object']).columns
         if len(object_cols) > 0:
-            print(f"  ⚠️  Object columns: {list(object_cols)}")
+            print(f"  Object columns: {list(object_cols)}")
             for col in object_cols:
                 unique_vals = data[col].unique()[:5]  # First 5 unique values
                 print(f"    {col} unique values: {unique_vals}")
@@ -2250,38 +2250,38 @@ def debug_raw_network_data(network_data_dict):
 #     """
 #     Enhanced version with comprehensive debugging
 #     """
-#     print("\n🔍 DEBUG: Starting technology file copying with enhanced debugging...")
+#     print("\nDEBUG: Starting technology file copying with enhanced debugging...")
 #
 #     # Read topology
 #     with open(input_data_path / "Topology.json", "r") as f:
 #         topology = json.load(f)
 #
-#     print(f"🔍 Topology loaded: {len(topology['nodes'])} nodes, {len(topology['investment_periods'])} periods")
+#     print(f"Topology loaded: {len(topology['nodes'])} nodes, {len(topology['investment_periods'])} periods")
 #
 #     # Copy technology files for each node in each period
 #     for period in topology["investment_periods"]:
-#         print(f"\n📁 Processing period: {period}")
+#         print(f"\nProcessing period: {period}")
 #
 #         for node in topology["nodes"]:
-#             print(f"\n🔧 Processing node: {node}")
+#             print(f"\nProcessing node: {node}")
 #
 #             # Read Technologies.json for this node
 #             tech_file_path = input_data_path / period / "node_data" / node / "Technologies.json"
 #
 #             if not tech_file_path.exists():
-#                 print(f"  ❌ Technologies.json not found: {tech_file_path}")
+#                 print(f"  Technologies.json not found: {tech_file_path}")
 #                 continue
 #
 #             try:
 #                 with open(tech_file_path, "r") as f:
 #                     technologies_at_node = json.load(f)
 #
-#                 print(f"  📄 Technologies.json loaded successfully")
+#                 print(f"  Technologies.json loaded successfully")
 #                 print(f"    existing: {technologies_at_node.get('existing', 'NOT_FOUND')}")
 #                 print(f"    new: {technologies_at_node.get('new', 'NOT_FOUND')}")
 #
 #             except Exception as e:
-#                 print(f"  ❌ Error reading Technologies.json: {e}")
+#                 print(f"  Error reading Technologies.json: {e}")
 #                 continue
 #
 #             # Get technology lists
@@ -2304,7 +2304,7 @@ def debug_raw_network_data(network_data_dict):
 #
 #             # Copy each technology file
 #             for tech_name in all_techs:
-#                 print(f"      🔍 Looking for: {tech_name}")
+#                 print(f"      Looking for: {tech_name}")
 #
 #                 source_file = find_technology_file(tech_name, path_files_technologies)
 #                 if source_file:
@@ -2315,24 +2315,24 @@ def debug_raw_network_data(network_data_dict):
 #                         # Verify the copied file
 #                         if dest_file.exists():
 #                             file_size = dest_file.stat().st_size
-#                             print(f"        ✅ Copied successfully: {source_file} -> {dest_file} ({file_size} bytes)")
+#                             print(f"        Copied successfully: {source_file} -> {dest_file} ({file_size} bytes)")
 #
 #                             # Quick validation of JSON content
 #                             try:
 #                                 with open(dest_file, 'r') as f:
 #                                     test_json = json.load(f)
-#                                 print(f"        ✅ JSON validation passed")
+#                                 print(f"        JSON validation passed")
 #                             except Exception as e:
-#                                 print(f"        ⚠️  JSON validation failed: {e}")
+#                                 print(f"        JSON validation failed: {e}")
 #                         else:
-#                             print(f"        ❌ File not found after copy")
+#                             print(f"        File not found after copy")
 #
 #                     except Exception as e:
-#                         print(f"        ❌ Copy failed: {e}")
+#                         print(f"        Copy failed: {e}")
 #                 else:
-#                     print(f"        ❌ Source file not found in {path_files_technologies}")
+#                     print(f"        Source file not found in {path_files_technologies}")
 #
-#     print("\n🔍 Technology file copying debugging completed")
+#     print("\nTechnology file copying debugging completed")
 
 
 # Add this function to your defined_functions.py file:
@@ -2348,7 +2348,7 @@ def convert_network_data_indices_to_names(network_data_dict, network_location):
     Returns:
         - network_data_dict: Updated dictionary with node names as indices
     """
-    print("\n🔍 DEBUG: Converting network data indices from node IDs to node names...")
+    print("\nDEBUG: Converting network data indices from node IDs to node names...")
 
     # Create node_id to node_name mapping
     node_id_to_name = network_location['node_name'].to_dict()
@@ -2378,9 +2378,9 @@ def convert_network_data_indices_to_names(network_data_dict, network_location):
         # Check for any unmapped nodes
         unknown_nodes = [node for node in new_index if node.startswith("UNKNOWN_ID_")]
         if unknown_nodes:
-            print(f"    ⚠️  WARNING: Unmapped node IDs: {unknown_nodes}")
+            print(f"    WARNING: Unmapped node IDs: {unknown_nodes}")
 
-    print("\n✅ Network data index conversion completed")
+    print("\nNetwork data index conversion completed")
     return network_data_dict
 
 
@@ -2389,7 +2389,7 @@ def apply_carbon_pricing_to_all_nodes(input_data_path, carbon_tax_euro_per_tonne
     Apply carbon pricing to all nodes by updating their CarbonCost.csv files.
     """
 
-    print(f"\n💰 APPLYING CARBON PRICING TO ALL NODES")
+    print(f"\nAPPLYING CARBON PRICING TO ALL NODES")
     print(f"Carbon tax: €{carbon_tax_euro_per_tonne}/tonne CO2")
     print("=" * 50)
 
@@ -2409,7 +2409,7 @@ def apply_carbon_pricing_to_all_nodes(input_data_path, carbon_tax_euro_per_tonne
 
             # Check if CarbonCost.csv exists, create if not
             if not carbon_cost_path.exists():
-                print(f"📝 {node_name}: Creating CarbonCost.csv template...")
+                print(f"{node_name}: Creating CarbonCost.csv template...")
 
                 # Ensure directory exists
                 carbon_cost_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2433,12 +2433,12 @@ def apply_carbon_pricing_to_all_nodes(input_data_path, carbon_tax_euro_per_tonne
             carbon_cost_template.to_csv(carbon_cost_path, sep=";", index=False)
 
             successful_nodes.append(node_name)
-            print(f"✅ {node_name}: Carbon pricing applied")
+            print(f"{node_name}: Carbon pricing applied")
 
         except Exception as e:
             failed_nodes.append(node_name)
-            print(f"❌ {node_name}: Failed - {e}")
+            print(f"{node_name}: Failed - {e}")
 
-    print(f"\n📊 SUMMARY: ✅ {len(successful_nodes)} success, ❌ {len(failed_nodes)} failed")
+    print(f"\nSUMMARY: {len(successful_nodes)} success, {len(failed_nodes)} failed")
     return len(failed_nodes) == 0
 

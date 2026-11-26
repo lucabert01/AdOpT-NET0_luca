@@ -33,7 +33,7 @@ SCENARIOS = [
     ("technology_selection", "costs", 200, "200 €/t", "o", (-6, -11)),
     ("technology_selection", "costs", 250, "250 €/t", "o", (5, -10)),
     ("technology_selection", "emissions_minC", None, "Emis.-min.", "D", (2, 6)),
-    ("technology_selection_wasteCaL", "emissions_minC", None, "Emis.-min., waste CaL only", "s", (6, 4)),
+    ("technology_selection_wasteCaL", "emissions_minC", None, "Emis.-min., CaL on WtE", "s", (0, -11)),
 ]
 
 
@@ -64,7 +64,7 @@ def collect() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-XLIM = (65, 95)    # % of baseline emissions avoided (tax 175 sits at ~70%)
+XLIM = (70, 95)    # % of baseline emissions avoided (tax 175 sits at ~76%)
 YLIM = (100, 250)  # €/t avoided
 
 
@@ -76,7 +76,7 @@ def draw_abatement_on_ax(ax, res: pd.DataFrame):
                    s=28, facecolor=fs.TS_MAIN, edgecolor=fs.MARK_EDGE, linewidth=0.5, zorder=3)
         ax.annotate(r["label"], (r["fraction_avoided"] * 100, r["cost_per_t_avoided"]),
                     xytext=r["offset"], textcoords="offset points", fontsize=fs.TICK_SIZE,
-                    ha="right" if r["offset"][0] < 0 else "left",
+                    ha="right" if r["offset"][0] < 0 else "center" if r["offset"][0] == 0 else "left",
                     color=fs.INK_SECONDARY)
     ax.set_xlabel("Baseline CO$_2$ emissions avoided (%)")
     ax.set_ylabel("Cost of CO$_2$ avoided (€/tCO$_2$)")

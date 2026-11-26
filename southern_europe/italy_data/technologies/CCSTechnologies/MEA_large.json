@@ -14,7 +14,7 @@
     "capex_zeta": 13.2732E+06,
     "opex_variable": 7.3,
     "opex_fixed": 0.05,
-    "discount_rate": 0.1,
+    "discount_rate": 0.08,
     "lifetime": 30,
     "decommission_cost": 0
   },

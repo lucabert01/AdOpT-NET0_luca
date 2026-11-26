@@ -45,7 +45,7 @@ try:
         update_network_size_max_arcs,
     )
 except ImportError as e:
-    print(f"⚠️  Warning: Could not import some functions from defined_functions: {e}")
+    print(f"Warning: Could not import some functions from defined_functions: {e}")
     # If import fails, we'll define minimal fallbacks only if needed
 
 
@@ -89,7 +89,7 @@ def load_network_data(data_path):
     anthro_data = pd.read_csv(path_files_grids / "anthropisation_grids_italy.csv")
     morpho_data = pd.read_csv(path_files_grids / "morphological_feature_grids_italy.csv")
     print(
-        f"✅ Loaded geographical data: {len(soil_data)} soil grids, {len(anthro_data)} anthro grids, {len(morpho_data)} morpho grids")
+        f"Loaded geographical data: {len(soil_data)} soil grids, {len(anthro_data)} anthro grids, {len(morpho_data)} morpho grids")
 
     # Load network data - UPDATED TO USE CONFIRMED SHEET NAMES
     print("Loading network data...")
@@ -99,7 +99,7 @@ def load_network_data(data_path):
     # Load pipeline data (contains both distance and connection info)
     network_pipeline = pd.read_excel(path_files_node_flux / "node_metrics_paper.xlsx", index_col=0, sheet_name='pipeline')
     network_distance = network_pipeline.copy()  # Use pipeline data as distance matrix
-    print(f"✅ Loaded network data: {len(network_nodes)} nodes, {network_distance.shape} distance matrix, {network_pipeline.shape} pipeline matrix")
+    print(f"Loaded network data: {len(network_nodes)} nodes, {network_distance.shape} distance matrix, {network_pipeline.shape} pipeline matrix")
 
     # Some node_metrics_paper.xlsx entries carry stray leading/trailing whitespace in
     # node_name/node_type (e.g. "Unicalce Val Brembilla Lime " with a trailing space) --
@@ -115,12 +115,12 @@ def load_network_data(data_path):
     print("Loading electricity data...")
     electricity_price = pd.read_csv(path_files_electricity / "electricity_prices_hourly_2024.csv")
     avg_electricity_price_eur_mwh = calculate_average_electricity_price(electricity_price)
-    print(f"✅ Average electricity price: {avg_electricity_price_eur_mwh} EUR/MWh")
+    print(f"Average electricity price: {avg_electricity_price_eur_mwh} EUR/MWh")
 
     # Calculate annual emission values
     print("Processing emission data...")
     network_emission_flux = calculate_annual_emission_values(network_emission_flux, path_files_node_flux)
-    print(f"✅ Processed emission data for {len(network_emission_flux)} nodes")
+    print(f"Processed emission data for {len(network_emission_flux)} nodes")
 
     return {
         'network_nodes': network_nodes,
@@ -151,7 +151,7 @@ def load_intersection_data(intersection_file_path, pipeline_names=None):
     intersection_data = {}
 
     if not intersection_file.exists():
-        print(f"⚠️  Intersection file not found: {intersection_file}")
+        print(f"Intersection file not found: {intersection_file}")
         return intersection_data
 
     try:
@@ -203,22 +203,22 @@ def load_intersection_data(intersection_file_path, pipeline_names=None):
                             'intersected_grids': intersected_grids,
                             'intersected_proportions': intersected_proportions
                         }
-                        print(f"✅ Loaded intersection data for {pipeline_name}: {len(intersected_grids)} grids")
+                        print(f"Loaded intersection data for {pipeline_name}: {len(intersected_grids)} grids")
                     else:
-                        print(f"⚠️  Could not identify grid/proportion columns for {pipeline_name}")
+                        print(f"Could not identify grid/proportion columns for {pipeline_name}")
                         intersection_data[pipeline_name] = {'intersected_grids': [], 'intersected_proportions': []}
 
                 except Exception as e:
-                    print(f"⚠️  Error loading intersection data for {pipeline_name}: {e}")
+                    print(f"Error loading intersection data for {pipeline_name}: {e}")
                     intersection_data[pipeline_name] = {'intersected_grids': [], 'intersected_proportions': []}
             else:
                 # No intersection data available for this pipeline
                 intersection_data[pipeline_name] = {'intersected_grids': [], 'intersected_proportions': []}
 
-        print(f"✅ Loaded intersection data for {len(intersection_data)} pipelines")
+        print(f"Loaded intersection data for {len(intersection_data)} pipelines")
 
     except Exception as e:
-        print(f"❌ Error loading intersection file: {e}")
+        print(f"Error loading intersection file: {e}")
 
     return intersection_data
 
@@ -240,7 +240,7 @@ def get_node_emission(node_id, network_emission_flux):
     """
     # Check if annual_emission column exists
     if 'annual_emission' not in network_emission_flux.columns:
-        print(f"⚠️  Warning: 'annual_emission' column not found in DataFrame")
+        print(f"Warning: 'annual_emission' column not found in DataFrame")
         print(f"Available columns: {list(network_emission_flux.columns)}")
         return 0.0
 
@@ -269,7 +269,7 @@ def get_node_emission(node_id, network_emission_flux):
         return float(emission_value) if not pd.isna(emission_value) else 0.0
 
     except (KeyError, IndexError, ValueError, TypeError) as e:
-        print(f"⚠️  Warning: Error getting emission for node {node_id}: {e}")
+        print(f"Warning: Error getting emission for node {node_id}: {e}")
         return 0.0
 
 
@@ -285,12 +285,12 @@ def calculate_total_annual_emission(network_emission_flux):
     """
     total_emission = 0.0
 
-    print(f"🔍 Debug: Network emission flux columns: {list(network_emission_flux.columns)}")
-    print(f"🔍 Debug: Network emission flux shape: {network_emission_flux.shape}")
+    print(f"Debug: Network emission flux columns: {list(network_emission_flux.columns)}")
+    print(f"Debug: Network emission flux shape: {network_emission_flux.shape}")
 
     # Check if annual_emission column exists
     if 'annual_emission' not in network_emission_flux.columns:
-        print(f"❌ Error: 'annual_emission' column not found!")
+        print(f"Error: 'annual_emission' column not found!")
         return 0.0
 
     # Calculate total using vectorized operation for better performance
@@ -301,11 +301,11 @@ def calculate_total_annual_emission(network_emission_flux):
 
         # Debug output for individual nodes with significant emissions
         significant_nodes = network_emission_flux[network_emission_flux['annual_emission'] > 0]
-        print(f"🔍 Debug: Found {len(significant_nodes)} nodes with emissions")
+        print(f"Debug: Found {len(significant_nodes)} nodes with emissions")
 
         # Show some examples for debugging
         if len(significant_nodes) > 0:
-            print(f"🔍 Debug: Sample emissions:")
+            print(f"Debug: Sample emissions:")
             for i, (node_id, row) in enumerate(significant_nodes.head(5).iterrows()):
                 emission_value = row['annual_emission']
                 print(f"   Node {node_id}: {emission_value:,.0f} kg/year")
@@ -314,8 +314,8 @@ def calculate_total_annual_emission(network_emission_flux):
                 print(f"   ... and {len(significant_nodes) - 5} more nodes with emissions")
 
     except Exception as e:
-        print(f"❌ Error in vectorized calculation: {e}")
-        print("🔄 Falling back to node-by-node calculation...")
+        print(f"Error in vectorized calculation: {e}")
+        print("Falling back to node-by-node calculation...")
 
         # Option 2: Fallback to node-by-node calculation
         for node_id in network_emission_flux.index:
@@ -323,7 +323,7 @@ def calculate_total_annual_emission(network_emission_flux):
             if emission_value > 0:
                 total_emission += emission_value
 
-    print(f"✅ Total annual emission: {total_emission:,.0f} kg/year")
+    print(f"Total annual emission: {total_emission:,.0f} kg/year")
     return total_emission
 
 
@@ -341,8 +341,8 @@ def calculate_global_max_massflow(network_emission_flux):
     seconds_per_year = 365 * 24 * 3600
     global_max_massflow_kg_s = total_annual_emission * TONNES_TO_KG / seconds_per_year
 
-    print(f"📊 Total annual emission: {total_annual_emission:,.0f} kg/year")
-    print(f"📊 Global max mass flow: {global_max_massflow_kg_s:.2f} kg/s")
+    print(f"Total annual emission: {total_annual_emission:,.0f} kg/year")
+    print(f"Global max mass flow: {global_max_massflow_kg_s:.2f} kg/s")
 
     return global_max_massflow_kg_s
 
@@ -361,20 +361,20 @@ def calculate_global_min_massflow(network_emission_flux):
 
     # Get emissions from nodes that actually have emissions (> 0)
     if 'annual_emission' not in network_emission_flux.columns:
-        print(f"⚠️  Warning: 'annual_emission' column not found for global min calculation")
+        print(f"Warning: 'annual_emission' column not found for global min calculation")
         return 1.0  # Fallback
 
     emitting_nodes = network_emission_flux[network_emission_flux['annual_emission'] > 0]
 
     if emitting_nodes.empty:
-        print(f"⚠️  Warning: No emitting nodes found for global min calculation")
+        print(f"Warning: No emitting nodes found for global min calculation")
         return 1.0  # Fallback if no emitting nodes found
 
     # Find minimum annual emission from emitting nodes
     min_emission_kg_year = emitting_nodes['annual_emission'].min()
     min_emission_kg_s = min_emission_kg_year * TONNES_TO_KG / seconds_per_year
 
-    print(f"📊 Global min mass flow: {min_emission_kg_s:.3f} kg/s (from smallest emitting node: {min_emission_kg_year:,.0f} kg/year)")
+    print(f"Global min mass flow: {min_emission_kg_s:.3f} kg/s (from smallest emitting node: {min_emission_kg_year:,.0f} kg/year)")
 
     return min_emission_kg_s
 
@@ -427,7 +427,7 @@ def get_pipeline_length(from_node, to_node, network_distance):
         return round(float(distance), 2)
 
     except Exception as e:
-        print(f"   ❌ Error getting pipeline length for {from_node} → {to_node}: {e}")
+        print(f"   Error getting pipeline length for {from_node} -> {to_node}: {e}")
         return None
 
 
@@ -460,7 +460,7 @@ def validate_pipeline_transport(from_node, to_node, network_pipeline):
 
         return False
     except Exception as e:
-        print(f"   ❌ Error validating transport for {from_node} → {to_node}: {e}")
+        print(f"   Error validating transport for {from_node} -> {to_node}: {e}")
         return False
 
 
@@ -503,7 +503,7 @@ def get_pipeline_directions_and_flows(pipeline_name, network_nodes, network_pipe
     try:
         parts = pipeline_name.split('_')
         if len(parts) != 2:
-            print(f"   ❌ Invalid pipeline name format: {pipeline_name}")
+            print(f"   Invalid pipeline name format: {pipeline_name}")
             return []
 
         node1, node2 = int(parts[0]), int(parts[1])
@@ -513,7 +513,7 @@ def get_pipeline_directions_and_flows(pipeline_name, network_nodes, network_pipe
         can_transport_2_to_1 = validate_pipeline_transport(node2, node1, network_pipeline)
 
         if not (can_transport_1_to_2 or can_transport_2_to_1):
-            print(f"   ❌ No transport possible for pipeline {pipeline_name}")
+            print(f"   No transport possible for pipeline {pipeline_name}")
             return []
 
         # Get emissions for both nodes
@@ -557,7 +557,7 @@ def get_pipeline_directions_and_flows(pipeline_name, network_nodes, network_pipe
         return directions
 
     except Exception as e:
-        print(f"   ❌ Error analyzing pipeline {pipeline_name}: {e}")
+        print(f"   Error analyzing pipeline {pipeline_name}: {e}")
         return []
 
 # ============================================================================
@@ -598,7 +598,7 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore",
     from_node_name = node_names.get(from_node)
     to_node_name = node_names.get(to_node)
     if from_node_name == "Eni S.p.A Casalborsetti" and to_node_name == "Porto Corsini":
-        print(f"      💸 Arc {from_node_name} → {to_node_name}: forced near-zero cost override "
+        print(f"      Arc {from_node_name} -> {to_node_name}: forced near-zero cost override "
               f"(gamma1=0, gamma2=13273.625)")
         return 0, 13273.625
 
@@ -607,7 +607,7 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore",
     # Get pipeline length using shared function
     length_km = get_pipeline_length(from_node, to_node, data_dict['network_distance'])
     if length_km is None:
-        print(f"⚠️  No distance data for arc {from_node} → {to_node}, using gamma values 0")
+        print(f"No distance data for arc {from_node} -> {to_node}, using gamma values 0")
         return 0, 0
 
     if massflow_min_kg_s_override is not None and massflow_max_kg_s_override is not None:
@@ -615,7 +615,7 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore",
         # entirely (own emission / global min / global max heuristics).
         massflow_min_kg_s = massflow_min_kg_s_override
         massflow_max_kg_s = massflow_max_kg_s_override
-        print(f"      🖊️  Manual override for arc {from_node} → {to_node}: "
+        print(f"      Manual override for arc {from_node} -> {to_node}: "
               f"flow={massflow_min_kg_s:.3f}-{massflow_max_kg_s:.3f}kg/s")
     else:
         # Get source emission and calculate mass flow using shared function
@@ -635,18 +635,18 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore",
         if source_emission_kg_s < 0.1:  # Transport-only node (no significant local emissions)
             # For transport nodes, use global minimum mass flow based on smallest emitting node
             massflow_min_kg_s = global_min_massflow_kg_s
-            print(f"      🚇 Transport-only node {from_node}: using global min flow of {massflow_min_kg_s:.3f} kg/s")
+            print(f"      Transport-only node {from_node}: using global min flow of {massflow_min_kg_s:.3f} kg/s")
         else:
             # For emission nodes, use emission-based minimum flow
             massflow_min_kg_s = max(source_emission_kg_s, 0.100)
-            print(f"      📍 Emission node {from_node}: using emission-based minimum flow of {massflow_min_kg_s:.3f} kg/s")
+            print(f"      Emission node {from_node}: using emission-based minimum flow of {massflow_min_kg_s:.3f} kg/s")
 
         massflow_max_kg_s = global_max_massflow_kg_s
 
     # Visual terrain indicator
-    terrain_info = "🌊 OFFSHORE" if terrain == "Offshore" else "🏞️ ONSHORE"
+    terrain_info = "OFFSHORE" if terrain == "Offshore" else "ONSHORE"
 
-    print(f"   Processing arc {from_node} → {to_node}: length={length_km:.3f}km, flow={massflow_min_kg_s:.3f}-{massflow_max_kg_s:.3f}kg/s, {terrain_info}")
+    print(f"   Processing arc {from_node} -> {to_node}: length={length_km:.3f}km, flow={massflow_min_kg_s:.3f}-{massflow_max_kg_s:.3f}kg/s, {terrain_info}")
 
     # Create base options using shared function with specified terrain
     base_options = create_base_options(
@@ -669,7 +669,7 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore",
             intersected_proportions = route['intersected_proportions']
             break
     if not intersected_grids:
-        print(f"      ⚠️  No route grid cells for arc {from_node} → {to_node}: "
+        print(f"      No route grid cells for arc {from_node} -> {to_node}: "
               f"no geographical cost factor")
 
     enhanced_options = add_geographical_options(
@@ -698,20 +698,20 @@ def calculate_arc_gammas(from_node, to_node, data_dict, terrain="Onshore",
             gamma1 = results_enhanced['financial_indicators']['gamma1']
             gamma2 = results_enhanced['financial_indicators']['gamma2']
 
-            print(f"      ✅ γ₁: {gamma1:,.0f} EUR, γ₂: {gamma2:,.3f} EUR/(t/h)")
+            print(f"      gamma1: {gamma1:,.0f} EUR, gamma2: {gamma2:,.3f} EUR/(t/h)")
             return gamma1, gamma2
 
         except KeyError as ke:
-            print(f"      ❌ Missing result key for arc {from_node} → {to_node}: {ke}, using gamma values 0")
-            print(f"      🔍 Available keys: {list(results_enhanced.get('financial_indicators', {}).keys())}")
+            print(f"      Missing result key for arc {from_node} -> {to_node}: {ke}, using gamma values 0")
+            print(f"      Available keys: {list(results_enhanced.get('financial_indicators', {}).keys())}")
             return 0, 0
 
     except Exception as e:
-        print(f"      ❌ Error calculating costs for arc {from_node} → {to_node}: {e}, using gamma values 0")
+        print(f"      Error calculating costs for arc {from_node} -> {to_node}: {e}, using gamma values 0")
 
         # IMPROVED: Additional debugging for specific error types
         if "'capex_pipe'" in str(e):
-            print(f"      🔍 CAPEX calculation failed - likely due to:")
+            print(f"      CAPEX calculation failed - likely due to:")
             print(f"         • Mass flow range: {massflow_min_kg_s:.3f} - {massflow_max_kg_s:.3f} kg/s")
             print(f"         • Terrain type: {terrain}")
             print(f"         • Pipeline length: {length_km:.3f} km")
@@ -782,7 +782,7 @@ def create_gamma_matrices(data_dict, terrain_function=None, massflow_overrides=N
         if gamma1 > 0 and gamma2 > 0:
             processed_arcs += 1
 
-    print(f"\n📊 SUMMARY:")
+    print(f"\nSUMMARY:")
     print(f"   Total possible arcs: {len(possible_arcs)}")
     print(f"   Successfully processed: {processed_arcs}")
     print(f"   Set to zero: {len(possible_arcs) - processed_arcs}")
@@ -817,8 +817,8 @@ def create_zero_gamma_matrices(gamma1_matrix):
         dtype=float
     )
 
-    print(f"✅ Created gamma3 matrix: {gamma3_matrix.shape}")
-    print(f"✅ Created gamma4 matrix: {gamma4_matrix.shape}")
+    print(f"Created gamma3 matrix: {gamma3_matrix.shape}")
+    print(f"Created gamma4 matrix: {gamma4_matrix.shape}")
 
     return gamma3_matrix, gamma4_matrix
 
@@ -837,7 +837,7 @@ def calculate_average_electricity_price(electricity_price_df):
     Returns:
         float: Average electricity price in EUR/MWh
     """
-    print(f"\n🔌 CALCULATING AVERAGE ELECTRICITY PRICE")
+    print(f"\nCALCULATING AVERAGE ELECTRICITY PRICE")
     print(f"{'=' * 50}")
 
     # Find the price column - same logic as main script
@@ -851,7 +851,7 @@ def calculate_average_electricity_price(electricity_price_df):
             price_column = price_columns[0]
 
     if price_column is None:
-        print(f"⚠️  Could not identify electricity price column, using default 60.0 EUR/MWh")
+        print(f"Could not identify electricity price column, using default 60.0 EUR/MWh")
         return 60.0
 
     print(f"Using price column: '{price_column}'")
@@ -869,18 +869,18 @@ def calculate_average_electricity_price(electricity_price_df):
     prices = pd.to_numeric(prices, errors='coerce').dropna()
 
     if len(prices) == 0:
-        print(f"⚠️  No valid price data found, using default 60.0 EUR/MWh")
+        print(f"No valid price data found, using default 60.0 EUR/MWh")
         return 60.0
 
     # Calculate average price
     avg_price = prices.mean()
-    print(f"📊 Average price: {avg_price:.2f} EUR/MWh")
+    print(f"Average price: {avg_price:.2f} EUR/MWh")
 
     # Validate price range
     if 20 <= avg_price <= 200:
-        print(f"✅ Average price appears reasonable for European electricity market")
+        print(f"Average price appears reasonable for European electricity market")
     else:
-        print(f"⚠️  Average price outside typical range (20-200 EUR/MWh) - please verify data")
+        print(f"Average price outside typical range (20-200 EUR/MWh) - please verify data")
 
     return round(avg_price, 2)
 
@@ -911,7 +911,7 @@ def create_base_options(length_km, massflow_min_kg_s, massflow_max_kg_s,
         "length_km": length_km,
         "currency_out": "EUR",
         "financial_year_out": 2024,
-        "discount_rate": 0.1,
+        "discount_rate": 0.08,
         "massflow_min_kg_per_s": massflow_min_kg_s,
         "massflow_max_kg_per_s": massflow_max_kg_s,
         "massflow_evaluation_points": evaluation_points,
@@ -1159,11 +1159,11 @@ def save_to_excel(gamma1_matrix, gamma2_matrix, gamma3_matrix=None, gamma4_matri
         with pd.ExcelWriter(filename, engine='openpyxl') as writer:
             # Save gamma1 matrix
             gamma1_matrix.to_excel(writer, sheet_name='gamma1', index=True)
-            print(f"✅ Saved gamma1 matrix to sheet 'gamma1'")
+            print(f"Saved gamma1 matrix to sheet 'gamma1'")
 
             # Save gamma2 matrix
             gamma2_matrix.to_excel(writer, sheet_name='gamma2', index=True)
-            print(f"✅ Saved gamma2 matrix to sheet 'gamma2'")
+            print(f"Saved gamma2 matrix to sheet 'gamma2'")
 
             # Save gamma3 matrix (create with zeros if not provided)
             if gamma3_matrix is None:
@@ -1174,7 +1174,7 @@ def save_to_excel(gamma1_matrix, gamma2_matrix, gamma3_matrix=None, gamma4_matri
                     dtype=float
                 )
             gamma3_matrix.to_excel(writer, sheet_name='gamma3', index=True)
-            print(f"✅ Saved gamma3 matrix to sheet 'gamma3'")
+            print(f"Saved gamma3 matrix to sheet 'gamma3'")
 
             # Save gamma4 matrix (create with zeros if not provided)
             if gamma4_matrix is None:
@@ -1185,9 +1185,9 @@ def save_to_excel(gamma1_matrix, gamma2_matrix, gamma3_matrix=None, gamma4_matri
                     dtype=float
                 )
             gamma4_matrix.to_excel(writer, sheet_name='gamma4', index=True)
-            print(f"✅ Saved gamma4 matrix to sheet 'gamma4'")
+            print(f"Saved gamma4 matrix to sheet 'gamma4'")
 
-        print(f"📁 Excel file saved as: {filename}")
+        print(f"Excel file saved as: {filename}")
         print(f"   Matrix size: {gamma1_matrix.shape[0]} × {gamma1_matrix.shape[1]}")
         print(f"   Gamma1 non-zero values: {(gamma1_matrix != 0).sum().sum()}")
         print(f"   Gamma2 non-zero values: {(gamma2_matrix != 0).sum().sum()}")
@@ -1195,7 +1195,7 @@ def save_to_excel(gamma1_matrix, gamma2_matrix, gamma3_matrix=None, gamma4_matri
         print(f"   Gamma4 values: {gamma4_matrix.count().sum()} (all zeros)")
 
     except Exception as e:
-        print(f"❌ Error saving to Excel: {e}")
+        print(f"Error saving to Excel: {e}")
 
 
 def print_section_header(title, width=80):

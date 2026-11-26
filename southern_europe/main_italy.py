@@ -100,8 +100,7 @@ EXCLUDED_PIPELINE_ROUTES = [
 # pipeline data by that script.
 MINIMUM_PIPELINE_CAPACITY_T_H = {
     ("Ferrara", "Eni S.p.A Casalborsetti"): 1399.1,  # 36 inch, 65.1 km
-    # half the capacity of a 26 inch pipe over 120.8 km (759.2 t/h)
-    ("Italcementi di Rezzato", "Ferrara"): 379.6,
+    ("Italcementi di Rezzato", "Ferrara"): 759.2,  # 26 inch, 120.8 km
 }
 default_carbon_tax = 250  # euro per tonne CO2 -- used by any scenario in SCENARIOS
                            # that doesn't set its own "carbon_tax" (see run_scenario)
@@ -186,29 +185,34 @@ SCENARIOS = [
     # (MEA retrofit where applicable). Cost-minimizing, run at three increasing
     # CO2 tax levels to trace how the cement/waste technology split shifts as
     # carbon pricing tightens.
+    #
+    # Rerun with an 8% discount rate everywhere (2026-11-26): each case warm starts
+    # from the design of its own latest finished run (the 10% runs, since a run only
+    # saves its values once it has finished solving; see load_warmstart_values).
+    # Only the design is taken over: the old cost variables were computed at 10%
+    # and the pipeline gammas changed, so the old full solution no longer matches the
+    # cost constraints. The design itself stays feasible.
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
-     "carbon_tax": 175},
-    # tax 200 runs before tax 250 so that tax 250 can start from its solution. The
-    # cold-started tax 250 run (2026-11-17) stopped at the 1.5% gap on a two-trunk
-    # layout (west trunk via Piacenza-Modena plus Rezzato->Ferrara at the 450 t/h
-    # large-class minimum), ~EUR 8M/y worse than the single Brescia-Rezzato-Ferrara
-    # trunk of tax 200 / emissions-min. The tax 200 solution is feasible at tax 250
-    # (only the tax changes), so the full solution is used as MIP start.
-    # (tax 200 itself was last run, 2026-11-18, warm-started from tax 250.)
+     "carbon_tax": 175,
+     "warmstart": "tax175_costs_technology_selection",
+     "warmstart_design_only": True},
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
-     "carbon_tax": 200},
+     "carbon_tax": 200,
+     "warmstart": "tax200_costs_technology_selection",
+     "warmstart_design_only": True},
     {"name": "technology_selection",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "costs",
      "carbon_tax": 250,
-     "warmstart": "tax200_costs_technology_selection"},
+     "warmstart": "tax250_costs_technology_selection",
+     "warmstart_design_only": True},
     # Same choice set, minimizing emissions directly -- the upper bound the cost
     # sweep above approaches as carbon_tax rises. carbon_tax doesn't affect an
     # emissions-only objective, so this one run at the default level stands in
@@ -217,7 +221,8 @@ SCENARIOS = [
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "objective": "emissions_minC",
-     "warmstart": "tax200_costs_technology_selection"},
+     "warmstart": "tax250_emissions_minC_technology_selection",
+     "warmstart_design_only": True},
     # Same cement choice, but waste has no MEA-retrofit option: each waste plant
     # either keeps running its existing WasteToEnergyEmitter UNABATED (its MEA
     # retrofit is disabled via "ccs_retrofit_disabled", see disable_ccs_retrofit) or
@@ -229,15 +234,15 @@ SCENARIOS = [
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
      "ccs_retrofit_disabled": ["WasteToEnergyEmitter"],
-     "objective": "emissions_minC"},
+     "objective": "emissions_minC",
+     "warmstart": "tax250_emissions_minC_technology_selection_wasteCaL",
+     "warmstart_design_only": True},
     # Same choice set as technology_selection, but the permanent storage sink must
     # inject at a near-constant rate (between 85% resp. 95% and 100% of its
     # injection capacity in every hour), with a temporary CO2 buffer storage
     # offered at the Casalborsetti hub to absorb the mismatch between capture and
     # injection. Both at a CO2 tax of 200 EUR/t.
-    # c_inj (85% minimum) starts from the design of technology_selection at tax 200
-    # (same technology choice and tax, run earlier in this list): its operation has
-    # no injection band or buffer storage, so only the design is taken over.
+    # c_inj (85% minimum) starts from the design of its own previous run.
     {"name": "c_inj",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
@@ -245,10 +250,11 @@ SCENARIOS = [
      "carbon_tax": 200,
      "injection_rate_tolerance": 0.15,
      "temporary_storage_nodes": ["Eni S.p.A Casalborsetti"],
-     "warmstart": "tax200_costs_technology_selection",
+     "warmstart": "tax200_costs_c_inj",
      "warmstart_design_only": True},
-    # c_inj_min95 (95% minimum) runs after c_inj and starts from its design: its
-    # operation (85% band) does not fit the narrower band.
+    # c_inj_min95 (95% minimum) has no earlier run of its own: it runs after c_inj
+    # and starts from the design of that (new) run. Its operation (85% band) does
+    # not fit the narrower band.
     {"name": "c_inj_min95",
      "tech_for_cement": ["CementEmitter", "CementHybridCCS"],
      "tech_for_waste": ["WasteToEnergyEmitter", "WasteCaL_CCS"],
@@ -268,10 +274,7 @@ SCENARIOS = [
 # (`python main_italy.py <name or case name> ...`) override it.
 # Order of execution always follows SCENARIOS (c_inj before c_inj_min95, which
 # warm starts from it).
-RUN_SCENARIOS = [
-    "tax250_costs_technology_selection",
-    "tax250_emissions_minC_technology_selection",
-]
+RUN_SCENARIOS = None
 
 # Technology (filename under italy_data/technologies/) used for the temporary CO2
 # buffer storage added at a scenario's "temporary_storage_nodes"
@@ -707,7 +710,7 @@ def solve_warmstart_design(m: "adopt.ModelHub", design_name: str):
     :param m: a ModelHub ready to solve (enforce_single_cement_technology applied)
     :param str design_name: key of WARMSTART_DESIGNS
     """
-    print(f"\n🔥 Building warm start: solving with the '{design_name}' design fixed "
+    print(f"\nBuilding warm start: solving with the '{design_name}' design fixed "
           f"(time limit {WARMSTART_DESIGN_TIME_LIMIT_H} h)")
     fixed = fix_warmstart_design(m, WARMSTART_DESIGNS[design_name])
 
@@ -765,7 +768,7 @@ def load_warmstart_values(m: "adopt.ModelHub", source_case: str,
         key=lambda path: path.parent.name,  # folder names start with the run's timestamp
     )
     if not candidates:
-        print(f"  ⚠️  No saved run of '{source_case}' found -- solving without warm start")
+        print(f"  No saved run of '{source_case}' found -- solving without warm start")
         return False
     source = candidates[-1]
     values = pd.read_pickle(source).to_dict()
@@ -783,7 +786,7 @@ def load_warmstart_values(m: "adopt.ModelHub", source_case: str,
         if value is not None:
             var.set_value(value, skip_validation=True)
             n_set += 1
-    print(f"\n🔥 Warm start from {source}{' (design only)' if design_only else ''}: "
+    print(f"\nWarm start from {source}{' (design only)' if design_only else ''}: "
           f"{n_set}/{n_vars} variables set")
     return True
 
@@ -988,7 +991,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
 
 
     # ===== DEBUG 1: After assign_ccs_technologies() =====
-    print("\n🔍 DEBUG: Checking Technologies.json files after assignment...")
+    print("\nDEBUG: Checking Technologies.json files after assignment...")
 
     # Check a few key nodes to see what's in their Technologies.json files
     debug_nodes = ["Piacenza", "LOMELLINA ENERGIA", "Eni S.p.A Casalborsetti "]  # Mix of emitter and storage nodes
@@ -998,7 +1001,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         if tech_file_path.exists():
             with open(tech_file_path, "r") as f:
                 tech_data = json.load(f)
-            print(f"  📄 {node}:")
+            print(f"  {node}:")
             print(f"    existing: {tech_data.get('existing', 'NOT_FOUND')}")
             print(f"    existing types: {[type(v).__name__ for v in tech_data.get('existing', {}).values()]}")
             print(f"    new: {tech_data.get('new', 'NOT_FOUND')}")
@@ -1009,13 +1012,13 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
                 if isinstance(data, dict):
                     for key, value in data.items():
                         if isinstance(value, bytes):
-                            print(f"    ⚠️  FOUND BYTES: {section}.{key} = {value}")
+                            print(f"    FOUND BYTES: {section}.{key} = {value}")
                 elif isinstance(data, list):
                     for i, item in enumerate(data):
                         if isinstance(item, bytes):
-                            print(f"    ⚠️  FOUND BYTES: {section}[{i}] = {item}")
+                            print(f"    FOUND BYTES: {section}[{i}] = {item}")
         else:
-            print(f"  ❌ {node}: Technologies.json not found")
+            print(f"  {node}: Technologies.json not found")
 
     # Copy over technology files using our custom function -- each copied JSON already
     # carries its own real Performance.emission_factor / ccs.co2_concentration, since
@@ -1101,7 +1104,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
             pipeline_class_connections_path, size_class, network_pipeline
         )
 
-    print("\n🔍 Converting network data indices to match topology...")
+    print("\nConverting network data indices to match topology...")
     network_data_dict = convert_network_data_indices_to_names(network_data_dict, network_location)
 
 
@@ -1113,17 +1116,17 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
 
     # Max size arc (all networks) - using predefined size_max value, with the
     # three pipeline size classes capped at their own calibrated ceiling
-    print(f"🔍 Network sizing: default = {max_transport_capacity} t/h, "
+    print(f"Network sizing: default = {max_transport_capacity} t/h, "
           f"pipeline size classes = {pipeline_size_class_max_capacity_t_h}")
     update_network_size_max_arcs(input_data_path, network_data_dict, max_transport_capacity,
                                   per_network_type_capacity=pipeline_size_class_max_capacity_t_h)
 
     # ===== DEBUG 2: After network matrix generation =====
-    print("\n🔍 DEBUG: Checking network matrices after generation...")
+    print("\nDEBUG: Checking network matrices after generation...")
 
     # Check the generated CSV files for each network type
     for network_type in new_network_types:
-        print(f"  📊 Network: {network_type}")
+        print(f"  Network: {network_type}")
 
         # Check distance matrix
         distance_path = input_data_path / "period1" / "network_topology" / "new" / network_type / "distance.csv"
@@ -1137,11 +1140,11 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
                 # Check for any string/object values
                 object_cols = distance_df.select_dtypes(include=['object']).columns
                 if len(object_cols) > 0:
-                    print(f"    ⚠️  Object columns in distance: {object_cols.tolist()}")
+                    print(f"    Object columns in distance: {object_cols.tolist()}")
                     for col in object_cols:
                         print(f"      Sample values in {col}: {distance_df[col].head(3).tolist()}")
             except Exception as e:
-                print(f"    ❌ Error reading distance matrix: {e}")
+                print(f"    Error reading distance matrix: {e}")
 
         # Check connection matrix
         connection_path = input_data_path / "period1" / "network_topology" / "new" / network_type / "connection.csv"
@@ -1152,7 +1155,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
                 print(f"    Connection matrix dtypes: {connection_df.dtypes.unique()}")
                 print(f"    Connection matrix unique values: {connection_df.values.flatten()[:10]}")
             except Exception as e:
-                print(f"    ❌ Error reading connection matrix: {e}")
+                print(f"    Error reading connection matrix: {e}")
 
         # Check size_max_arcs matrix
         size_max_path = input_data_path / "period1" / "network_topology" / "new" / network_type / "size_max_arcs.csv"
@@ -1163,7 +1166,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
                 print(f"    Size max matrix dtypes: {size_max_df.dtypes.unique()}")
                 print(f"    Size max matrix sample values: {size_max_df.iloc[0, 0]} (type: {type(size_max_df.iloc[0, 0])})")
             except Exception as e:
-                print(f"    ❌ Error reading size_max matrix: {e}")
+                print(f"    Error reading size_max matrix: {e}")
 
     # Delete the templates
     os.remove(input_data_path / "period1" / "network_topology" / "new" / "distance.csv")
@@ -1234,7 +1237,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     # ----- Apply Carbon Pricing -----#
     if enable_carbon_pricing and carbon_tax > 0:
         print(f"\n" + "=" * 60)
-        print(f"💰 APPLYING CARBON PRICING: €{carbon_tax}/tonne CO2")
+        print(f"APPLYING CARBON PRICING: €{carbon_tax}/tonne CO2")
         print(f"=" * 60)
 
         # Apply carbon pricing to all nodes
@@ -1245,11 +1248,11 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
         )
 
         if carbon_pricing_success:
-            print(f"✅ Carbon pricing successfully applied to all {len(node_names)} nodes")
+            print(f"Carbon pricing successfully applied to all {len(node_names)} nodes")
         else:
-            print(f"⚠️  Some nodes failed carbon pricing application")
+            print(f"Some nodes failed carbon pricing application")
     else:
-        print(f"\n💡 Carbon pricing disabled (carbon_tax={carbon_tax}, enabled={enable_carbon_pricing})")
+        print(f"\nCarbon pricing disabled (carbon_tax={carbon_tax}, enabled={enable_carbon_pricing})")
 
     #----- Define climate data -----#
     load_climate_data_from_api_robust(input_data_path)
@@ -1258,13 +1261,13 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     print("Building and solving optimization problem...")
 
     # ===== DEBUG 3: Before optimization =====
-    print("\n🔍 DEBUG: Final checks before optimization...")
+    print("\nDEBUG: Final checks before optimization...")
 
     # Check topology consistency
     with open(input_data_path / "Topology.json", "r") as f:
         topology = json.load(f)
 
-    print(f"  🗺️  Topology:")
+    print(f"  Topology:")
     print(f"    Nodes ({len(topology['nodes'])}): {topology['nodes']}")
     print(f"    Carriers ({len(topology['carriers'])}): {topology['carriers']}")
     print(f"    Investment periods: {topology['investment_periods']}")
@@ -1294,9 +1297,9 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
                     missing_files.append(f"{node}/carrier_data/{carrier}.csv")
 
     if missing_files:
-        print(f"  ❌ Missing files/directories: {missing_files[:10]}...")  # Show first 10
+        print(f"  Missing files/directories: {missing_files[:10]}...")  # Show first 10
     else:
-        print(f"  ✅ All required files present")
+        print(f"  All required files present")
 
     m = adopt.ModelHub()
     m.read_data(input_data_path, start_period=0, end_period=8759)

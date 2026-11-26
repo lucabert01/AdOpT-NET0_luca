@@ -1,0 +1,45 @@
+emitter,node,tech,sector,family,captured_annual_t,max_captured_t_h,capacity_factor,capture_eur_per_t,transport_eur_per_t,storage_eur_per_t,total_eur_per_t,baseline_t,emitted_t,avoided_annual_t,total_eur_per_t_avoided,capture_eur_per_t_avoided,transport_eur_per_t_avoided,storage_eur_per_t_avoided,captured
+Fertilizer Ferrara (SMR),Ferrara,FertilizerSMREmitter_existing,FertilizersSMR,Pure process CO$_2$,161748.0,20.51598173515982,0.8999999999999998,8.951728998923366,29.62642378204789,50.59576929039448,89.17392207136574,161748.0,0.0,161748.0,89.17392207136574,8.951728998923366,29.62642378204789,50.59576929039448,True
+Refinery Sannazzaro de' Burgondi,RAFFINERIA DI SANNAZZARO DE' BURGONDI,,Refining,,,,,,,,,1597264.0,1597264.0,,,,,,False
+Cement Robilante,ROBILANTE cement plant,,Cement,,,,,,,,,933726.0000000002,933726.0000000005,,,,,,False
+Cement Rezzato,Italcementi di Rezzato,,Cement,,,,,,,,,918742.0000000002,918742.0000000002,,,,,,False
+WtE Brescia,TERMOVALORIZZATORE DI BRESCIA,,Waste,,,,,,,,,867256.25,867254.5394416079,,,,,,False
+Refinery Trecate,RAFFINERIA SARPOM DI TRECATE,,Refining,,,,,,,,,850236.0000000002,850236.0000000001,,,,,,False
+Cement Calusco d'Adda,Italcementi Calusco D'Adda,,Cement,,,,,,,,,790120.0000000001,790120.0000000005,,,,,,False
+WtE Milano,SILLA 2,,Waste,,,,,,,,,743710.3518835105,743714.5076587595,,,,,,False
+WtE Torino,TRM - TERMOVALORIZZATORE DEL GERBIDO,,Waste,,,,,,,,,627018.9720866536,627009.7710397732,,,,,,False
+Cement Vernasca,VERNASCA cement plant,,Cement,,,,,,,,,587138.47,587152.7078017849,,,,,,False
+Cement Ternate,Holcim (Italia) S.p.A.-unità produttiva di Ternate,,Cement,,,,,,,,,536971.0,536971.0,,,,,,False
+Cement Caravate,Colacem - Stabilimento di Caravate,,Cement,,,,,,,,,510738.9999999999,510738.99999999994,,,,,,False
+Industrial cluster Ravenna,Ravenna,,Other,,,,,,,,,500000.0,500000.0,,,,,,False
+Fertilizer Ferrara (non-SMR),Ferrara,,FertilizersCombustion,,,,,,,,,485243.99999999994,485244.0,,,,,,False
+Cement Fanna,FANNA cement plant,,Cement,,,,,,,,,438034.0,438034.0,,,,,,False
+Cement Piacenza,Piacenza,,Cement,,,,,,,,,405887.0,405887.0,,,,,,False
+Cement Pederobba,Cementirossi - Cementeria di Pederobba,,Cement,,,,,,,,,351765.9999999999,351766.0,,,,,,False
+Cement Monselice,MONSELICE cement plant,,Cement,,,,,,,,,342306.0,342306.0,,,,,,False
+WtE Parona,LOMELLINA ENERGIA,,Waste,,,,,,,,,338516.0,338515.2192453399,,,,,,False
+Refinery Busalla,Iplom S.p.A - Raffineria di Busalla,,Refining,,,,,,,,,258516.1169999999,258516.1169999999,,,,,,False
+Lime Val Brembilla,Unicalce Val Brembilla Lime,,Lime,,,,,,,,,244452.99999999994,244452.99999999997,,,,,,False
+WtE Trezzo sull'Adda,TermoTrezzo,,Waste,,,,,,,,,223853.0,223853.19482936594,,,,,,False
+WtE Parma,TERMOVALORIZZATORE - PAIP,,Waste,,,,,,,,,213023.66409822606,213022.50581678445,,,,,,False
+Lime Montichiari,Fassa Montichiari Lime,,Lime,,,,,,,,,203183.99999999997,203184.00000000006,,,,,,False
+WtE Verona,TERMOVALORIZZAOTRE DI VERONA,,Waste,,,,,,,,,200899.36040948986,200900.05647803884,,,,,,False
+Cement Susegana,STABILIMENTO DI PONTE DELLA PRIULA,,Cement,,,,,,,,,197108.00000000006,197108.0,,,,,,False
+WtE Dalmine,Termovalorizzatore di Dalmine,,Waste,,,,,,,,,190599.88400000002,190600.66929612716,,,,,,False
+WtE Granarolo dell'Emilia,FRULLO ENERGIA AMBIENTE S.R.L.,,Waste,,,,,,,,,186972.0,186972.22282979783,,,,,,False
+WtE Modena,HERAMBIENTE S.R.L.  - Termovalorizzatore,,Waste,,,,,,,,,186706.873,186705.95635269405,,,,,,False
+WtE Padova,Impianto di Termovalorizzazione di San Lazzaro (PD),,Waste,,,,,,,,,179315.793,179316.55055406416,,,,,,False
+WtE Trieste,Impianto di Termovalorizzazione Rifiuti di Trieste,,Waste,,,,,,,,,157981.17099999997,157979.81370813888,,,,,,False
+WtE Bolzano,TERMOVALORIZZATORE DI BOLZANO,,Waste,,,,,,,,,145093.98251796496,145094.89746313271,,,,,,False
+WtE Forlì,HERAMBIENTE - 3^ LINEA,,Waste,,,,,,,,,144055.0,144055.1446739483,,,,,,False
+Lime Bernezzo,Unicalce Bernezzo,,Lime,,,,,,,,,139988.00000000003,139988.00000000006,,,,,,False
+WtE Ferrara,Ferrara,,Waste,,,,,,,,,130183.0,130183.15898337532,,,,,,False
+WtE Valmadrera,Impianto di termovalorizzazione di Valmadrera,,Waste,,,,,,,,,128208.98999999999,128209.98215933262,,,,,,False
+Cement Tavernola Bergamasca,Stabilimento di Tavernola Bergamasca,,Cement,,,,,,,,,128207.0,128206.99999999997,,,,,,False
+WtE Rimini,Termovalorizzatore di Rimini,,Waste,,,,,,,,,128100.192,128101.28023748274,,,,,,False
+Lime Dolcè,Fassa Cerano Dolce,,Lime,,,,,,,,,126945.0,126944.99999999997,,,,,,False
+WtE Busto Arsizio,TERMOVALORIZZATORE BUSTO ARSIZIO,,Waste,,,,,,,,,122771.83136135498,122770.97209558259,,,,,,False
+WtE Corteolona,TERMOVALORIZZATORE DI CORTEOLONA E GENZONE,,Waste,,,,,,,,,119999.99999999999,120000.8615987158,,,,,,False
+WtE Desio,TERMOVALORIZZATORE DI DESIO,,Waste,,,,,,,,,111610.75578305,111611.42818874033,,,,,,False
+WtE Piacenza,Piacenza,,Waste,,,,,,,,,111514.71652493525,111519.48435534953,,,,,,False
+WtE Como,TERMOVALORIZZATORE COMO,,Waste,,,,,,,,,98843.52923620994,98843.19852745562,,,,,,False

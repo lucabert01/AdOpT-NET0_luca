@@ -48,8 +48,12 @@ SCENARIO_NAME = "technology_selection"
 
 # Fixed x-axis extent (Mt/yr) shared by every MACC panel, so bar widths are
 # directly comparable across scenarios. Widened automatically if any panel's
-# total capture exceeds it.
-MACC_XMAX_MT = 15
+# total capture exceeds it. 16.5 (not 16) so the tick at 16 -- the Ravenna
+# injection limit -- is drawn inside the frame.
+MACC_XMAX_MT = 16.5
+# Annual injection limit of the Ravenna storage site (Mt/yr), drawn as a
+# thin dotted vertical line in every MACC panel
+STORAGE_INJECTION_LIMIT_MT = 16
 
 # network_map_tax_sweep: scenarios (fs.SCENARIOS slugs) shown as the 2x2 map
 # panels a-d; every scenario in fs.SCENARIOS still gets its own standalone map
@@ -65,6 +69,9 @@ WASTE_CAL_MACC_SCENARIO = ("technology_selection_wasteCaL", "emissions_minC")
 BACKGROUND_MACC_ALPHA = 0.3
 BACKGROUND_MACC_NOTES = {"emissions_minC": "if all WtE install CaL",
                          "tax200": "CO$_2$ tax 250 €/t"}
+# Panel title when the background MACC is a scenario of its own (the light
+# CO2-tax 250 run behind the 200 one)
+BACKGROUND_PANEL_LABELS = {"tax200": "CO$_2$ tax 200 & 250 €/tCO$_2$"}
 # MACC bars: width = captured Mt/yr (x axis stays CO2 captured), height =
 # chain cost per tonne AVOIDED (see
 # ccs_chain_emitter_cost_ranking.add_avoided_columns), consistent with panel
@@ -235,6 +242,8 @@ def _draw_macc_panel(ax, panel, x_max, y_max):
     ax.set_xlim(0, x_max)
     ax.set_ylim(0, y_max)
     ax.set_yticks(np.arange(0, y_max + 1, 50))
+    ax.axvline(STORAGE_INJECTION_LIMIT_MT, color=fs.INK_SECONDARY, linestyle=(0, (1, 1.5)),
+               linewidth=0.7, zorder=4)
     if panel["carbon_tax"] is not None:
         # left end: the cheapest bars sit far below the tax, so the label never
         # collides with a bar (the right end is where bars approach the tax)
@@ -252,11 +261,25 @@ def _draw_background_macc(ax, background, note, y_max):
     df = background["macc_df"]
     cr._draw_macc_on_ax(ax, df, annotate_fertilizers=False, alpha=BACKGROUND_MACC_ALPHA, zorder=2,
                         width_col=MACC_WIDTH_COL, height_col=MACC_HEIGHT_COL)
-    # point at the part of the curve sticking out to the right of the main MACC
-    plot_df = df.sort_values(MACC_HEIGHT_COL)
+    if background["carbon_tax"] is not None:
+        # the background run's own CO2 tax, as light as its bars
+        ax.axhline(background["carbon_tax"], color=fs.INK_PRIMARY, linestyle=(0, (4, 2)), linewidth=0.8,
+                   alpha=BACKGROUND_MACC_ALPHA, zorder=2.5)
+        # direct label, same place/style as the panel's own tax label, as light as the line
+        ax.text(0.012, background["carbon_tax"] + y_max * 0.015, "CO$_2$ tax", transform=ax.get_yaxis_transform(),
+                ha="left", va="bottom", fontsize=fs.TICK_SIZE, color=fs.INK_PRIMARY,
+                alpha=BACKGROUND_MACC_ALPHA, zorder=2.5)
+    plot_df = df.sort_values(MACC_HEIGHT_COL).reset_index(drop=True)
     x_right = plot_df[MACC_WIDTH_COL].cumsum().to_numpy() / 1e6
-    x_target = x_right[-1] - 0.6
-    i = int(np.searchsorted(x_right, x_target))
+    note_sector = background.get("note_sector")
+    if note_sector is not None:
+        # point at the top centre of the last (most expensive) bar of that sector
+        i = int(plot_df.index[plot_df["sector"] == note_sector][-1])
+        x_target = x_right[i] - plot_df[MACC_WIDTH_COL].iloc[i] / 2e6
+    else:
+        # point at the part of the curve sticking out to the right of the main MACC
+        x_target = x_right[-1] - 0.6
+        i = int(np.searchsorted(x_right, x_target))
     y_target = min(plot_df[MACC_HEIGHT_COL].iloc[i], y_max)
     ax.annotate(note,
                 xy=(x_target, y_target), xycoords="data",
@@ -283,8 +306,15 @@ def plot_tax_sweep_macc(panels, backgrounds, abatement_res):
         if panel["slug"] in backgrounds:
             _draw_background_macc(ax, backgrounds[panel["slug"]], BACKGROUND_MACC_NOTES[panel["slug"]], y_max)
         _draw_macc_panel(ax, panel, x_max, y_max)
-        _panel_title(ax, {**panel, "letter": letter})
+        _panel_title(ax, {**panel, "letter": letter,
+                          "label": BACKGROUND_PANEL_LABELS.get(panel["slug"], panel["label"])})
         ax.set_xlabel(fs.CAPTURED_LABEL)
+    # injection-limit label once, in panel a, where nothing is drawn right of
+    # the bars
+    axes[0, 0].text(STORAGE_INJECTION_LIMIT_MT - 0.15, y_max * 0.03, "Ravenna injection limit",
+                    rotation=90, ha="right", va="bottom", fontsize=fs.TICK_SIZE - 0.5,
+                    color=fs.INK_SECONDARY, zorder=6,
+                    bbox=dict(facecolor=fs.SURFACE, edgecolor="none", pad=0.4))
     axes[0, 0].set_xlabel("")
     axes[0, 0].tick_params(labelbottom=False)   # shares its x-axis with c below
     axes[0, 1].tick_params(labelleft=False)     # shares its y-axis with a
@@ -296,8 +326,8 @@ def plot_tax_sweep_macc(panels, backgrounds, abatement_res):
     _panel_title(ax_d, {"letter": fs.PANEL_LETTERS[3], "label": "Cost of CO$_2$ avoided per scenario"})
 
     all_macc = pd.concat([p["macc_df"] for p in macc_panels + list(backgrounds.values())], ignore_index=True)
-    handles = cr.sector_patch_handles(all_macc) + [
-        plt.Line2D([0], [0], color=fs.INK_PRIMARY, linestyle=(0, (4, 2)), linewidth=0.8, label="CO$_2$ tax")]
+    # no CO2-tax entry: the tax lines are direct-labelled in the panels
+    handles = cr.sector_patch_handles(all_macc)
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.53, 0.0), ncol=len(handles),
                frameon=False, handlelength=1.3, handletextpad=0.45, columnspacing=1.1)
     fig.subplots_adjust(left=0.085, right=0.99, top=0.95, bottom=0.17, hspace=0.42, wspace=0.28)
@@ -310,7 +340,8 @@ def plot_tax_sweep_macc(panels, backgrounds, abatement_res):
         if panel["slug"] in backgrounds:
             _draw_background_macc(ax, backgrounds[panel["slug"]], BACKGROUND_MACC_NOTES[panel["slug"]], y_max)
         handles = _draw_macc_panel(ax, panel, x_max, y_max)
-        _panel_title(ax, panel)
+        _panel_title(ax, {**panel, "label": BACKGROUND_PANEL_LABELS.get(panel["slug"], panel["label"])}
+                     if panel["slug"] in backgrounds else panel)
         ax.set_xlabel(fs.CAPTURED_LABEL)
         ax.set_ylabel(fs.COST_LABEL)
         ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False,
@@ -421,7 +452,8 @@ def _load_background_maccs(panels):
     print(f"Loaded background MACC ({scenario_name}, {objective}) <- {h5_path}")
     tax250 = next(p for p in panels if p["slug"] == "tax250")
     return {"emissions_minC": {"macc_df": macc_df, "carbon_tax": None},
-            "tax200": {"macc_df": tax250["macc_df"], "carbon_tax": None}}
+            "tax200": {"macc_df": tax250["macc_df"], "carbon_tax": tax250["carbon_tax"],
+                       "note_sector": "Waste"}}
 
 
 def main():

@@ -12,7 +12,7 @@ try:
     from adopt_net0.database.components.networks.enhanced_co2_pipelines_cost_model import \
         CO2_Pipeline_CostModel as EnhancedModel
 except ImportError as e:
-    print(f"⚠️  Warning: Could not import EnhancedModel: {e}")
+    print(f"Warning: Could not import EnhancedModel: {e}")
     print("   This is required for gamma calculations. Please check your adopt_net0 installation.")
 
 # Import shared functions from arc_specific_functions
@@ -97,15 +97,15 @@ def compute_gammas_for_size_class(size_class, fixed_range_kg_s, data_dict, possi
 
     if fixed_range_kg_s is not None:
         min_kg_s, max_kg_s = fixed_range_kg_s
-        print(f"🖊️  Fixed mass-flow range for '{size_class}': {min_kg_s:.3f} - {max_kg_s:.3f} kg/s "
+        print(f"Fixed mass-flow range for '{size_class}': {min_kg_s:.3f} - {max_kg_s:.3f} kg/s "
               f"(applied to all {len(possible_arcs)} arcs)")
         massflow_overrides = {arc: (min_kg_s, max_kg_s) for arc in possible_arcs}
     else:
-        print(f"⚠️  No fixed range set for '{size_class}' yet (SIZE_CLASS_MASSFLOW_RANGES_KG_S) - "
+        print(f"No fixed range set for '{size_class}' yet (SIZE_CLASS_MASSFLOW_RANGES_KG_S) - "
               f"falling back to automatic per-arc min/max derivation")
         massflow_overrides = load_massflow_overrides(dashboard_overrides_path)
         if massflow_overrides:
-            print(f"🖊️  Loaded {len(massflow_overrides)} manual mass-flow override(s) from {dashboard_overrides_path}")
+            print(f"Loaded {len(massflow_overrides)} manual mass-flow override(s) from {dashboard_overrides_path}")
 
     gamma1_matrix, gamma2_matrix = create_gamma_matrices(
         data_dict, terrain_function=determine_arc_terrain, massflow_overrides=massflow_overrides
@@ -114,7 +114,7 @@ def compute_gammas_for_size_class(size_class, fixed_range_kg_s, data_dict, possi
 
     gamma1_nonzero = (gamma1_matrix != 0).sum().sum()
     gamma2_nonzero = (gamma2_matrix != 0).sum().sum()
-    print(f"\n📊 '{size_class}' gamma calculation results:")
+    print(f"\n'{size_class}' gamma calculation results:")
     print(f"   Gamma1 non-zero values: {gamma1_nonzero} / {len(possible_arcs)} arcs")
     print(f"   Gamma2 non-zero values: {gamma2_nonzero} / {len(possible_arcs)} arcs")
 
@@ -130,7 +130,7 @@ def compute_gammas_for_size_class(size_class, fixed_range_kg_s, data_dict, possi
                       f"gamma_defined_per_arc_pipeline_{size_class}.xlsx"]:
         output_file = output_dir / file_name
         save_to_excel(gamma1_matrix, gamma2_matrix, gamma3_matrix, gamma4_matrix, filename=str(output_file))
-        print(f"📁 Saved: {output_file.absolute()}")
+        print(f"Saved: {output_file.absolute()}")
 
     return output_file
 
@@ -142,28 +142,28 @@ def main():
     print("This script calculates gamma1/gamma2 for every possible arc, once per")
     print("pipeline size class (small/medium/large), and saves each as its own")
     print("capex_defined_per_arc_{size_class}.xlsx. Gamma3/gamma4 are zeros.")
-    print("\n🏞️  All arcs (including Eni S.p.A Casalborsetti -> Porto Corsini) are processed as ONSHORE terrain,")
+    print("\nAll arcs (including Eni S.p.A Casalborsetti -> Porto Corsini) are processed as ONSHORE terrain,")
     print("   gas phase between nodes at 40 bar")
-    print("\n🔇 VERBOSE OUTPUT: Cost model calculations are suppressed for cleaner output")
-    print("📊 UPDATED BEHAVIOR: Failed calculations will be set to 0 instead of NaN")
+    print("\nVERBOSE OUTPUT: Cost model calculations are suppressed for cleaner output")
+    print("UPDATED BEHAVIOR: Failed calculations will be set to 0 instead of NaN")
 
     try:
         # Load all data ONCE (geo data / electricity prices / emissions are
         # shared across all three size classes)
-        print("\n🔄 Loading network data...")
+        print("\nLoading network data...")
         data_dict = load_network_data("../../italy_data")
 
-        print(f"\n📊 Data verification:")
+        print(f"\nData verification:")
         print(f"   Nodes: {len(data_dict['network_nodes'])}")
         print(f"   Distance matrix: {data_dict['network_distance'].shape}")
         print(f"   Pipeline matrix: {data_dict['network_pipeline'].shape}")
 
         if 'annual_emission' not in data_dict['network_emission_flux'].columns:
-            print("⚠️  Warning: Annual emission data not found. Please check data loading.")
+            print("Warning: Annual emission data not found. Please check data loading.")
             print(f"   Available columns in emission data: {list(data_dict['network_emission_flux'].columns)}")
             return
 
-        print("\n🔄 Loading intersection data...")
+        print("\nLoading intersection data...")
         intersection_file_path = Path("../../italy_data/geographical_feature/route_grid_intersections.xlsx")
         possible_arcs = get_all_possible_arcs(data_dict['network_pipeline'])
         # Both directions: an arc can use the route drawn the other way
@@ -175,7 +175,7 @@ def main():
         data_dict['intersection_data'] = load_intersection_data(intersection_file_path, pipeline_names)
 
         offshore_arcs = [(f, t) for f, t in possible_arcs if determine_arc_terrain(f, t, data_dict) == "Offshore"]
-        print(f"   🌊 Offshore arcs: {offshore_arcs}" if offshore_arcs else "   ℹ️  No offshore arcs found")
+        print(f"   Offshore arcs: {offshore_arcs}" if offshore_arcs else "   No offshore arcs found")
 
         output_dir = Path("../../italy_data/network_capex_metrics")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -191,14 +191,14 @@ def main():
         print_section_header("ANALYSIS COMPLETE")
         for size_class, path in output_files.items():
             print(f"   {size_class:8s} -> {path}")
-        print("\n🔢 Missing/failed calculations are set to 0 instead of NaN")
+        print("\nMissing/failed calculations are set to 0 instead of NaN")
 
     except Exception as e:
-        print(f"\n❌ FATAL ERROR: {e}")
+        print(f"\nFATAL ERROR: {e}")
         import traceback
         traceback.print_exc()
 
-        print(f"\n🔍 Debugging information:")
+        print(f"\nDebugging information:")
         print(f"   Current working directory: {os.getcwd()}")
         print(f"   Data path exists: {Path('../../italy_data').exists()}")
         print(

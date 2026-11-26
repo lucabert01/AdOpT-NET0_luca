@@ -69,16 +69,16 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
         # Load cost factor table
         cost_factor_path = input_path / "enhanced_co2_transport_cost_model" / "cost_factor_table.xlsx"
         if not cost_factor_path.exists():
-            print(f"⚠️  Cost factor table not found at: {cost_factor_path}")
+            print(f"Cost factor table not found at: {cost_factor_path}")
             print(f"Creating default cost factors...")
             # Create default cost factors if file doesn't exist
             self.cost_factor_table = self._create_default_cost_factors()
         else:
             try:
                 self.cost_factor_table = pd.read_excel(cost_factor_path)
-                print(f"✅ Loaded cost factor table from: {cost_factor_path}")
+                print(f"Loaded cost factor table from: {cost_factor_path}")
             except Exception as e:
-                print(f"⚠️  Error loading cost factor table: {e}")
+                print(f"Error loading cost factor table: {e}")
                 self.cost_factor_table = self._create_default_cost_factors()
 
         # Load CO2 fluid properties
@@ -86,9 +86,9 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
         if co2_props_path.exists():
             try:
                 self.co2_fluid_properties = pd.read_excel(co2_props_path, sheet_name=None)
-                print(f"✅ Loaded CO2 fluid properties")
+                print(f"Loaded CO2 fluid properties")
             except Exception as e:
-                print(f"⚠️  Error loading CO2 properties: {e}")
+                print(f"Error loading CO2 properties: {e}")
                 self.co2_fluid_properties = None
 
     def _create_default_cost_factors(self):
@@ -128,7 +128,7 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
             })
 
         df = pd.DataFrame(cost_factors_data)
-        print(f"📊 Created default cost factors for {len(categories)} pipeline categories")
+        print(f"Created default cost factors for {len(categories)} pipeline categories")
         return df
 
     def _estimate_operating_pressure(self, massflow_kg_per_s, terrain="Onshore"):
@@ -208,7 +208,7 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
             dict: Interpolated cost factors
         """
         if self.cost_factor_table is None or self.cost_factor_table.empty:
-            print("⚠️  No cost factor table available, using zeros")
+            print("No cost factor table available, using zeros")
             return {
                 'k_morpho_plain': 0.000,
                 'k_morpho_hill': 0.000,
@@ -295,13 +295,13 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
         grids_processed = 0
 
         # Debug information
-        print(f"      🔍 Calculating geo factor for mass flow: {massflow_kg_per_s:.3f} kg/s")
-        print(f"      🔍 Intersected grids: {len(intersected_grids)}")
+        print(f"      Calculating geo factor for mass flow: {massflow_kg_per_s:.3f} kg/s")
+        print(f"      Intersected grids: {len(intersected_grids)}")
 
         # Check if geographical data is available
         if (morpho_data.empty or soil_data.empty or anthro_data.empty or
                 len(intersected_grids) == 0 or len(intersected_proportions) == 0):
-            print(f"      ⚠️  No geographical data available")
+            print(f"      No geographical data available")
             return 0.000
 
         velocity_m_s = self.options.get("velocity_m_s", 5.000)
@@ -319,8 +319,8 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
         )
         cost_factors = self._interpolate_cost_factors(pipeline_DN)
 
-        print(f"      🔍 Pipeline DN: {pipeline_DN:.1f} mm")
-        print(f"      🔍 Cost factors: {cost_factors}")
+        print(f"      Pipeline DN: {pipeline_DN:.1f} mm")
+        print(f"      Cost factors: {cost_factors}")
 
         # Initialize weighted components (these will be the final weighted averages)
         total_weighted_morpho_factor = 0.000
@@ -331,7 +331,7 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
         for grid_id, intersection_prop in zip(intersected_grids, intersected_proportions):
             # Validate intersection proportion
             if intersection_prop < 0 or intersection_prop > 1:
-                print(f"      ⚠️  Invalid intersection proportion for grid {grid_id}: {intersection_prop}")
+                print(f"      Invalid intersection proportion for grid {grid_id}: {intersection_prop}")
                 continue
 
             # Try different grid ID formats for matching
@@ -367,7 +367,7 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
 
             # Skip if no data found for this grid
             if morpho_grid.empty or soil_grid.empty or anthro_grid.empty:
-                print(f"      ⚠️  No data found for grid {grid_id}")
+                print(f"      No data found for grid {grid_id}")
                 continue
 
             grids_processed += 1
@@ -410,7 +410,7 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
                     elif 'ANTHROPISED' in col_upper and 'NON' not in col_upper:
                         anthro_prop = float(anthro_grid[col].iloc[0])
 
-                print(f"      🔍 Grid {grid_id}: morpho=({plain_prop:.2f},{hill_prop:.2f},{mountain_prop:.2f}), "
+                print(f"      Grid {grid_id}: morpho=({plain_prop:.2f},{hill_prop:.2f},{mountain_prop:.2f}), "
                       f"soil=({non_rock_prop:.2f},{rock_prop:.2f}), anthro=({non_anthro_prop:.2f},{anthro_prop:.2f})")
 
                 # Calculate incremental cost factors for this grid
@@ -435,11 +435,11 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
                 total_weighted_soil_factor += soil_incremental_factor * intersection_prop
                 total_weighted_anthro_factor += anthro_incremental_factor * intersection_prop
 
-                print(f"      🔍 Grid {grid_id} factors: morpho={morpho_incremental_factor:.3f}, "
+                print(f"      Grid {grid_id} factors: morpho={morpho_incremental_factor:.3f}, "
                       f"soil={soil_incremental_factor:.3f}, anthro={anthro_incremental_factor:.3f}")
 
             except Exception as e:
-                print(f"      ❌ Error processing grid {grid_id}: {e}")
+                print(f"      Error processing grid {grid_id}: {e}")
                 continue
 
         # Calculate total incremental geographical factor
@@ -455,11 +455,11 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
         total_incremental_geo_factor = min(total_incremental_geo_factor, 2.000)  # Max 200% cost increase
         total_incremental_geo_factor = round(total_incremental_geo_factor, 3)
 
-        print(f"      ✅ Processed {grids_processed} grids, total geo factor: {total_incremental_geo_factor:.3f}")
+        print(f"      Processed {grids_processed} grids, total geo factor: {total_incremental_geo_factor:.3f}")
 
         # Provide feedback if no grids were processed
         if grids_processed == 0:
-            print(f"      ⚠️  No geographical grids could be matched for pipeline DN {pipeline_DN:.0f}")
+            print(f"      No geographical grids could be matched for pipeline DN {pipeline_DN:.0f}")
 
         return total_incremental_geo_factor
 
@@ -543,7 +543,7 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
                 len(self.options.get("intersected_proportions", [])) > 0
             ])
 
-            print(f"   🔍 Geographical data available: {geo_data_available}")
+            print(f"   Geographical data available: {geo_data_available}")
 
             for massflow_kg_per_s in range_massflow_kg_per_s:
                 massflow_t_per_h = massflow_kg_per_s / 1000 * 3600
@@ -563,7 +563,7 @@ class CO2_Pipeline_CostModel(DataComponent_CostModel):
                             self.options["anthro_data"]
                         )
                     except Exception as e:
-                        print(f"      ❌ Error calculating geo factor: {e}")
+                        print(f"      Error calculating geo factor: {e}")
                         incremental_geo_factor = 0.000
 
                 # Correct for compression lifetime
