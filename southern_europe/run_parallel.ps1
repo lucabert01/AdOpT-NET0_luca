@@ -5,8 +5,9 @@
 # c_inj_min95 (last in the list: by the time it starts, it may pick up the new
 # c_inj run's design). Windows version of run_parallel.sh.
 #
-# Usage (from southern_europe\, with the project's Python environment active):
-#   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1
+# Usage (from southern_europe\; -Python is the venv's python.exe if it is not the
+# first python on the PATH):
+#   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1 -Python <venv>\Scripts\python.exe
 #   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1 -MaxParallel 2 -Threads 8
 #   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1 -MaxParallel 1 -Cases tax175_costs_technology_selection,tax200_costs_c_inj
 #   (several cases: comma-separated, no spaces)
@@ -50,9 +51,19 @@ function Write-QueueLog([string]$message) {
 $env:GUROBI_THREADS = "$Threads"
 $env:PYTHONUNBUFFERED = "1"
 $env:PYTHONIOENCODING = "utf-8"
+# This repository's root first on the path (as PyCharm does): main_italy.py imports
+# adopt_net0 and southern_europe.* from here, not from whatever the venv has installed
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$env:PYTHONPATH = if ($env:PYTHONPATH) { "$repoRoot;$env:PYTHONPATH" } else { $repoRoot }
 
 $pythonExe = (Get-Command $Python -ErrorAction Stop).Source
 Write-QueueLog "queue: $($Cases.Count) cases, $MaxParallel at a time, $Threads threads each, python $pythonExe"
+$adoptPath = & $pythonExe -c "import adopt_net0, gurobipy; print(adopt_net0.__file__)"
+if ($LASTEXITCODE -ne 0) {
+    Write-QueueLog "this python cannot import adopt_net0 and gurobipy -- pass the project's venv with -Python <path to python.exe>"
+    exit 1
+}
+Write-QueueLog "adopt_net0 from $adoptPath"
 
 $running = @{}   # case -> @{ Process; PeakGB }
 

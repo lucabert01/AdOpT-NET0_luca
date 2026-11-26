@@ -23,6 +23,8 @@ cd "$(dirname "$0")"
 MAX_PARALLEL="${MAX_PARALLEL:-4}"
 THREADS="${THREADS:-4}"
 PYTHON="${PYTHON:-python}"
+# this repository first on the path (as PyCharm does), not the venv's adopt_net0
+export PYTHONPATH="$(cd .. && pwd)${PYTHONPATH:+:$PYTHONPATH}"
 CASES=("$@")
 if [ ${#CASES[@]} -eq 0 ]; then
     CASES=(
