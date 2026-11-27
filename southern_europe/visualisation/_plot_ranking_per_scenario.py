@@ -9,8 +9,8 @@ with CaL on every waste-to-energy plant):
     ccs_chain_emitter_cost_ranking's per-tonne-captured split scaled by
     captured / avoided (add_avoided_columns), so the bar total equals the
     MACC bar height of the tax-sweep figures. Ranked cheapest at the top.
-  - emitters without capture: listed below a separator, no bar, with their
-    annual emissions, ordered by emissions.
+  - emitters without capture: listed below a separator, no bar, marked
+    "no CCS", ordered by emissions.
 
 Emitter names are "<sector> <location>" (e.g. "Cement Robilante",
 "WtE Torino"), built from the paper_names sheet of node_metrics_paper.xlsx
@@ -127,10 +127,10 @@ def plot_ranking(table: pd.DataFrame, title: str, path: Path, x_max: float):
         ax.text(min(tot, x_max) + x_max * 0.006, yi, f"{tot:,.0f}", va="center", ha="left",
                 fontsize=fs.TICK_SIZE - 1, color=fs.INK_PRIMARY, clip_on=False)
 
-    # uncaptured emitters: no bar, just their remaining emissions
-    for yi, (_, r) in zip(y[n_cap:], table.iloc[n_cap:].iterrows()):
-        ax.text(x_max * 0.006, yi, f"no capture  ({r['baseline_t'] / 1e3:,.0f} kt/y emitted)", va="center",
-                ha="left", fontsize=fs.TICK_SIZE - 1, color=fs.INK_SECONDARY, style="italic")
+    # uncaptured emitters: no bar, just a short note
+    for yi in y[n_cap:]:
+        ax.text(x_max * 0.006, yi, "no CCS", va="center", ha="left", fontsize=fs.TICK_SIZE - 1,
+                color=fs.INK_SECONDARY, style="italic")
     if n_cap < n:
         ax.axhline(y[n_cap - 1] - 0.5 if n_cap else n - 0.5, color=fs.INK_SECONDARY, linewidth=0.5,
                    linestyle=(0, (2, 2)))
