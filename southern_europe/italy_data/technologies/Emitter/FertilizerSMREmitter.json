@@ -7,7 +7,7 @@
   "Economics": {
     "comment": "capex in EUR/unit or as a piecewise function, opex_variable in EUR/unit total output, opex_fixed in % of capex_annual. Costs and performance are the one of a CO2 compressor for an emitter of size 19tCO2/h, taken from Riccardo's simulations. Opex fixed value is the one used for MEA",
     "capex_model": 1,
-    "unit_capex": 239887,
+    "unit_capex": 3765000,
     "fix_capex": 0,
     "piecewise_capex": {
       "bp_x": "not defined",
