@@ -142,7 +142,7 @@ REFERENCE_EMITTER_TECHNOLOGIES = {
 #----- Multi-run scenario matrix -----#
 # Each entry's "name" becomes the results folder
 # (Results_CCSchainOptimization/<name>); the case-study working folder is per case
-# (Italy_CaseStudy/tax{carbon_tax}_{objective}_{name}).
+# (Italy_CaseStudy/{carbon_tax}_{cost|em}_{name}, see run_scenario).
 #
 # NOTE: entries below are matched by FILENAME (via find_technology_file), not by the
 # JSON's own "tec_type" field -- for CementHybridCCS those happen to be the same
@@ -808,7 +808,7 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     Runs the full CCS-chain data-preparation + optimization pipeline for one
     emitter-technology scenario (a choice of cement and waste technology).
 
-    Writes its case-study input data to Italy_CaseStudy/<case name>/ and its
+    Writes its case-study input data to Italy_CaseStudy/<short case name>/ and its
     results to Results_CCSchainOptimization/<scenario_name>/, so multiple scenarios
     can be run back to back without overwriting each other. Several scenarios may
     share the same scenario_name but differ in objective and/or carbon_tax (see
@@ -892,8 +892,13 @@ def run_scenario(scenario_name: str, tech_for_cement: list, tech_for_waste: list
     # Create input data path and optimisation templates
     # One folder per case (not per scenario name): the tax levels and objectives of
     # one scenario name can then run in parallel without overwriting each other's
-    # input data.
-    input_data_path = Path("Italy_CaseStudy") / f"tax{carbon_tax}_{objective}_{scenario_name}"
+    # input data. The name is shortened (e.g. "250_em_techsel_wasteCaL") because the
+    # node/technology file paths inside it are up to 111 characters long, and on the
+    # server's network share the full case name pushed them past Windows' 260
+    # character path limit.
+    short_objective = {"costs": "cost", "emissions_minC": "em"}.get(objective, objective)
+    short_name = scenario_name.replace("technology_selection", "techsel")
+    input_data_path = Path("Italy_CaseStudy") / f"{carbon_tax}_{short_objective}_{short_name}"
     input_data_path.mkdir(parents=True, exist_ok=True)
     adopt.create_optimization_templates(input_data_path)
 

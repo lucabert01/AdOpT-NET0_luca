@@ -44,7 +44,12 @@ $queueLog = Join-Path $PSScriptRoot "logs\queue.log"
 function Write-QueueLog([string]$message) {
     $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $message"
     Write-Host $line
-    Add-Content -Path $queueLog -Value $line -Encoding utf8
+    # the network share sometimes refuses the write (e.g. while queue.log is open
+    # elsewhere): retry briefly, and never let it stop the queue
+    for ($try = 1; $try -le 5; $try++) {
+        try { Add-Content -Path $queueLog -Value $line -Encoding utf8 -ErrorAction Stop; break }
+        catch { Start-Sleep -Seconds 2 }
+    }
 }
 
 # Inherited by the python processes
