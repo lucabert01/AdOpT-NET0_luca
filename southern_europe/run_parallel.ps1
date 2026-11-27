@@ -5,10 +5,15 @@
 # c_inj_min95 (last in the list: by the time it starts, it may pick up the new
 # c_inj run's design). Windows version of run_parallel.sh.
 #
-# Usage (from southern_europe\; -Python is the venv's python.exe if it is not the
-# first python on the PATH):
-#   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1 -Python <venv>\Scripts\python.exe
+# Usage (from southern_europe\):
+#   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1        # all 7 at once, 5 threads each
 #   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1 -MaxParallel 2 -Threads 8
+#   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1 -Python <venv>\Scripts\python.exe
+# Without -Python, the server's venv ..\..\Adopt_NET0_Xiao\venv is used if it exists,
+# otherwise the first python on the PATH. Stop all runs with .\stop_runs.ps1.
+#
+# A run needs ~7 GB of memory at its peak (measured on the server, 2026-11-27), so
+# all 7 cases fit at once: 7 x 5 threads = 35 of the server's 40 cores.
 #   powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1 -MaxParallel 1 -Cases tax175_costs_technology_selection,tax200_costs_c_inj
 #   (several cases: comma-separated, no spaces)
 #
@@ -19,9 +24,9 @@
 # Output: logs\<case>.log (and <case>.err.log); the queue's own messages,
 # including each case's peak memory, go to logs\queue.log.
 param(
-    [int]$MaxParallel = 4,
-    [int]$Threads = 4,
-    [string]$Python = "python",
+    [int]$MaxParallel = 7,
+    [int]$Threads = 5,
+    [string]$Python = "",
     [int]$StaggerSeconds = 120,
     [string[]]$Cases = @(
         "tax175_costs_technology_selection",
@@ -38,6 +43,10 @@ param(
 $Cases = @($Cases | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 Set-Location $PSScriptRoot
+if (-not $Python) {
+    $serverVenv = Join-Path $PSScriptRoot "..\..\Adopt_NET0_Xiao\venv\Scripts\python.exe"
+    $Python = if (Test-Path $serverVenv) { (Resolve-Path $serverVenv).Path } else { "python" }
+}
 New-Item -ItemType Directory -Force logs | Out-Null
 $queueLog = Join-Path $PSScriptRoot "logs\queue.log"
 
